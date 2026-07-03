@@ -47,3 +47,6 @@ build/
 
 # Logs
 *.log
+
+# Personal notes (served publicly from static/ — keep out of the repo)
+src/main/resources/static/notes.*
