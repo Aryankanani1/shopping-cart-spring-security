@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo.Service.product;
 
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.request.AddProductRequest;
+import com.aryan.spring_security_demo.request.ProductUpdateRequest;
 
 import java.util.List;
 
@@ -9,7 +10,7 @@ public interface ProductServiceInterface {
     Product addProduct(AddProductRequest product);
     Product getProductById(Long id);
     void deleteProductById(Long productId);
-    void updateProductById(Product product, Long productId);
+    Product updateProductById(ProductUpdateRequest product, Long productId);
 
     List<Product> getAllProducts();
     List<Product> getAllProductsByCategory(String category);
