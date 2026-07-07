@@ -5,8 +5,6 @@ import com.aryan.spring_security_demo.exception.CategoryNotFoundException;
 import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationContext;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
