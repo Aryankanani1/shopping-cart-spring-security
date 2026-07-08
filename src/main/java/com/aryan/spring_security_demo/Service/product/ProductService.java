@@ -39,8 +39,8 @@ public class ProductService implements ProductServiceInterface{
         return new Product(
                 productRequest.getName(),
                 productRequest.getPrice(),
-                productRequest.getBrand(),
                 productRequest.getDescription(),
+                productRequest.getBrand(),
                 productRequest.getInventory(),
                 productRequest.getCategory()
         );
