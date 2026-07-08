@@ -1,6 +1,5 @@
 package com.aryan.spring_security_demo.controller;
 import com.aryan.spring_security_demo.Service.product.ProductServiceInterface;
-import com.aryan.spring_security_demo.exception.ProductNotFoundException;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.request.AddProductRequest;
 import com.aryan.spring_security_demo.request.ProductUpdateRequest;
@@ -8,9 +7,7 @@ import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
-
 import static org.springframework.http.HttpStatus.*;
 
 @RequiredArgsConstructor
@@ -60,7 +57,6 @@ public class ProductController {
         }
     }
 
-
     @DeleteMapping("/product/{id}/delete")
     public ResponseEntity<ApiResponse> deleteProduct(@PathVariable Long id){
         try {
@@ -89,7 +85,6 @@ public class ProductController {
             return ResponseEntity.status(INTERNAL_SERVER_ERROR).body(new ApiResponse(e.getMessage(),null));
         }
     }
-
 
     @GetMapping("/products/by/category-and-brand")
     public ResponseEntity<ApiResponse> getProductByBrandAndCategory(@RequestParam String category,
@@ -169,4 +164,8 @@ public class ProductController {
             return ResponseEntity.ok(new ApiResponse(e.getMessage(),null));
         }
     }
+
+
+
+
 }

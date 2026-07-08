@@ -38,7 +38,7 @@ public class Product {
 
 
     @JsonIgnore
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL,orphanRemoval = true)
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Image> imageList;
 
     public Product(String name, BigDecimal price, String description, String brand, int inventory, Category category) {

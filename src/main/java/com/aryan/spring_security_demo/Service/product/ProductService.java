@@ -1,5 +1,4 @@
 package com.aryan.spring_security_demo.Service.product;
-
 import com.aryan.spring_security_demo.dto.ImageDto;
 import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.exception.ProductNotFoundException;
@@ -7,10 +6,12 @@ import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.repository.CategoryRepository;
+import com.aryan.spring_security_demo.repository.ImageRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
 import com.aryan.spring_security_demo.request.AddProductRequest;
 import com.aryan.spring_security_demo.request.ProductUpdateRequest;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,9 +23,11 @@ public class ProductService implements ProductServiceInterface{
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final ModelMapper modelMapper;
+    private final ImageRepository imageRepository;
     @Override
     public Product addProduct(AddProductRequest request) {
-        // check if category is in DB or not
+        // check if the category is in DB or not
        Category category = Optional.ofNullable(categoryRepository.findByName(request.getCategory().getName()))
                          .orElseGet(() -> {
                    Category newCategory = new Category(request.getCategory().getName());
@@ -57,7 +60,7 @@ public class ProductService implements ProductServiceInterface{
 
     @Override
     public void deleteProductById(Long productId) {
-productRepository.findById(productId)
+        productRepository.findById(productId)
         .ifPresentOrElse(productRepository::delete,
                 () ->
                 {
@@ -152,5 +155,15 @@ productRepository.findById(productId)
     @Override
     public List<ProductDto> getConvertedProducts(List<Product> products) {
         return products.stream().map(this::convertToDto).toList();
+    }
+
+    @Override
+    public ProductDto convertDto(Product product){
+        ProductDto productDto = modelMapper.map(product,ProductDto.class);
+        List<Image> images = imageRepository.findProductById(product.getId());
+        List<ImageDto> imageDtos = images.stream().map(image -> modelMapper.map(image, ImageDto.class))
+                .toList();
+        productDto.setImages(imageDtos);
+        return productDto;
     }
 }
