@@ -12,7 +12,6 @@ public interface ProductServiceInterface {
     Product getProductById(Long id);
     void deleteProductById(Long productId);
     Product updateProductById(ProductUpdateRequest product, Long productId);
-
     List<Product> getAllProducts();
     List<Product> getAllProductsByCategory(String category);
     List<Product> getProductsByBrand(String brand);
@@ -23,5 +22,5 @@ public interface ProductServiceInterface {
 
     ProductDto convertToDto(Product product);
     List<ProductDto> getConvertedProducts(List<Product> products);
-
+    ProductDto convertDto(Product product);
 }
