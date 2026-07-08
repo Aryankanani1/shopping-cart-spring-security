@@ -1,7 +1,10 @@
 package com.aryan.spring_security_demo.Service.product;
 
+import com.aryan.spring_security_demo.dto.ImageDto;
+import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.exception.ProductNotFoundException;
 import com.aryan.spring_security_demo.model.Category;
+import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.repository.CategoryRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
@@ -117,5 +120,37 @@ productRepository.findById(productId)
     @Override
     public Long countProductsByBrandAndName(String brand, String name) {
         return productRepository.countByBrandAndName(brand,name);
+    }
+
+    @Override
+    public ProductDto convertToDto(Product product) {
+        ProductDto dto = new ProductDto();
+        dto.setId(product.getId());
+        dto.setName(product.getName());
+        dto.setBrand(product.getBrand());
+        dto.setPrice(product.getPrice());
+        dto.setDescription(product.getDescription());
+        dto.setInventory(product.getInventory());
+        dto.setCategoryName(product.getCategory() != null ? product.getCategory().getName() : null);
+        dto.setImages(mapImages(product.getImageList()));
+        return dto;
+    }
+
+    private List<ImageDto> mapImages(List<Image> images) {
+        return Optional.ofNullable(images).orElseGet(List::of)
+                .stream()
+                .map(image -> {
+                    ImageDto imageDto = new ImageDto();
+                    imageDto.setImageId(image.getId());
+                    imageDto.setImageName(image.getFileName());
+                    imageDto.setDownloadUrl(image.getURL());
+                    return imageDto;
+                })
+                .toList();
+    }
+
+    @Override
+    public List<ProductDto> getConvertedProducts(List<Product> products) {
+        return products.stream().map(this::convertToDto).toList();
     }
 }
