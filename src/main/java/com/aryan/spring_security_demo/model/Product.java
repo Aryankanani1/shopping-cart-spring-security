@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -36,6 +37,7 @@ public class Product {
     private Category category;
 
 
+    @JsonIgnore
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL,orphanRemoval = true)
     private List<Image> imageList;
 

@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.Service.product;
 
+import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.request.AddProductRequest;
 import com.aryan.spring_security_demo.request.ProductUpdateRequest;
@@ -20,5 +21,7 @@ public interface ProductServiceInterface {
     List<Product> getProductsByBrandAndName(String brand,String name);
     Long countProductsByBrandAndName(String brand,String name);
 
+    ProductDto convertToDto(Product product);
+    List<ProductDto> getConvertedProducts(List<Product> products);
 
 }
