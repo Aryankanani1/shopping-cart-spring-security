@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -22,11 +23,32 @@ public class Cart {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private BigDecimal totalAmount = BigDecimal.ZERO;
-    private Set<CartItem> cartItemSet;
 
     // cart has many items
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<CartItem> cartItems;
+    private Set<CartItem> cartItems = new HashSet<>();
+
+    public void addItem(CartItem cartItem){
+        this.cartItems.add(cartItem);
+        cartItem.setCart(this);
+        updateTotalAmount();
+    }
+
+    public void removeItem(CartItem cartItem){
+        this.cartItems.add(cartItem);
+        cartItem.setCart(null);
+        updateTotalAmount();
+    }
+
+    public void updateTotalAmount(){
+        this.totalAmount = cartItems.stream().map(item -> {
+            BigDecimal unitPrice = item.getUnitPrice();
+            if(unitPrice == null){
+                return BigDecimal.ZERO;
+            }
+            return unitPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
+        }).reduce(BigDecimal.ZERO,BigDecimal::add);
+    }
 
 
 }
