@@ -2,7 +2,6 @@ package com.aryan.spring_security_demo.Service.cart;
 
 import com.aryan.spring_security_demo.exception.CartNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
-import com.aryan.spring_security_demo.model.CartItem;
 import com.aryan.spring_security_demo.repository.CartItemRepository;
 import com.aryan.spring_security_demo.repository.CartRepository;
 import lombok.RequiredArgsConstructor;
@@ -32,13 +31,17 @@ public class CartService implements CartServiceInterface{
         cartItemRepository.deleteAllByCartId(id);
         cart.getCartItems().clear();
         cartRepository.deleteById(id);
-
-
     }
 
     @Override
     public BigDecimal getTotalPrice(Long id) {
         Cart cart = getCart(id);
         return cart.getTotalAmount();
+    }
+
+    @Override
+    public Long initializeNewCart(){
+        Cart newCart = new Cart();
+        return cartRepository.save(newCart).getId();
     }
 }
