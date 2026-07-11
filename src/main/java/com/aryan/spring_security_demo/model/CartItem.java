@@ -26,7 +26,7 @@ public class CartItem {
      private BigDecimal unitPrice;
      private BigDecimal totalPrice;
 
-     @ManyToOne(cascade = CascadeType.ALL)
+     @ManyToOne
      @JoinColumn(name = "cart_id")
      private Cart cart;
 
