@@ -8,9 +8,9 @@ import com.aryan.spring_security_demo.model.CartItem;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.repository.CartItemRepository;
 import com.aryan.spring_security_demo.repository.CartRepository;
-import jakarta.persistence.criteria.CriteriaBuilder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
@@ -25,6 +25,7 @@ public class CartItemService implements CartItemServiceInterface {
 
 
     @Override
+    @Transactional
     public void addItemToCart(Long cartId, Long productId, Integer quantity) {
         // get the cart
         Cart cart = cartService.getCart(cartId);
@@ -53,6 +54,7 @@ public class CartItemService implements CartItemServiceInterface {
     }
 
     @Override
+    @Transactional
     public void removeItemFromCart(Long cartId, Long productId) {
 
         Cart cart = cartService.getCart(cartId);
@@ -62,6 +64,7 @@ public class CartItemService implements CartItemServiceInterface {
     }
 
     @Override
+    @Transactional
     public void updateItemQuantity(Long cartId, Long productId, int quantity) {
 
         Cart cart = cartService.getCart(cartId);

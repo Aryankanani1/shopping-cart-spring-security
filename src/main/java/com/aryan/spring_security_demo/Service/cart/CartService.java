@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.repository.CartItemRepository;
 import com.aryan.spring_security_demo.repository.CartRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 
 @Service
@@ -25,6 +26,7 @@ public class CartService implements CartServiceInterface{
     }
 
     @Override
+    @Transactional
     public void clearCart(Long id) {
 
         Cart cart = getCart(id);
