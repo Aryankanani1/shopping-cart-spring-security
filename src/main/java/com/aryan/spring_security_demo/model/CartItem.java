@@ -1,5 +1,5 @@
 package com.aryan.spring_security_demo.model;
-
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -26,6 +26,7 @@ public class CartItem {
      private BigDecimal unitPrice;
      private BigDecimal totalPrice;
 
+     @JsonIgnore
      @ManyToOne
      @JoinColumn(name = "cart_id")
      private Cart cart;
