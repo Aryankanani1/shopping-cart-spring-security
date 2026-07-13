@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.Service.order;
 
+import com.aryan.spring_security_demo.Service.cart.CartService;
 import com.aryan.spring_security_demo.enums.OrderStatus;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
@@ -8,13 +9,14 @@ import com.aryan.spring_security_demo.model.OrderItem;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.repository.OrderRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -22,9 +24,20 @@ public class OrderService implements OrderServiceInterface{
 
     private final OrderRepository orderRepository;
     private final ProductRepository  productRepository;
+    private final CartService cartService;
     @Override
+    @Transactional
     public Order placeOrder(Long userId) {
-        return null;
+        Cart cart = cartService.getCartByUserId(userId);
+        Order order = careatOrder(cart);
+        List<OrderItem> orderItems = createOrderItems(order,cart);
+        order.setOrderItems(new HashSet<>(orderItems));
+        order.setTotalAmount(calculateTotalAmount(orderItems));
+        Order savedOrdered = orderRepository.save(order);
+
+        cartService.clearCart(cart.getId());
+
+        return savedOrdered;
     }
 
     @Override
@@ -38,6 +51,7 @@ public class OrderService implements OrderServiceInterface{
 
         Order order = new Order();
         //set the user
+        order.setUser(cart.getUser());
         order.setOrderStatus(OrderStatus.PENDING);
         order.setLocalDate(LocalDate.now());
         return order;
@@ -65,5 +79,10 @@ public class OrderService implements OrderServiceInterface{
         return  orderItemList.stream()
                 .map(item -> item.getPrice()
                         .multiply(new BigDecimal(item.getQuntity()))).reduce(BigDecimal.ZERO,BigDecimal::add);
+    }
+
+    @Override
+    public List<Order> getUserOrders(Long userId){
+        return orderRepository.findByUserId(userId);
     }
 }
