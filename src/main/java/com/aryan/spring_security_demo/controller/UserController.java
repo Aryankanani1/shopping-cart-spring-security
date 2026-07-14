@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.controller;
 
 import com.aryan.spring_security_demo.Service.user.UserServiceInterface;
+import com.aryan.spring_security_demo.dto.UserDto;
 import com.aryan.spring_security_demo.exception.AlreadyExistsException;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.model.User;
@@ -11,9 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.apache.coyote.Response;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.service.annotation.DeleteExchange;
-
-import javax.print.DocFlavor;
 
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -29,7 +27,8 @@ public class UserController {
     public ResponseEntity<ApiResponse> getUserById(@PathVariable Long id){
         try{
             User user = userServiceInterface.getUserById(id);
-            return ResponseEntity.ok(new ApiResponse("success!",user));
+            UserDto userDto = userServiceInterface.convertUserToDto(user);
+            return ResponseEntity.ok(new ApiResponse("success!",userDto));
         }catch (ResourceNotFoundException e){
 return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
         }
@@ -39,7 +38,8 @@ return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null
     public ResponseEntity<ApiResponse> createUser(@RequestBody CreateUserRequest createUserRequest){
         try {
             User user = userServiceInterface.createUser(createUserRequest);
-            return ResponseEntity.ok(new ApiResponse("success!",user));
+                UserDto userDto = userServiceInterface.convertUserToDto(user);
+            return ResponseEntity.ok(new ApiResponse("success!",userDto));
         } catch (AlreadyExistsException e) {
             return  ResponseEntity.status(CONFLICT).body(new ApiResponse(e.getMessage(),null));
         }
@@ -49,7 +49,8 @@ return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null
     public ResponseEntity<ApiResponse> updateUser(@RequestBody UserUpdateRequest request,@PathVariable Long userId){
         try {
             User user = userServiceInterface.updateUser(request, userId);
-            return ResponseEntity.ok(new ApiResponse("success!",user));
+            UserDto userDto = userServiceInterface.convertUserToDto(user);
+            return ResponseEntity.ok(new ApiResponse("success!",userDto));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
         }
@@ -65,3 +66,4 @@ return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null
         }
     }
 }
+
