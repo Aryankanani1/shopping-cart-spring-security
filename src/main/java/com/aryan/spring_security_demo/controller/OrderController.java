@@ -34,7 +34,6 @@ public class OrderController {
         }
         }
 
-
         @GetMapping("/{orderId}/order")
         public ResponseEntity<ApiResponse> getOrderById(@PathVariable Long orderId){
             try {
@@ -56,7 +55,4 @@ public class OrderController {
                     .body(new ApiResponse("order not found!", null));
         }
     }
-
-
-
 }
