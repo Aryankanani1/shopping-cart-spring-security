@@ -9,6 +9,7 @@ import com.aryan.spring_security_demo.request.UserUpdateRequest;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -18,8 +19,9 @@ public class UserService implements UserServiceInterface{
     private final UserRepository userRepository;
     private final ModelMapper modelMapper;
     @Override
+    @Transactional(readOnly = true)
     public User getUserById(Long userId) {
-        return userRepository.findById(userId).orElseThrow(() -> new UserNoFoundException("failed to find user"));
+        return userRepository.findByIdWithDetails(userId).orElseThrow(() -> new UserNoFoundException("failed to find user"));
     }
 
     @Override
