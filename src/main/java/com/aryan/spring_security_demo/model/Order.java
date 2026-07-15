@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.model;
 
 import com.aryan.spring_security_demo.enums.OrderStatus;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -25,7 +26,6 @@ public class Order {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long Id;
-    private Long orderDate;
     private LocalDate localDate;
     @Enumerated(EnumType.STRING)
     private OrderStatus orderStatus;
@@ -35,6 +35,7 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL,orphanRemoval = true)
     Set<OrderItem> orderItems = new HashSet<>();
 
+    @JsonIgnore
     @ManyToOne
     @JoinColumn(name = "user_id")
     private User user;
