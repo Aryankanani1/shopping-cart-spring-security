@@ -1,4 +1,5 @@
 package com.aryan.spring_security_demo.Service.user;
+import com.aryan.spring_security_demo.dto.UserDto;
 import com.aryan.spring_security_demo.exception.AlreadyExistsException;
 import com.aryan.spring_security_demo.exception.UserNoFoundException;
 import com.aryan.spring_security_demo.model.User;
@@ -6,6 +7,7 @@ import com.aryan.spring_security_demo.repository.UserRepository;
 import com.aryan.spring_security_demo.request.CreateUserRequest;
 import com.aryan.spring_security_demo.request.UserUpdateRequest;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -14,6 +16,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class UserService implements UserServiceInterface{
     private final UserRepository userRepository;
+    private final ModelMapper modelMapper;
     @Override
     public User getUserById(Long userId) {
         return userRepository.findById(userId).orElseThrow(() -> new UserNoFoundException("failed to find user"));
@@ -46,6 +49,10 @@ public class UserService implements UserServiceInterface{
         userRepository.findById(userId).ifPresentOrElse(userRepository::delete, () -> {
             throw new UserNoFoundException("failed to find user");
         });
+    }
 
+    @Override
+    public UserDto convertUserToDto(User user){
+        return modelMapper.map(user,UserDto.class);
     }
 }
