@@ -4,12 +4,10 @@ import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.model.Order;
 
 import java.util.List;
-
 public interface OrderServiceInterface {
 
-     Order placeOrder(Long userId);
+     OrderDto placeOrder(Long userId);
     OrderDto getOrder(Long orderId);
-
 
     List<OrderDto> getUserOrders(Long userId);
 }

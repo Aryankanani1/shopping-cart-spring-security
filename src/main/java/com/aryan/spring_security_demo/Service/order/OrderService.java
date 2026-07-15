@@ -31,7 +31,7 @@ public class OrderService implements OrderServiceInterface{
     private final ModelMapper modelMapper;
     @Override
     @Transactional
-    public Order placeOrder(Long userId) {
+    public OrderDto placeOrder(Long userId) {
         Cart cart = cartService.getCartByUserId(userId);
         Order order = careatOrder(cart);
         List<OrderItem> orderItems = createOrderItems(order,cart);
@@ -41,7 +41,7 @@ public class OrderService implements OrderServiceInterface{
 
         cartService.clearCart(cart.getId());
 
-        return savedOrdered;
+        return convertToDto(savedOrdered);
     }
 
     @Override
@@ -83,7 +83,7 @@ public class OrderService implements OrderServiceInterface{
     private BigDecimal calculateTotalAmount(List<OrderItem> orderItemList){
         return  orderItemList.stream()
                 .map(item -> item.getPrice()
-                        .multiply(new BigDecimal(item.getQuntity()))).reduce(BigDecimal.ZERO,BigDecimal::add);
+                        .multiply(new BigDecimal(item.getQuantity()))).reduce(BigDecimal.ZERO,BigDecimal::add);
     }
 
     @Override

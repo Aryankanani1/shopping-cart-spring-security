@@ -3,7 +3,6 @@ package com.aryan.spring_security_demo.controller;
 import com.aryan.spring_security_demo.Service.order.OrderServiceInterface;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
-import com.aryan.spring_security_demo.model.Order;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-import static ch.qos.logback.core.util.AggregationType.NOT_FOUND;
 import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 
 @RestController
@@ -24,10 +22,10 @@ public class OrderController {
     private final OrderServiceInterface orderServiceInterface;
 
     @PostMapping("/order")
-    public ResponseEntity<ApiResponse> createOrder(@PathVariable Long userId){
+    public ResponseEntity<ApiResponse> createOrder(@RequestParam Long userId){
 
         try {
-            Order order = orderServiceInterface.placeOrder(userId);
+            OrderDto order = orderServiceInterface.placeOrder(userId);
             return ResponseEntity.ok(new ApiResponse("Item Order Success!",order));
         } catch (Exception e) {
             return ResponseEntity.status(INTERNAL_SERVER_ERROR).body(new ApiResponse("Error occurred!",null));
@@ -45,7 +43,7 @@ public class OrderController {
             }
         }
 
-    @GetMapping("/{userId}/order")
+    @GetMapping("/user/{userId}/order")
     public ResponseEntity<ApiResponse> getUserOrders(@PathVariable Long userId){
         try {
             List<OrderDto> order = orderServiceInterface.getUserOrders(userId);
