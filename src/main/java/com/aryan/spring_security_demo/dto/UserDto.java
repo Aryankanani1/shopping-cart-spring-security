@@ -6,7 +6,7 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-@JsonPropertyOrder({"id", "firstName", "lastName", "email", "cart", "orders"})
+@JsonPropertyOrder({"id", "firstName", "lastName", "email", "orders","cart"})
 public class UserDto {
 
     private Long id;
