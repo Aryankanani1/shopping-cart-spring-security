@@ -1,4 +1,4 @@
-package com.aryan.spring_security_demo.config;
+package com.aryan.spring_security_demo.security.config;
 
 import com.aryan.spring_security_demo.dto.ImageDto;
 import com.aryan.spring_security_demo.dto.OrderDto;
