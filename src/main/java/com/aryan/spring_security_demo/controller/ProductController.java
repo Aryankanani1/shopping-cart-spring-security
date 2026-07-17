@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.request.ProductUpdateRequest;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import static org.springframework.http.HttpStatus.*;
@@ -34,6 +35,8 @@ public class ProductController {
         }
     }
 
+
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PostMapping("/add")
     public ResponseEntity<ApiResponse> addProduct(@RequestBody AddProductRequest name) {
                 try{
@@ -44,6 +47,7 @@ public class ProductController {
                 }
     }
 
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PutMapping("/product/{id}/product")
     public ResponseEntity<ApiResponse> updateProduct(@RequestBody ProductUpdateRequest request
             , @PathVariable Long id)
@@ -57,6 +61,7 @@ public class ProductController {
         }
     }
 
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @DeleteMapping("/product/{id}/delete")
     public ResponseEntity<ApiResponse> deleteProduct(@PathVariable Long id){
         try {

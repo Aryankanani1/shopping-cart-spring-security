@@ -36,9 +36,7 @@ public class User {
     private List<Order> orders;
 
     @ManyToMany(fetch = FetchType.EAGER,cascade = {CascadeType.MERGE,
-            CascadeType.DETACH,
-            CascadeType.PERSIST,
-            CascadeType.PERSIST
+            CascadeType.DETACH
     }
     )
     @JoinTable(name = "user_roles",
