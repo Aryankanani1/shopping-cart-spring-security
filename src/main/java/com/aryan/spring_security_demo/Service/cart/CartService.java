@@ -2,12 +2,14 @@ package com.aryan.spring_security_demo.Service.cart;
 
 import com.aryan.spring_security_demo.exception.CartNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
+import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.CartItemRepository;
 import com.aryan.spring_security_demo.repository.CartRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -42,9 +44,13 @@ public class CartService implements CartServiceInterface{
     }
 
     @Override
-    public Long initializeNewCart(){
-        Cart newCart = new Cart();
-        return cartRepository.save(newCart).getId();
+    public Cart initializeNewCart(User user){
+        return Optional.ofNullable(getCartByUserId(user.getId()))
+                .orElseGet(() -> {
+                    Cart cart = new Cart();
+                    cart.setUser(user);
+                    return cartRepository.save(cart);
+                });
     }
 
     @Override

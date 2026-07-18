@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.Service.product;
 import com.aryan.spring_security_demo.dto.ImageDto;
 import com.aryan.spring_security_demo.dto.ProductDto;
+import com.aryan.spring_security_demo.exception.AlreadyExistsException;
 import com.aryan.spring_security_demo.exception.ProductNotFoundException;
 import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.model.Image;
@@ -20,13 +21,17 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 public class ProductService implements ProductServiceInterface{
-
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ModelMapper modelMapper;
     private final ImageRepository imageRepository;
     @Override
     public Product addProduct(AddProductRequest request) {
+
+
+        if(productExists(request.getName(),request.getBrand())){
+            throw new AlreadyExistsException(request.getBrand() + " " + request.getName() + "already exists");
+        }
         // check if the category is in DB or not
        Category category = Optional.ofNullable(categoryRepository.findByName(request.getCategory().getName()))
                          .orElseGet(() -> {
@@ -39,6 +44,10 @@ public class ProductService implements ProductServiceInterface{
         // if yes set it as the new product category
         // if no set as the new category
         // and then set the product into that category
+    }
+
+    private boolean productExists(String name,String brand){
+        return productRepository.existsByNameAndBrand(name,brand);
     }
 
     private Product createProduct(AddProductRequest productRequest, Category category){
@@ -73,11 +82,7 @@ public class ProductService implements ProductServiceInterface{
           return productRepository.findById(productId)
                   .map(existingproduct -> updateExistingProduct(existingproduct,request))
                   .map(productRepository::save).orElseThrow(() -> new ProductNotFoundException("product not found exception"));
-
-
-
     }
-
     public Product updateExistingProduct(Product existingProduct, ProductUpdateRequest productUpdateRequest){
                 existingProduct.setName(productUpdateRequest.getName());
                 existingProduct.setBrand(productUpdateRequest.getBrand());
@@ -90,7 +95,6 @@ public class ProductService implements ProductServiceInterface{
                 return existingProduct;
 
     }
-
     @Override
     public List<Product> getAllProducts() {
         return productRepository.findAll();
@@ -166,4 +170,6 @@ public class ProductService implements ProductServiceInterface{
         productDto.setImages(imageDtos);
         return productDto;
     }
+
+
 }

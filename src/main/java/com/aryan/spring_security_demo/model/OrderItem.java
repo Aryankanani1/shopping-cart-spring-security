@@ -21,7 +21,7 @@ public class OrderItem {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private int quntity;
+    private int quantity;
     private BigDecimal price;
 
     @JsonIgnore
@@ -34,8 +34,8 @@ public class OrderItem {
     @JoinColumn(name = "product_id")
     private Product product;
 
-    public OrderItem(Order order, Product product,int quntity, BigDecimal price) {
-        this.quntity = quntity;
+    public OrderItem(Order order, Product product,int quantity, BigDecimal price) {
+        this.quantity = quantity;
         this.price = price;
         this.order = order;
         this.product = product;
