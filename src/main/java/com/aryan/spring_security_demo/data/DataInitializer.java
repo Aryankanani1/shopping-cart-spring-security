@@ -4,21 +4,33 @@ import com.aryan.spring_security_demo.model.Role;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.RoleRepository;
 import com.aryan.spring_security_demo.repository.UserRepository;
-import jakarta.transaction.Transactional;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 @Transactional
 @Component
 @RequiredArgsConstructor
 public class DataInitializer implements ApplicationListener<ApplicationReadyEvent> {
+
+    // Should match hibernate.jdbc.batch_size so the persistence context is flushed
+    // and cleared on the same boundary Hibernate uses to send JDBC batches. This
+    // keeps memory bounded during bulk inserts and avoids a bloated first-level cache.
+    // IN SHORT, this logic prevents outOfMemory exception
+    private static final int BATCH_SIZE = 20;
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final RoleRepository roleRepository;
+
+    @PersistenceContext
+    private EntityManager entityManager;
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
         Set<String> defaultRoles = Set.of("ROLE_ADMIN","ROLE_CUSTOMER");
@@ -43,7 +55,15 @@ public class DataInitializer implements ApplicationListener<ApplicationReadyEven
             userRepository.save(user);
             System.out.println("default test user " + i + "created successfully");
 
+            // Batch insert: flush + clear on the batch boundary to bound memory
+            // and let Hibernate group the INSERTs into JDBC batches.
+            if (i % BATCH_SIZE == 0) {
+                entityManager.flush();
+                entityManager.clear();
+            }
         }
+        entityManager.flush();
+        entityManager.clear();
     }
 
     private void createDefaultAdminIfNotExists(){
@@ -62,7 +82,13 @@ public class DataInitializer implements ApplicationListener<ApplicationReadyEven
             userRepository.save(user);
             System.out.println("default admin " + i + "created successfully");
 
+            if (i % BATCH_SIZE == 0) {
+                entityManager.flush();
+                entityManager.clear();
+            }
         }
+        entityManager.flush();
+        entityManager.clear();
     }
 
 

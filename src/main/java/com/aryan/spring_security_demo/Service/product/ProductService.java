@@ -14,6 +14,7 @@ import com.aryan.spring_security_demo.request.ProductUpdateRequest;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +27,7 @@ public class ProductService implements ProductServiceInterface{
     private final ModelMapper modelMapper;
     private final ImageRepository imageRepository;
     @Override
+    @Transactional
     public Product addProduct(AddProductRequest request) {
 
 
@@ -46,6 +48,7 @@ public class ProductService implements ProductServiceInterface{
         // and then set the product into that category
     }
 
+
     private boolean productExists(String name,String brand){
         return productRepository.existsByNameAndBrand(name,brand);
     }
@@ -62,12 +65,14 @@ public class ProductService implements ProductServiceInterface{
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Product getProductById(Long id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new ProductNotFoundException("product not found") );
     }
 
     @Override
+    @Transactional
     public void deleteProductById(Long productId) {
         productRepository.findById(productId)
         .ifPresentOrElse(productRepository::delete,
@@ -78,12 +83,14 @@ public class ProductService implements ProductServiceInterface{
     }
 
     @Override
+    @Transactional
     public Product updateProductById(ProductUpdateRequest request, Long productId) {
           return productRepository.findById(productId)
                   .map(existingproduct -> updateExistingProduct(existingproduct,request))
                   .map(productRepository::save).orElseThrow(() -> new ProductNotFoundException("product not found exception"));
     }
-    public Product updateExistingProduct(Product existingProduct, ProductUpdateRequest productUpdateRequest){
+
+    private Product updateExistingProduct(Product existingProduct, ProductUpdateRequest productUpdateRequest){
                 existingProduct.setName(productUpdateRequest.getName());
                 existingProduct.setBrand(productUpdateRequest.getBrand());
                 existingProduct.setPrice(productUpdateRequest.getPrice());
@@ -96,35 +103,42 @@ public class ProductService implements ProductServiceInterface{
 
     }
     @Override
+    @Transactional(readOnly = true)
     public List<Product> getAllProducts() {
         return productRepository.findAll();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Product> getAllProductsByCategory(String category) {
         return productRepository.findByCategoryName(category);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Product> getProductsByBrand(String brand) {
         return productRepository.findByBrand(brand);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Product> getProductsByCategoryAndBrand(String category, String brand) {
         return productRepository.findByCategoryNameAndBrand(category,brand);
     }
     @Override
+    @Transactional(readOnly = true)
     public List<Product> getProductsByName(String name) {
         return productRepository.findByName(name);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Product> getProductsByBrandAndName(String brand, String name) {
         return productRepository.findByBrandAndName(brand,name);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Long countProductsByBrandAndName(String brand, String name) {
         return productRepository.countByBrandAndName(brand,name);
     }
@@ -170,6 +184,5 @@ public class ProductService implements ProductServiceInterface{
         productDto.setImages(imageDtos);
         return productDto;
     }
-
 
 }

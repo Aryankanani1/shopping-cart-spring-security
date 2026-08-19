@@ -5,9 +5,9 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.NaturalId;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -21,21 +21,28 @@ import java.util.List;
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "users_seq")
+    @SequenceGenerator(name = "users_seq", sequenceName = "users_seq", allocationSize = 50)
     private Long id;
+
+    @Version
+    private Long version;
+
     private String firstName;
     private String lastName;
     @NaturalId
     private String email;
     private String password;
 
-    @OneToOne(mappedBy = "user" ,cascade = CascadeType.ALL,orphanRemoval = true)
+    @OneToOne(mappedBy = "user" ,cascade = CascadeType.ALL,orphanRemoval = true, fetch = FetchType.LAZY)
     private Cart cart;
 
-    @OneToMany(mappedBy = "user",cascade = CascadeType.ALL,orphanRemoval = true)
+    @BatchSize(size = 20)
+    @OneToMany(mappedBy = "user",cascade = CascadeType.ALL,orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Order> orders;
 
-    @ManyToMany(fetch = FetchType.EAGER,cascade = {CascadeType.MERGE,
+    @BatchSize(size = 20)
+    @ManyToMany(fetch = FetchType.LAZY,cascade = {CascadeType.MERGE,
             CascadeType.DETACH
     }
     )
@@ -50,6 +57,18 @@ public class User {
     )
     private Collection<Role> roles = new HashSet<>();
 
+    // email is the @NaturalId (a stable, unique business key), so it is the
+    // safest basis for equality across the entity lifecycle and detached state.
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof User other)) return false;
+        return email != null && email.equals(other.getEmail());
+    }
 
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 
 }

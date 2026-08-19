@@ -10,10 +10,10 @@ import com.aryan.spring_security_demo.model.OrderItem;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.repository.OrderRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -45,9 +45,10 @@ public class OrderService implements OrderServiceInterface{
     }
 
     @Override
+    @Transactional(readOnly = true)
     public OrderDto getOrder(Long orderId) {
         return orderRepository.
-                findById(orderId).
+                findByIdWithItems(orderId).
                 map(this::convertToDto)
                 .orElseThrow(() -> new ResourceNotFoundException("order not found!"));
     }
@@ -62,7 +63,6 @@ public class OrderService implements OrderServiceInterface{
         return order;
 
     }
-
     private List<OrderItem> createOrderItems(Order order, Cart cart){
         //keeping track of the inventory by calculating the total price
         return cart.getCartItems().stream()
@@ -87,6 +87,7 @@ public class OrderService implements OrderServiceInterface{
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<OrderDto> getUserOrders(Long userId){
         return orderRepository.findByUserId(userId)
                 .stream().map(this::convertToDto).toList();
