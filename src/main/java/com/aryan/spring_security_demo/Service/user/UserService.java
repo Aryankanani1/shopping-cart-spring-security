@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.UserRepository;
 import com.aryan.spring_security_demo.request.CreateUserRequest;
 import com.aryan.spring_security_demo.request.UserUpdateRequest;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.security.core.Authentication;
@@ -29,6 +30,7 @@ public class UserService implements UserServiceInterface{
     }
 
     @Override
+    @Transactional
     public User createUser(CreateUserRequest request) {
         return Optional.of(request).filter(user -> !userRepository.existsByEmail(request.getEmail()))
                 .map(req -> {
@@ -42,6 +44,7 @@ public class UserService implements UserServiceInterface{
     }
 
     @Override
+    @Transactional
     public User updateUser(UserUpdateRequest request, Long userId) {
         return userRepository.findById(userId).map(existingUser -> {
             existingUser.setFirstName(request.getFirstName());
@@ -50,7 +53,9 @@ public class UserService implements UserServiceInterface{
         }).orElseThrow(() -> new UserNoFoundException("failed to find user"));
     }
 
+
     @Override
+    @Transactional
     public void deleteUser(Long userId) {
         userRepository.findById(userId).ifPresentOrElse(userRepository::delete, () -> {
             throw new UserNoFoundException("failed to find user");

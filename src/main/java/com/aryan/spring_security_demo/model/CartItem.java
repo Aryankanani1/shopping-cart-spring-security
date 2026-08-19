@@ -17,9 +17,14 @@ import java.math.BigDecimal;
 public class CartItem {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "cart_item_seq")
+    @SequenceGenerator(name = "cart_item_seq", sequenceName = "cart_item_seq", allocationSize = 50)
      private Long id;
-     @ManyToOne
+
+     @Version
+     private Long version;
+
+     @ManyToOne(fetch = FetchType.LAZY)
      @JoinColumn(name = "product_id")
      private Product product;
      private int quantity;
@@ -27,7 +32,7 @@ public class CartItem {
      private BigDecimal totalPrice;
 
      @JsonIgnore
-     @ManyToOne
+     @ManyToOne(fetch = FetchType.LAZY)
      @JoinColumn(name = "cart_id")
      private Cart cart;
 
@@ -35,4 +40,16 @@ public class CartItem {
  public void setTotalPrice(){
   this.totalPrice = this.unitPrice.multiply(new BigDecimal(this.quantity));
  }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof CartItem other)) return false;
+        return id != null && id.equals(other.getId());
+    }
+
+    @Override
+    public int hashCode() {
+        return getClass().hashCode();
+    }
 }

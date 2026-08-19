@@ -5,6 +5,8 @@ import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -15,22 +17,26 @@ public class CategoryService implements CategoryServiceInterface{
     private final CategoryRepository categoryRepository;
 
     @Override
+    @Transactional(readOnly = true)
     public Category getCategoryById(Long id) {
         return categoryRepository.findById(id)
                 .orElseThrow(() -> new CategoryNotFoundException("category not found exception"));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Category getCategoryByName(String name) {
         return categoryRepository.findByName(name);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Category> getAllCategories() {
         return categoryRepository.findAll();
     }
 
     @Override
+    @Transactional
     public Category addCategory(Category category) {
         // check the category if it is existing or not if exist we can't
         // create those categories, and
@@ -44,6 +50,7 @@ public class CategoryService implements CategoryServiceInterface{
     }
 
     @Override
+    @Transactional
     public Category updateCategory(Category category,Long id) {
      return Optional.ofNullable(getCategoryById(id)).map(oldCategory -> {
            oldCategory.setName(category.getName());
@@ -55,6 +62,7 @@ public class CategoryService implements CategoryServiceInterface{
 
 
     @Override
+    @Transactional
     public void deleteCategoryById(Long id) {
 categoryRepository.findById(id).ifPresentOrElse(categoryRepository::delete,() -> {
 

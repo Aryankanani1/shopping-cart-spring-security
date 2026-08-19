@@ -8,8 +8,8 @@ import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.repository.ImageRepository;
 import lombok.RequiredArgsConstructor;
-import org.hibernate.annotations.processing.SQL;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.sql.rowset.serial.SerialBlob;
@@ -26,11 +26,13 @@ public class ImageService implements ImageServiceInterface {
     private final ProductServiceInterface productServiceInterface;
 
     @Override
+    @Transactional(readOnly = true)
     public Image getImageById(Long id) {
         return imageRepository.findById(id).orElseThrow(() -> new ImageNotFoundException("Image not found"));
     }
 
     @Override
+    @Transactional
     public void deleteImageById(Long id) {
         // find the image by id
         // after find it then delete it
@@ -40,6 +42,7 @@ public class ImageService implements ImageServiceInterface {
     }
 
     @Override
+    @Transactional
     public List<ImageDto> saveImages(List<MultipartFile> files, Long productId) {
 
 // 1. Build the entity — Create an Image and copy in the file's metadata (filename, content type)
@@ -79,6 +82,7 @@ public class ImageService implements ImageServiceInterface {
 
 
     @Override
+    @Transactional
     public void updateImage(MultipartFile file, Long imageId) {
     // find the image by the id,
         // then update the image
