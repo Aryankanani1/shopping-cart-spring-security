@@ -30,6 +30,12 @@ spring.datasource.hikari.leak-detection-threshold=20000
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
 
+# Close the persistence context at the service/transaction boundary instead of
+# holding it open for the whole request. This surfaces LazyInitializationException
+# at development time and prevents hidden N+1 queries during JSON serialization,
+# forcing associations to be fetched explicitly (e.g. JOIN FETCH / @EntityGraph).
+spring.jpa.open-in-view=false
+
 # Global batch fetching — turns a would-be N+1 on lazy associations into a
 # single IN (...) query. Complements the per-collection @BatchSize hints.
 spring.jpa.properties.hibernate.default_batch_fetch_size=20

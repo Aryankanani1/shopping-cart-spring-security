@@ -68,9 +68,11 @@ public class UserService implements UserServiceInterface{
     }
 
     @Override
+    @Transactional(readOnly = true)
     public User getAuthenticatedUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String email = authentication.getName();
-        return userRepository.findByEmail(email);
+        return userRepository.findByEmailWithRoles(email)
+                .orElseThrow(() -> new UserNoFoundException("failed to find user"));
     }
 }

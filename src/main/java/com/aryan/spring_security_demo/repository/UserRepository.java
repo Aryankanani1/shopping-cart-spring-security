@@ -15,5 +15,8 @@ public interface UserRepository extends JpaRepository<User,Long> {
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.orders LEFT JOIN FETCH u.cart WHERE u.id = :id")
     Optional<User> findByIdWithDetails(@Param("id") Long id);
 
-    User findByEmail(String email);
+    // Fetch the user together with roles so authentication/authorization code can
+    // read authorities without a lazy load (works with open-in-view disabled).
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.roles WHERE u.email = :email")
+    Optional<User> findByEmailWithRoles(@Param("email") String email);
 }
