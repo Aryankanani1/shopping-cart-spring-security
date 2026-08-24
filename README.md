@@ -1,5 +1,12 @@
 # Shopping Cart — Spring Security
 
+![Java](https://img.shields.io/badge/Java-17-orange)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen)
+![Spring Security](https://img.shields.io/badge/Spring%20Security-JWT-green)
+![Database](https://img.shields.io/badge/MySQL-Hibernate-blue)
+![Build](https://img.shields.io/badge/build-Maven-red)
+![Last commit](https://img.shields.io/github/last-commit/Aryankanani1/shopping-cart-spring-security)
+
 An e-commerce REST API built with **Spring Boot 4.1** and **Java 17**, featuring
 JWT-based stateless authentication, role-based authorization, a product catalog,
 cart, and order flow. Persistence is tuned for Hibernate best practices
