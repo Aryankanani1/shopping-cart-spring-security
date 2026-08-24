@@ -7,6 +7,7 @@ import com.aryan.spring_security_demo.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -17,6 +18,7 @@ import java.util.Set;
 @Transactional
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class DataInitializer implements ApplicationListener<ApplicationReadyEvent> {
 
     // Should match hibernate.jdbc.batch_size so the persistence context is flushed
@@ -53,7 +55,7 @@ public class DataInitializer implements ApplicationListener<ApplicationReadyEven
             user.setPassword(passwordEncoder.encode("123456"));
             user.setRoles(Set.of(userRole));
             userRepository.save(user);
-            System.out.println("default test user " + i + "created successfully");
+            log.info("Default test user {} created successfully", i);
 
             // Batch insert: flush + clear on the batch boundary to bound memory
             // and let Hibernate group the INSERTs into JDBC batches.
@@ -80,7 +82,7 @@ public class DataInitializer implements ApplicationListener<ApplicationReadyEven
             user.setPassword(passwordEncoder.encode("123456"));
             user.setRoles(Set.of(userRole));
             userRepository.save(user);
-            System.out.println("default admin " + i + "created successfully");
+            log.info("Default admin {} created successfully", i);
 
             if (i % BATCH_SIZE == 0) {
                 entityManager.flush();

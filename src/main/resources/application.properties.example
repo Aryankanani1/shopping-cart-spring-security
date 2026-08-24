@@ -70,3 +70,20 @@ logging.level.org.hibernate.orm.query=WARN
 auth.token.jwtSecret=${JWT_SECRET}
 # Token lifetime in milliseconds (e.g. 3600000 = 1 hour).
 auth.token.expirationInMils=${JWT_EXPIRATION_MS:3600000}
+
+# ---------------------------------------------------------------------------
+# Startup pipeline (see com.aryan.spring_security_demo.bootstrap.*)
+# Ordered ApplicationRunner/CommandLineRunner beans that run once at boot.
+# ---------------------------------------------------------------------------
+# DefaultDataRunner — seed default catalog categories into an empty DB.
+# Disable globally here, or per-run with the program arg: --skip-seed
+app.startup.seed.enabled=true
+app.startup.seed.categories=Electronics,Books,Clothing,Home & Kitchen,Toys,Sports,Beauty,Groceries
+
+# ConnectivityCheckRunner — validate the DB and (optionally) external HTTP APIs
+# at boot. Leave endpoints blank to check only the database. Comma-separated.
+app.startup.connectivity.endpoints=
+app.startup.connectivity.timeout-ms=3000
+
+# CacheWarmupRunner — preload the categories/products caches at boot.
+app.startup.cache.warmup-enabled=true
