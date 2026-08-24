@@ -9,10 +9,12 @@ target/
 .env.*
 !.env.example
 
-# Application secrets
+# Application config: base application.yml + application-{dev,prod}.yml are
+# committed (safe defaults only; secrets come from the environment).
+# Legacy .properties and personal local overrides stay OUT of the repo.
 src/main/resources/application.properties
 src/main/resources/application-*.properties
-!src/main/resources/application.properties.example
+src/main/resources/application-local.yml
 
 # IntelliJ IDEA
 .idea/

@@ -60,6 +60,13 @@
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 
+		<!-- YAML config support (application.yml). Spring Boot 4 no longer pulls
+		     SnakeYAML transitively, so declare it explicitly; version from the BOM. -->
+		<dependency>
+			<groupId>org.yaml</groupId>
+			<artifactId>snakeyaml</artifactId>
+		</dependency>
+
 		<!-- Generates config metadata so @ConfigurationProperties keys get IDE
 		     autocomplete/docs. Compile-time only; not shipped in the jar. -->
 		<dependency>
