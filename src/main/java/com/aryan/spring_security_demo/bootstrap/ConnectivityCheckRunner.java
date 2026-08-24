@@ -1,8 +1,8 @@
 package com.aryan.spring_security_demo.bootstrap;
 
+import com.aryan.spring_security_demo.config.StartupProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
@@ -15,7 +15,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -40,12 +39,7 @@ import java.util.List;
 public class ConnectivityCheckRunner implements ApplicationRunner {
 
     private final DataSource dataSource;
-
-    @Value("${app.startup.connectivity.endpoints:}")
-    private String endpointsCsv;
-
-    @Value("${app.startup.connectivity.timeout-ms:3000}")
-    private long timeoutMs;
+    private final StartupProperties startupProperties;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -53,8 +47,12 @@ public class ConnectivityCheckRunner implements ApplicationRunner {
         checkExternalEndpoints();
     }
 
+    private long timeoutMs() {
+        return startupProperties.getConnectivity().getTimeoutMs();
+    }
+
     private void checkDatabase() {
-        int validationTimeoutSeconds = (int) Math.max(1, timeoutMs / 1000);
+        int validationTimeoutSeconds = (int) Math.max(1, timeoutMs() / 1000);
         try (Connection connection = dataSource.getConnection()) {
             boolean valid = connection.isValid(validationTimeoutSeconds);
             if (valid) {
@@ -68,7 +66,7 @@ public class ConnectivityCheckRunner implements ApplicationRunner {
     }
 
     private void checkExternalEndpoints() {
-        List<String> endpoints = Arrays.stream(endpointsCsv.split(","))
+        List<String> endpoints = startupProperties.getConnectivity().getEndpoints().stream()
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
@@ -79,7 +77,7 @@ public class ConnectivityCheckRunner implements ApplicationRunner {
         }
 
         HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(timeoutMs))
+                .connectTimeout(Duration.ofMillis(timeoutMs()))
                 .build();
 
         for (String endpoint : endpoints) {
@@ -91,7 +89,7 @@ public class ConnectivityCheckRunner implements ApplicationRunner {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(endpoint))
-                    .timeout(Duration.ofMillis(timeoutMs))
+                    .timeout(Duration.ofMillis(timeoutMs()))
                     .method("HEAD", HttpRequest.BodyPublishers.noBody())
                     .build();
 

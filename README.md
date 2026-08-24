@@ -113,6 +113,13 @@ app.startup.cache.warmup-enabled=true
 A **database** connectivity failure is logged as an ERROR; external endpoint
 failures are logged as WARN and do **not** abort startup.
 
+These keys are bound to a validated, type-safe `@ConfigurationProperties` group
+(`StartupProperties`, prefix `app.startup`) rather than scattered `@Value`
+lookups — invalid config (e.g. a non-positive timeout, empty category list) fails
+fast at startup. JWT settings are grouped the same way (`AuthTokenProperties`,
+prefix `auth.token`). Defaults live in code, so the **same jar runs in every
+environment** and only the externalized configuration changes.
+
 ### Caching
 `CacheConfig` enables Spring's cache abstraction with an in-memory
 `ConcurrentMapCacheManager` (no extra dependency). `CatalogCacheService` exposes
