@@ -1,0 +1,71 @@
+# ===========================================================================
+# BASE configuration — committed, safe shared defaults for EVERY environment.
+# Only values that differ per environment live in application-{profile}.yml.
+# Secrets are never stored here: they are read from environment variables and
+# override these committed defaults via Spring's property precedence.
+# ===========================================================================
+spring:
+  application:
+    name: spring_security_demo
+
+  # Dev by default for local runs. Activate prod with:  SPRING_PROFILES_ACTIVE=prod
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  # --- DataSource: connection details come from the environment ---
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # HikariCP — size to the DB's real capacity, not "big".
+    hikari:
+      pool-name: ShoppingCartHikariPool
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 20000
+
+  # --- JPA / Hibernate: settings that are correct in all environments ---
+  jpa:
+    # Close the persistence context at the transaction boundary: surfaces
+    # LazyInitializationException early and prevents N+1 during serialization.
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        # Turn a would-be N+1 on lazy associations into a single IN (...) query.
+        default_batch_fetch_size: 20
+        # Batch writes — works because ids use SEQUENCE with a pooled optimizer.
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+        batch_versioned_data: true
+
+# Base path prefix for all REST controllers (e.g. /api/v1/products).
+api:
+  prefix: /api/v1
+
+# --- JWT (see AuthTokenProperties) ---
+# jwtSecret has NO committed default — it must be supplied via JWT_SECRET.
+# Base64 key, >= 256 bits for HS256:  openssl rand -base64 32
+auth:
+  token:
+    jwtSecret: ${JWT_SECRET}
+    expirationInMils: ${JWT_EXPIRATION_MS:3600000}
+
+# --- Startup pipeline (see StartupProperties) — defaults safe for all envs ---
+app:
+  startup:
+    seed:
+      enabled: true
+      categories: Electronics,Books,Clothing,Home & Kitchen,Toys,Sports,Beauty,Groceries
+    connectivity:
+      # Comma-separated external endpoints to verify at boot (empty = DB only).
+      endpoints: ${APP_STARTUP_CONNECTIVITY_ENDPOINTS:}
+      timeout-ms: 3000
+    cache:
+      warmup-enabled: true

@@ -32,27 +32,42 @@ cart, and order flow. Persistence is tuned for Hibernate best practices
 - MySQL running and reachable
 
 ### Configure
-Copy the example properties and fill in the placeholders (secrets come from
-environment variables, never source control):
 
-```bash
-cp src/main/resources/application.properties.example src/main/resources/application.properties
-```
+Configuration follows a **commit-safe-defaults, override-per-environment** model
+— no config file needs to be copied or created to run locally:
 
-Required environment variables:
+- `application.yml` — committed **base** with shared, safe defaults.
+- `application-dev.yml` / `application-prod.yml` — carry only what differs per
+  environment (`ddl-auto`, SQL logging, log levels).
+- **Secrets are never committed** — they are read from environment variables and
+  override the committed defaults via Spring's property precedence.
 
-| Variable          | Purpose                                              |
-|-------------------|------------------------------------------------------|
-| `DB_URL`          | JDBC URL, e.g. `jdbc:mysql://localhost:3306/shop`    |
-| `DB_USERNAME`     | Database user                                        |
-| `DB_PASSWORD`     | Database password                                    |
-| `JWT_SECRET`      | Base64 key, ≥256 bits — `openssl rand -base64 32`    |
-| `JWT_EXPIRATION_MS` | (optional) token lifetime, default `3600000` (1h)  |
+The active profile defaults to `dev`; select prod with `SPRING_PROFILES_ACTIVE=prod`.
+
+Environment variables:
+
+| Variable          | Required?            | Purpose                                            |
+|-------------------|----------------------|----------------------------------------------------|
+| `JWT_SECRET`      | **always**           | Base64 key, ≥256 bits — `openssl rand -base64 32`  |
+| `DB_URL`          | prod (dev: localhost)| JDBC URL, e.g. `jdbc:mysql://localhost:3306/shop`  |
+| `DB_USERNAME`     | prod (dev: `root`)   | Database user                                      |
+| `DB_PASSWORD`     | prod (dev: empty)    | Database password                                  |
+| `SPRING_PROFILES_ACTIVE` | optional      | Active profile, default `dev`                      |
+| `JWT_EXPIRATION_MS` | optional           | Token lifetime, default `3600000` (1h)             |
+
+In **dev** the datasource falls back to a local MySQL (`localhost:3306`,
+`root`, empty password) so the app boots out of the box; any value can still be
+overridden by exporting the matching env var.
 
 ### Run
 
 ```bash
-./mvnw spring-boot:run
+# dev (default profile)
+JWT_SECRET=$(openssl rand -base64 32) ./mvnw spring-boot:run
+
+# prod
+SPRING_PROFILES_ACTIVE=prod DB_URL=... DB_USERNAME=... DB_PASSWORD=... \
+  JWT_SECRET=... ./mvnw spring-boot:run
 ```
 
 The API is served under the `api.prefix` (default `/api/v1`).
@@ -66,10 +81,19 @@ repository/   Spring Data JPA repositories
 model/        JPA entities (User, Role, Product, Category, Image, Cart, CartItem, Order, OrderItem)
 dto/ request/ response/   API boundary objects
 security/     config (shopConfig), jwt (AuthTokenFilter, JwtUtils, JwtEntryPoint), user details
-config/       CacheConfig (@EnableCaching + cache manager)
+config/       CacheConfig + typed @ConfigurationProperties (StartupProperties, AuthTokenProperties)
 bootstrap/    Ordered startup runners (see below)
-data/         DataInitializer — seeds roles + users on ApplicationReadyEvent
+data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev") test users)
 ```
+
+### Configuration & profiles
+- **Typed, validated config**: `app.startup.*` and `auth.token.*` bind to
+  `@ConfigurationProperties` beans (`@Validated`) rather than scattered `@Value` —
+  invalid config fails fast at startup.
+- **Profiles decide beans, not `if` checks**: `DevDataSeeder` is `@Profile("dev")`,
+  so test users/admins exist only in dev; production never creates them. Roles
+  (needed everywhere) are seeded unconditionally by `DataInitializer`.
+- **`ddl-auto`**: `update` in dev, `validate` in prod (migrations own prod DDL).
 
 ### Security model
 - **Stateless JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`.
@@ -113,6 +137,13 @@ app.startup.cache.warmup-enabled=true
 A **database** connectivity failure is logged as an ERROR; external endpoint
 failures are logged as WARN and do **not** abort startup.
 
+These keys are bound to a validated, type-safe `@ConfigurationProperties` group
+(`StartupProperties`, prefix `app.startup`) rather than scattered `@Value`
+lookups — invalid config (e.g. a non-positive timeout, empty category list) fails
+fast at startup. JWT settings are grouped the same way (`AuthTokenProperties`,
+prefix `auth.token`). Defaults live in code, so the **same jar runs in every
+environment** and only the externalized configuration changes.
+
 ### Caching
 `CacheConfig` enables Spring's cache abstraction with an in-memory
 `ConcurrentMapCacheManager` (no extra dependency). `CatalogCacheService` exposes
@@ -122,13 +153,16 @@ manager for Redis/Caffeine in production; the annotations stay unchanged.
 
 ## Default seed data
 
+Seeded by `DevDataSeeder`, which exists **only under the `dev` profile** — these
+accounts are never created in production.
+
 | Type      | Credentials                                  |
 |-----------|----------------------------------------------|
 | Customers | `user1@gmail.com` … `user5@gmail.com` / `123456` |
 | Admins    | `admin1@gmail.com`, `admin2@gmail.com` / `123456` |
 
-> These are development conveniences — disable seeding or change credentials
-> before any non-local deployment.
+> Development conveniences only. Roles (`ROLE_ADMIN`, `ROLE_CUSTOMER`) are seeded
+> in every environment by `DataInitializer`; the test accounts above are not.
 
 ## Build & test
 

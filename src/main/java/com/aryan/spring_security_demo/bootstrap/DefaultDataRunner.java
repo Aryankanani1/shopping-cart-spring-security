@@ -1,10 +1,10 @@
 package com.aryan.spring_security_demo.bootstrap;
 
+import com.aryan.spring_security_demo.config.StartupProperties;
 import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
@@ -33,25 +33,21 @@ import java.util.List;
 public class DefaultDataRunner implements ApplicationRunner {
 
     private final CategoryRepository categoryRepository;
-
-    @Value("${app.startup.seed.enabled:true}")
-    private boolean seedEnabled;
-
-    @Value("#{'${app.startup.seed.categories:Electronics,Books,Clothing,Home " +
-            "& Kitchen,Toys,Sports,Beauty,Groceries}'.split(',')}")
-    private List<String> defaultCategories;
+    private final StartupProperties startupProperties;
 
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (!seedEnabled || args.containsOption("skip-seed")) {
+        StartupProperties.Seed seed = startupProperties.getSeed();
+        if (!seed.isEnabled() || args.containsOption("skip-seed")) {
             log.info("[seed] Category seeding skipped (enabled={}, --skip-seed={})",
-                    seedEnabled, args.containsOption("skip-seed"));
+                    seed.isEnabled(), args.containsOption("skip-seed"));
             return;
         }
 
+        List<String> categories = seed.getCategories();
         int created = 0;
-        for (String rawName : defaultCategories) {
+        for (String rawName : categories) {
             String name = rawName.trim();
             if (name.isEmpty() || categoryRepository.existsByName(name)) {
                 continue;
@@ -61,6 +57,6 @@ public class DefaultDataRunner implements ApplicationRunner {
         }
 
         log.info("[seed] Default categories ready — {} created, {} already present",
-                created, defaultCategories.size() - created);
+                created, categories.size() - created);
     }
 }

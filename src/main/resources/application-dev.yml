@@ -1,0 +1,29 @@
+# ===========================================================================
+# DEV profile — only what differs from the base for local development.
+# Convenience localhost fallbacks are provided, but every value still honours
+# an environment-variable override so nothing is hard-coded.
+# ===========================================================================
+spring:
+  datasource:
+    # Local defaults so the app boots out of the box; override via env when needed.
+    url: ${DB_URL:jdbc:mysql://localhost:3306/shopping_cart?createDatabaseIfNotExist=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+
+  jpa:
+    # Let Hibernate evolve the schema during development.
+    hibernate:
+      ddl-auto: update
+    # SQL logging — DEVELOPMENT ONLY. Watch these to catch N+1 early.
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+
+# Set the BasicBinder logger to TRACE to also see bound parameter values.
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.orm.jdbc.bind: TRACE
+    org.hibernate.orm.query: WARN

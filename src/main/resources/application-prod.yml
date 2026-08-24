@@ -1,0 +1,24 @@
+# ===========================================================================
+# PROD profile — only what differs from the base for production.
+# All connection details and secrets come from the environment (see base file);
+# nothing sensitive is committed here.
+# ===========================================================================
+spring:
+  jpa:
+    # Never auto-mutate a production schema — migrations own the DDL. Validate
+    # that the entities match the existing schema and fail fast if they don't.
+    hibernate:
+      ddl-auto: validate
+    # Keep SQL logging off in production.
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        use_sql_comments: false
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+    org.hibernate.orm.query: WARN

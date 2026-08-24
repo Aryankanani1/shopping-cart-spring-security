@@ -1,11 +1,12 @@
 package com.aryan.spring_security_demo.security.jwt;
 
+import com.aryan.spring_security_demo.config.AuthTokenProperties;
 import com.aryan.spring_security_demo.security.user.UserDetails;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Component;
@@ -15,12 +16,10 @@ import java.util.Date;
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class JwtUtils {
 
-    @Value("${auth.token.jwtSecret}")
-    private String jwtSecret;
-    @Value("${auth.token.expirationInMils}")
-    private int expirationTime;
+    private final AuthTokenProperties authTokenProperties;
 
     public String generateUserTokenFromUser(Authentication authentication){
         UserDetails userPrinciple = (UserDetails)  authentication.getPrincipal();
@@ -32,13 +31,13 @@ public class JwtUtils {
                 .claim("id",userPrinciple.getId())
                 .claim("roles",roles)
                 .issuedAt(new Date())
-                .expiration(new Date((new Date()).getTime() + expirationTime))
+                .expiration(new Date(new Date().getTime() + authTokenProperties.getExpirationInMils()))
                 .signWith(key())
                 .compact();
     }
 
     private SecretKey key(){
-        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtSecret));
+        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(authTokenProperties.getJwtSecret()));
     }
 
     String getUserNameFromToken(String token){
