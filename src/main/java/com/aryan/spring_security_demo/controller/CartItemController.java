@@ -11,6 +11,7 @@ import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import static org.springframework.http.HttpStatus.CREATED;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
@@ -24,7 +25,7 @@ public class CartItemController {
     private final UserServiceInterface userServiceInterface;
 
 
-    @PostMapping("/item/add")
+    @PostMapping
     public ResponseEntity<ApiResponse> addItemToCart(
             @RequestParam Long productId,
             @RequestParam Integer quantity){
@@ -34,7 +35,7 @@ public class CartItemController {
             Cart cart  = cartServiceInterface.initializeNewCart(user);
 
             cartItemServiceInterface.addItemToCart(cart.getId(), productId, quantity);
-            return ResponseEntity.ok(new ApiResponse("add item successfully!", null));
+            return ResponseEntity.status(CREATED).body(new ApiResponse("add item successfully!", null));
         }
         catch (CartNotFoundException e){
             return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
@@ -44,7 +45,7 @@ public class CartItemController {
     }
 
 
-    @DeleteMapping("cart/{cartId}/item/{productId}/remove")
+    @DeleteMapping("/cart/{cartId}/product/{productId}")
     public ResponseEntity<ApiResponse> removeItemFromCart(
             @PathVariable Long cartId,
             @PathVariable Long productId
@@ -52,14 +53,14 @@ public class CartItemController {
 
         try{
          cartItemServiceInterface.removeItemFromCart(cartId,productId);
-         return ResponseEntity.ok(new ApiResponse("item removed successfully",null));
+         return ResponseEntity.noContent().build();
     }catch (CartNotFoundException e){
             return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
         }
         }
 
 
-        @PutMapping("/cart/{cartId}/item/{itemId}/update")
+        @PutMapping("/cart/{cartId}/item/{itemId}")
         public ResponseEntity<ApiResponse> updateItemQuantity(
                 @PathVariable Long cartId,
                 @PathVariable Long itemId,

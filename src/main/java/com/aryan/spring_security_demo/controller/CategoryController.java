@@ -7,7 +7,9 @@ import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.net.URI;
 import java.util.List;
 
 import static org.springframework.http.HttpStatus.*;
@@ -19,7 +21,7 @@ public class CategoryController {
 
     private final CategoryServiceInterface categoryServiceInterface;
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<ApiResponse> getAllCategories(){
 
         try {
@@ -32,11 +34,13 @@ public class CategoryController {
     }
 
 
-    @PostMapping("/add")
+    @PostMapping
     public ResponseEntity<ApiResponse> addCategory(@RequestBody Category name){
         try {
             Category category = categoryServiceInterface.addCategory(name);
-            return ResponseEntity.ok(new ApiResponse("Success!", category));
+            URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                    .path("/{id}").buildAndExpand(category.getId()).toUri();
+            return ResponseEntity.created(location).body(new ApiResponse("Success!", category));
         }
         catch (Exception e){
             return ResponseEntity.status(CONFLICT)
@@ -44,7 +48,7 @@ public class CategoryController {
         }
     }
 
-    @GetMapping("/category/{id}/category")
+    @GetMapping("/{id:\\d+}")
     public ResponseEntity<ApiResponse> getCategoryById(@PathVariable Long id){
         try{
            Category category = categoryServiceInterface.getCategoryById(id);
@@ -55,8 +59,8 @@ public class CategoryController {
         }
     }
 
-    @GetMapping("category/{name}/category")
-    public ResponseEntity<ApiResponse> getCategoryByName(@PathVariable String name){
+    @GetMapping(params = "name")
+    public ResponseEntity<ApiResponse> getCategoryByName(@RequestParam String name){
         try{
             Category category = categoryServiceInterface.getCategoryByName(name);
             return ResponseEntity.ok(new ApiResponse("Success!",category));
@@ -66,11 +70,11 @@ public class CategoryController {
         }
     }
 
-    @DeleteMapping("category/{id}/delete")
+    @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse> deleteCategoryById(@PathVariable Long id){
         try{
              categoryServiceInterface.deleteCategoryById(id);
-            return ResponseEntity.ok(new ApiResponse("Found!",null));
+            return ResponseEntity.noContent().build();
         }catch (CategoryNotFoundException e){
             return ResponseEntity.status(NOT_FOUND)
                     .body(new ApiResponse("Category does not Exists",null));
@@ -78,7 +82,7 @@ public class CategoryController {
     }
 
 
-    @PutMapping("category/{id}/update")
+    @PutMapping("/{id}")
     public ResponseEntity<ApiResponse> updateCategoryId(@PathVariable Long id,@RequestBody Category category){
         try{
            Category updatedCategory =  categoryServiceInterface.updateCategory(category,id);

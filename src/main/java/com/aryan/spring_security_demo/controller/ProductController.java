@@ -8,9 +8,30 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.net.URI;
 import java.util.List;
 import static org.springframework.http.HttpStatus.*;
 
+/**
+ * Products resource. Verbs are carried by the HTTP method and the collection is
+ * filtered with query parameters (Richardson Maturity Model level 2):
+ *
+ * <pre>
+ *   GET    /products                        list all
+ *   GET    /products?brand=&name=           filter by brand + name
+ *   GET    /products?category=&name=         filter by category + name
+ *   GET    /products?name=                   filter by name
+ *   GET    /products?brand=                  filter by brand
+ *   GET    /products?category=               filter by category
+ *   GET    /products/count?brand=&name=      count matching brand + name
+ *   GET    /products/{id}                    fetch one
+ *   POST   /products                         create        -> 201 + Location
+ *   PUT    /products/{id}                     replace
+ *   DELETE /products/{id}                     delete        -> 204
+ * </pre>
+ */
 @RequiredArgsConstructor
 @RestController
 @RequestMapping("${api.prefix}/products")
@@ -18,13 +39,13 @@ public class ProductController {
 
     private final ProductServiceInterface productServiceInterface;
 
-    @GetMapping("/all")
+    @GetMapping
     public ResponseEntity<ApiResponse> getAllProducts(){
         List<Product> products = productServiceInterface.getAllProducts();
         return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getConvertedProducts(products)));
     }
 
-    @GetMapping("product/{productId}/product")
+    @GetMapping("/{productId:\\d+}")
     public ResponseEntity<ApiResponse> getProductById(@PathVariable("productId") Long id){
         try
         {
@@ -37,18 +58,21 @@ public class ProductController {
 
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
-    @PostMapping("/add")
+    @PostMapping
     public ResponseEntity<ApiResponse> addProduct(@RequestBody AddProductRequest name) {
                 try{
                     Product product = productServiceInterface.addProduct(name);
-                    return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.convertToDto(product)));
+                    URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                            .path("/{id}").buildAndExpand(product.getId()).toUri();
+                    return ResponseEntity.created(location)
+                            .body(new ApiResponse("Success!", productServiceInterface.convertToDto(product)));
             }catch (Exception e){
                     return ResponseEntity.status(CONFLICT).body(new ApiResponse(e.getMessage(),null));
                 }
     }
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
-    @PutMapping("/product/{id}/product")
+    @PutMapping("/{id}")
     public ResponseEntity<ApiResponse> updateProduct(@RequestBody ProductUpdateRequest request
             , @PathVariable Long id)
     {
@@ -62,20 +86,20 @@ public class ProductController {
     }
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
-    @DeleteMapping("/product/{id}/delete")
+    @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse> deleteProduct(@PathVariable Long id){
         try {
             productServiceInterface.deleteProductById(id);
-            return ResponseEntity.ok(new ApiResponse("Success!",null));
+            return ResponseEntity.noContent().build();
         }
         catch (Exception e){
             return ResponseEntity.status(NOT_FOUND).body(new ApiResponse("Product doesn't exits",null));
         }
     }
 
-    @GetMapping("/products/by/brand-and-name")
-    public ResponseEntity<ApiResponse> getProductByBrandAndName(@RequestParam String brandName,
-                                                                @RequestParam String productName){
+    @GetMapping(params = {"brand", "name"})
+    public ResponseEntity<ApiResponse> getProductByBrandAndName(@RequestParam("brand") String brandName,
+                                                                @RequestParam("name") String productName){
 
         try{
           List<Product> productsByBrand =  productServiceInterface.getProductsByBrandAndName(brandName,productName);
@@ -91,9 +115,9 @@ public class ProductController {
         }
     }
 
-    @GetMapping("/products/by/category-and-brand")
-    public ResponseEntity<ApiResponse> getProductByBrandAndCategory(@RequestParam String category,
-                                                                @RequestParam String productName){
+    @GetMapping(params = {"category", "name"})
+    public ResponseEntity<ApiResponse> getProductByCategoryAndName(@RequestParam("category") String category,
+                                                                @RequestParam("name") String productName){
 
         try{
             List<Product> productsByBrand =  productServiceInterface.getProductsByCategoryAndBrand(category,productName);
@@ -109,8 +133,8 @@ public class ProductController {
         }
     }
 
-    @GetMapping("/products/{name}/products")
-    public ResponseEntity<ApiResponse> getProductByBrandAndCategory(@PathVariable String name){
+    @GetMapping(params = "name")
+    public ResponseEntity<ApiResponse> getProductByName(@RequestParam("name") String name){
 
         try{
             List<Product> productsByBrand =  productServiceInterface.getProductsByName(name);
@@ -126,8 +150,8 @@ public class ProductController {
         }
     }
 
-    @GetMapping("/product/by-brand")
-    public ResponseEntity<ApiResponse> findProductByBrand(@RequestParam String brand){
+    @GetMapping(params = "brand")
+    public ResponseEntity<ApiResponse> findProductByBrand(@RequestParam("brand") String brand){
 
         try{
             List<Product> productsByBrand =  productServiceInterface.getProductsByBrand(brand);
@@ -143,8 +167,8 @@ public class ProductController {
         }
     }
 
-    @GetMapping("/product/{category}/all/products")
-    public ResponseEntity<ApiResponse> findAllProductByCategory(@PathVariable String category){
+    @GetMapping(params = "category")
+    public ResponseEntity<ApiResponse> findAllProductByCategory(@RequestParam("category") String category){
 
         try{
             List<Product> productsByBrand =  productServiceInterface.getAllProductsByCategory(category);
@@ -160,13 +184,13 @@ public class ProductController {
         }
     }
 
-    @GetMapping("/product/count/by-brand/and-name")
+    @GetMapping(value = "/count", params = {"brand", "name"})
     public ResponseEntity<ApiResponse> countProductByBrandAndName(@RequestParam String brand, @RequestParam String name){
         try{
             var productCount = productServiceInterface.countProductsByBrandAndName(brand,name);
             return ResponseEntity.ok(new ApiResponse("Product Count!",productCount));
         }catch (Exception e){
-            return ResponseEntity.ok(new ApiResponse(e.getMessage(),null));
+            return ResponseEntity.status(INTERNAL_SERVER_ERROR).body(new ApiResponse(e.getMessage(),null));
         }
     }
 

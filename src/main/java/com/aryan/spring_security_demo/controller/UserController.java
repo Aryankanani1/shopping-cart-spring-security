@@ -9,9 +9,11 @@ import com.aryan.spring_security_demo.request.CreateUserRequest;
 import com.aryan.spring_security_demo.request.UserUpdateRequest;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
-import org.apache.coyote.Response;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+
+import java.net.URI;
 
 import static org.springframework.http.HttpStatus.CONFLICT;
 import static org.springframework.http.HttpStatus.NOT_FOUND;
@@ -23,7 +25,7 @@ public class UserController {
 
     private final UserServiceInterface userServiceInterface;
 
-    @GetMapping("/{id}/user")
+    @GetMapping("/{id}")
     public ResponseEntity<ApiResponse> getUserById(@PathVariable Long id){
         try{
             User user = userServiceInterface.getUserById(id);
@@ -34,18 +36,20 @@ return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null
         }
     }
 
-    @PostMapping("/add")
+    @PostMapping
     public ResponseEntity<ApiResponse> createUser(@RequestBody CreateUserRequest createUserRequest){
         try {
             User user = userServiceInterface.createUser(createUserRequest);
                 UserDto userDto = userServiceInterface.convertUserToDto(user);
-            return ResponseEntity.ok(new ApiResponse("success!",userDto));
+            URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                    .path("/{id}").buildAndExpand(userDto.getId()).toUri();
+            return ResponseEntity.created(location).body(new ApiResponse("success!",userDto));
         } catch (AlreadyExistsException e) {
             return  ResponseEntity.status(CONFLICT).body(new ApiResponse(e.getMessage(),null));
         }
     }
 
-    @PutMapping("/{userId}/update")
+    @PutMapping("/{userId}")
     public ResponseEntity<ApiResponse> updateUser(@RequestBody UserUpdateRequest request,@PathVariable Long userId){
         try {
             User user = userServiceInterface.updateUser(request, userId);
@@ -56,14 +60,13 @@ return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null
         }
     }
 
-    @DeleteMapping("/{userId}/delete")
+    @DeleteMapping("/{userId}")
     public ResponseEntity<ApiResponse> deleteUser(@PathVariable Long userId){
         try {
              userServiceInterface.deleteUser(userId);
-            return ResponseEntity.ok(new ApiResponse("success!",null));
+            return ResponseEntity.noContent().build();
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
         }
     }
 }
-
