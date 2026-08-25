@@ -26,12 +26,12 @@ public class ImageController {
 
     private final ImageServiceInterface imageServiceInterface;
 
-    @PostMapping("/upload")
+    @PostMapping
     public ResponseEntity<ApiResponse> saveImages(@RequestParam List<MultipartFile> files,@RequestParam Long productId){
 
             try {
                 List<ImageDto> imageDtos = imageServiceInterface.saveImages(files, productId);
-                return ResponseEntity.ok(new ApiResponse("Uploaded Successfully", imageDtos));
+                return ResponseEntity.status(CREATED).body(new ApiResponse("Uploaded Successfully", imageDtos));
 
             }
             catch (Exception e){
@@ -42,7 +42,7 @@ public class ImageController {
 
 
     //downloadImage
-    @GetMapping("/image/download/{imageId}")
+    @GetMapping("/{imageId}")
     public ResponseEntity<Resource> downloadImage(@PathVariable Long imageId) throws SQLException {
         Image image = imageServiceInterface.getImageById(imageId);
         ByteArrayResource byteArrayResource = new ByteArrayResource(image.getImage()
@@ -56,7 +56,7 @@ public class ImageController {
 
     }
 
-    @PutMapping("/image/{imageId}/update")
+    @PutMapping("/{imageId}")
     public ResponseEntity<ApiResponse> updateImage(@PathVariable Long imageId, @RequestBody MultipartFile file){
         try {
             // find the image
@@ -75,13 +75,13 @@ public class ImageController {
         }
 
 
-    @DeleteMapping("/image/{imageId}/delete")
+    @DeleteMapping("/{imageId}")
     public ResponseEntity<ApiResponse> deleteImage(@PathVariable Long imageId){
         try{
             Image image = imageServiceInterface.getImageById(imageId);
             if(image != null){
                 imageServiceInterface.deleteImageById(imageId);
-                return ResponseEntity.ok(new ApiResponse("delete success!",null));
+                return ResponseEntity.noContent().build();
             }
 
         }catch (ImageNotFoundException e){
