@@ -4,6 +4,7 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen)
 ![Spring Security](https://img.shields.io/badge/Spring%20Security-JWT-green)
 ![Database](https://img.shields.io/badge/MySQL-Hibernate-blue)
+![REST](https://img.shields.io/badge/REST-Maturity%20Level%202-blueviolet)
 ![Build](https://img.shields.io/badge/build-Maven-red)
 ![Last commit](https://img.shields.io/github/last-commit/Aryankanani1/shopping-cart-spring-security)
 
@@ -101,6 +102,16 @@ data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev")
   Everything else is currently `permitAll()`.
 - `@EnableMethodSecurity(prePostEnabled = true)` enables `@PreAuthorize`.
 - Roles: `ROLE_ADMIN`, `ROLE_CUSTOMER`.
+
+## API
+
+The API follows **Richardson Maturity Model level 2**: the action is carried by
+the HTTP method on noun-based resource URIs (`GET/POST /products`,
+`GET/PUT/DELETE /products/{id}`), collections are filtered with query parameters
+(`GET /products?brand=&name=`), and responses use accurate status codes —
+`201 Created` (+ `Location`) on create, `204 No Content` on delete, `200` on
+read/update, and `404`/`409`/`401` on error. All paths are served under the
+`api.prefix` (default `/api/v1`).
 
 ## Startup pipeline
 
