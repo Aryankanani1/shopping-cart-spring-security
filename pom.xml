@@ -104,6 +104,15 @@
 			<version>3.2.4</version>
 		</dependency>
 
+		<!-- OpenAPI 3 + Swagger UI (springdoc). The 3.x line targets Spring Boot 4 /
+		     Spring Framework 7. Serves the spec at /v3/api-docs and the UI at
+		     /swagger-ui.html. -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>3.1.0</version>
+		</dependency>
+
 
 		<dependency>
 		<groupId>io.jsonwebtoken</groupId>
