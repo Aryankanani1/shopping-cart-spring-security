@@ -5,13 +5,15 @@
 ![Spring Security](https://img.shields.io/badge/Spring%20Security-JWT-green)
 ![Database](https://img.shields.io/badge/MySQL-Hibernate-blue)
 ![REST](https://img.shields.io/badge/REST-Maturity%20Level%202-blueviolet)
+![API Docs](https://img.shields.io/badge/API%20Docs-Swagger%20UI-85EA2D)
 ![Build](https://img.shields.io/badge/build-Maven-red)
 ![Last commit](https://img.shields.io/github/last-commit/Aryankanani1/shopping-cart-spring-security)
 
 An e-commerce REST API built with **Spring Boot 4.1** and **Java 17**, featuring
 JWT-based stateless authentication, role-based authorization, a product catalog,
 cart, and order flow. Persistence is tuned for Hibernate best practices
-(batching, sequence pooling, optimistic locking, `open-in-view=false`).
+(batching, sequence pooling, optimistic locking, `open-in-view=false`), and
+interactive API documentation is served by **Swagger UI** (springdoc-openapi).
 
 ## Tech stack
 
@@ -22,6 +24,7 @@ cart, and order flow. Persistence is tuned for Hibernate best practices
 | Database       | MySQL (`mysql-connector-j`), Hibernate             |
 | Auth           | JWT (jjwt 0.12.5), stateless, BCrypt               |
 | Mapping        | ModelMapper 3.2.4                                  |
+| API docs       | springdoc-openapi 3.1.0 (OpenAPI 3 + Swagger UI)   |
 | Caching        | Spring Cache (`ConcurrentMapCacheManager`)         |
 | Boilerplate    | Lombok                                             |
 | Build          | Maven wrapper (`./mvnw`)                           |
@@ -82,7 +85,7 @@ repository/   Spring Data JPA repositories
 model/        JPA entities (User, Role, Product, Category, Image, Cart, CartItem, Order, OrderItem)
 dto/ request/ response/   API boundary objects
 security/     config (shopConfig), jwt (AuthTokenFilter, JwtUtils, JwtEntryPoint), user details
-config/       CacheConfig + typed @ConfigurationProperties (StartupProperties, AuthTokenProperties)
+config/       CacheConfig + OpenApiConfig + typed @ConfigurationProperties (StartupProperties, AuthTokenProperties)
 bootstrap/    Ordered startup runners (see below)
 data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev") test users)
 ```
@@ -99,7 +102,7 @@ data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev")
 ### Security model
 - **Stateless JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`.
 - Secured paths: `/api/v1/carts/**`, `/api/v1/cartItems/**`, `/api/v1/orders/**`.
-  Everything else is currently `permitAll()`.
+  Everything else is currently `permitAll()` (which also exposes the Swagger docs).
 - `@EnableMethodSecurity(prePostEnabled = true)` enables `@PreAuthorize`.
 - Roles: `ROLE_ADMIN`, `ROLE_CUSTOMER`.
 
@@ -112,6 +115,18 @@ the HTTP method on noun-based resource URIs (`GET/POST /products`,
 `201 Created` (+ `Location`) on create, `204 No Content` on delete, `200` on
 read/update, and `404`/`409`/`401` on error. All paths are served under the
 `api.prefix` (default `/api/v1`).
+
+### API documentation
+
+Once the app is running, springdoc-openapi exposes:
+
+- **Swagger UI** — `http://localhost:8080/swagger-ui.html`
+- **OpenAPI spec** — `http://localhost:8080/v3/api-docs`
+
+Both sit outside the `api.prefix` and are reachable without authentication. A
+global `bearerAuth` (JWT) scheme is declared (`OpenApiConfig`), so click
+**Authorize** in Swagger UI and paste the token from `POST /api/v1/auth/login`
+to call the secured cart/order endpoints.
 
 ## Startup pipeline
 
