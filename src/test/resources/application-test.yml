@@ -1,0 +1,41 @@
+# ===========================================================================
+# TEST profile — used by @ActiveProfiles("test") integration tests only.
+# Overrides the base (MySQL) datasource with an in-memory H2 database so the
+# full HTTP -> security -> service -> JPA stack can be exercised in CI without
+# a live MySQL. The dev seeder (@Profile("dev")) does NOT run under this
+# profile, so tests own their own data setup.
+# ===========================================================================
+spring:
+  datasource:
+    url: jdbc:h2:mem:checkoutdb;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      # Build the schema from the entities for each test context, drop on shutdown.
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        # Override the base MySQLDialect with H2.
+        dialect: org.hibernate.dialect.H2Dialect
+
+# Base path prefix for all REST controllers (mirrors the base config).
+api:
+  prefix: /api/v1
+
+# Deterministic secret for signing/validating JWTs in tests (Base64, 256-bit).
+auth:
+  token:
+    jwtSecret: CEN/4/BWJAn9lZR7HK2RXAN+ejVVU7p4oBUm7RWtt5Q=
+    expirationInMils: 3600000
+
+# Keep the boot pipeline quiet and the database empty so each test controls its
+# own fixtures: no category seeding, no cache warm-up.
+app:
+  startup:
+    seed:
+      enabled: false
+    cache:
+      warmup-enabled: false
