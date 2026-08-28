@@ -4,9 +4,11 @@ import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.request.AddProductRequest;
 import com.aryan.spring_security_demo.request.ProductUpdateRequest;
 import com.aryan.spring_security_demo.response.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -34,6 +36,7 @@ import static org.springframework.http.HttpStatus.*;
  */
 @RequiredArgsConstructor
 @RestController
+@Validated
 @RequestMapping("${api.prefix}/products")
 public class ProductController {
 
@@ -59,7 +62,7 @@ public class ProductController {
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PostMapping
-    public ResponseEntity<ApiResponse> addProduct(@RequestBody AddProductRequest name) {
+    public ResponseEntity<ApiResponse> addProduct(@Valid @RequestBody AddProductRequest name) {
                 try{
                     Product product = productServiceInterface.addProduct(name);
                     URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -73,7 +76,7 @@ public class ProductController {
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse> updateProduct(@RequestBody ProductUpdateRequest request
+    public ResponseEntity<ApiResponse> updateProduct(@Valid @RequestBody ProductUpdateRequest request
             , @PathVariable Long id)
     {
         try{

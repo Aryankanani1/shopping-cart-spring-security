@@ -1,7 +1,9 @@
 package com.aryan.spring_security_demo.model;
 
+import com.aryan.spring_security_demo.validation.NoProfanity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,6 +26,8 @@ public class Category {
     @Version
     private Long version;
 
+    @NotBlank(message = "Category name is required")
+    @NoProfanity(message = "Category name contains disallowed words")
     @Column(name = "name")
     private String name;
 

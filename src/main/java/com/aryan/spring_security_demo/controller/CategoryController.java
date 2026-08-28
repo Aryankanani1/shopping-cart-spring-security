@@ -4,8 +4,10 @@ import com.aryan.spring_security_demo.Service.category.CategoryServiceInterface;
 import com.aryan.spring_security_demo.exception.CategoryNotFoundException;
 import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.response.ApiResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
@@ -16,6 +18,7 @@ import static org.springframework.http.HttpStatus.*;
 
 @RequiredArgsConstructor
 @RestController
+@Validated
 @RequestMapping("${api.prefix}/categories")
 public class CategoryController {
 
@@ -35,7 +38,7 @@ public class CategoryController {
 
 
     @PostMapping
-    public ResponseEntity<ApiResponse> addCategory(@RequestBody Category name){
+    public ResponseEntity<ApiResponse> addCategory(@Valid @RequestBody Category name){
         try {
             Category category = categoryServiceInterface.addCategory(name);
             URI location = ServletUriComponentsBuilder.fromCurrentRequest()
@@ -83,7 +86,7 @@ public class CategoryController {
 
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse> updateCategoryId(@PathVariable Long id,@RequestBody Category category){
+    public ResponseEntity<ApiResponse> updateCategoryId(@PathVariable Long id,@Valid @RequestBody Category category){
         try{
            Category updatedCategory =  categoryServiceInterface.updateCategory(category,id);
             return ResponseEntity.ok(new ApiResponse("Found!",updatedCategory));
