@@ -31,6 +31,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -177,6 +178,47 @@ class CheckoutJourneyIntegrationTest {
                         .content(loginBody("shopper@example.com", "wrong-password")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("global handler: a missing resource returns RFC 7807 404")
+    void missingResource_returnsProblemDetail404() throws Exception {
+        mockMvc.perform(get("/api/v1/products/{id}", productId + 999_999))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Resource not found"))
+                .andExpect(jsonPath("$.status").value(404));
+    }
+
+    @Test
+    @DisplayName("global handler: creating a duplicate user returns RFC 7807 409")
+    void duplicateUser_returnsProblemDetail409() throws Exception {
+        String body = """
+                {
+                  "firstName": "Ada",
+                  "lastName": "Lovelace",
+                  "email": "shopper@example.com",
+                  "password": "secret123"
+                }
+                """;
+
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Resource already exists"))
+                .andExpect(jsonPath("$.status").value(409));
+    }
+
+    @Test
+    @DisplayName("framework 4xx: malformed JSON body stays a 400, not a 500")
+    void malformedJson_returnsProblemDetail400() throws Exception {
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{ this is not valid json "))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
     // --- helpers -----------------------------------------------------------

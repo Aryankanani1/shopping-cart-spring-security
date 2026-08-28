@@ -3,17 +3,14 @@ package com.aryan.spring_security_demo.controller;
 import com.aryan.spring_security_demo.Service.cart.CartServiceInterface;
 import com.aryan.spring_security_demo.Service.cartItem.CartItemServiceInterface;
 import com.aryan.spring_security_demo.Service.user.UserServiceInterface;
-import com.aryan.spring_security_demo.exception.CartNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.response.ApiResponse;
-import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import static org.springframework.http.HttpStatus.CREATED;
-import static org.springframework.http.HttpStatus.NOT_FOUND;
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RequiredArgsConstructor
 @RestController
@@ -30,18 +27,11 @@ public class CartItemController {
             @RequestParam Long productId,
             @RequestParam Integer quantity){
 
-        try {
-            User user = userServiceInterface.getAuthenticatedUser();
-            Cart cart  = cartServiceInterface.initializeNewCart(user);
+        User user = userServiceInterface.getAuthenticatedUser();
+        Cart cart = cartServiceInterface.initializeNewCart(user);
 
-            cartItemServiceInterface.addItemToCart(cart.getId(), productId, quantity);
-            return ResponseEntity.status(CREATED).body(new ApiResponse("add item successfully!", null));
-        }
-        catch (CartNotFoundException e){
-            return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
-        }catch (JwtException e){
-            return ResponseEntity.status(UNAUTHORIZED).body(new ApiResponse(e.getMessage(),null));
-        }
+        cartItemServiceInterface.addItemToCart(cart.getId(), productId, quantity);
+        return ResponseEntity.status(CREATED).body(new ApiResponse("add item successfully!", null));
     }
 
 
@@ -50,27 +40,18 @@ public class CartItemController {
             @PathVariable Long cartId,
             @PathVariable Long productId
     ){
-
-        try{
-         cartItemServiceInterface.removeItemFromCart(cartId,productId);
-         return ResponseEntity.noContent().build();
-    }catch (CartNotFoundException e){
-            return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
-        }
-        }
+        cartItemServiceInterface.removeItemFromCart(cartId, productId);
+        return ResponseEntity.noContent().build();
+    }
 
 
-        @PutMapping("/cart/{cartId}/item/{itemId}")
-        public ResponseEntity<ApiResponse> updateItemQuantity(
-                @PathVariable Long cartId,
-                @PathVariable Long itemId,
-                @RequestParam Integer quantity
-        ) {
-            try{
-            cartItemServiceInterface.updateItemQuantity(cartId, itemId, quantity);
-            return ResponseEntity.ok(new ApiResponse("item updated successfully",null));
-        }catch (CartNotFoundException e){
-            return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
-            }
-        }
+    @PutMapping("/cart/{cartId}/item/{itemId}")
+    public ResponseEntity<ApiResponse> updateItemQuantity(
+            @PathVariable Long cartId,
+            @PathVariable Long itemId,
+            @RequestParam Integer quantity
+    ) {
+        cartItemServiceInterface.updateItemQuantity(cartId, itemId, quantity);
+        return ResponseEntity.ok(new ApiResponse("item updated successfully", null));
+    }
 }
