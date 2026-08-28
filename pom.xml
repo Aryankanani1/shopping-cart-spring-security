@@ -98,6 +98,14 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- In-memory database for the end-to-end journey tests, so they run in CI
+		     without a live MySQL. Version managed by the Spring Boot BOM. -->
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>test</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.modelmapper</groupId>
 			<artifactId>modelmapper</artifactId>
