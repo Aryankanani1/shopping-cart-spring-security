@@ -2,7 +2,6 @@ package com.aryan.spring_security_demo.controller;
 
 import com.aryan.spring_security_demo.Service.image.ImageServiceInterface;
 import com.aryan.spring_security_demo.dto.ImageDto;
-import com.aryan.spring_security_demo.exception.ImageNotFoundException;
 import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +16,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.sql.SQLException;
 import java.util.List;
 
-import static org.springframework.http.HttpStatus.*;
+import static org.springframework.http.HttpStatus.CREATED;
 
 @RequiredArgsConstructor
 @RestController
@@ -27,21 +26,11 @@ public class ImageController {
     private final ImageServiceInterface imageServiceInterface;
 
     @PostMapping
-    public ResponseEntity<ApiResponse> saveImages(@RequestParam List<MultipartFile> files,@RequestParam Long productId){
+    public ResponseEntity<ApiResponse> saveImages(@RequestParam List<MultipartFile> files, @RequestParam Long productId){
+        List<ImageDto> imageDtos = imageServiceInterface.saveImages(files, productId);
+        return ResponseEntity.status(CREATED).body(new ApiResponse("Uploaded Successfully", imageDtos));
+    }
 
-            try {
-                List<ImageDto> imageDtos = imageServiceInterface.saveImages(files, productId);
-                return ResponseEntity.status(CREATED).body(new ApiResponse("Uploaded Successfully", imageDtos));
-
-            }
-            catch (Exception e){
-                return ResponseEntity.status(INTERNAL_SERVER_ERROR)
-                        .body(new ApiResponse("build failed!",e.getMessage()));
-            }
-        }
-
-
-    //downloadImage
     @GetMapping("/{imageId}")
     public ResponseEntity<Resource> downloadImage(@PathVariable Long imageId) throws SQLException {
         Image image = imageServiceInterface.getImageById(imageId);
@@ -49,45 +38,22 @@ public class ImageController {
                 .getBytes(1, (int) image.getImage().length()));
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.getFileType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION,"attachment;  filename=\"" +image
-                .getFileName() +"\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;  filename=\"" + image
+                        .getFileName() + "\"")
                 .body(byteArrayResource);
-
-
     }
 
     @PutMapping("/{imageId}")
     public ResponseEntity<ApiResponse> updateImage(@PathVariable Long imageId, @RequestBody MultipartFile file){
-        try {
-            // find the image
-            Image image = imageServiceInterface.getImageById(imageId);
-            // if image exists
-            if (image != null) {
-                imageServiceInterface.updateImage(file, imageId);
-                return ResponseEntity.ok(new ApiResponse("update success!", null));
-            }
-        }
-        catch (ImageNotFoundException e){
-            return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
-        }
-        return ResponseEntity.status(INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse("Update failed!",INTERNAL_SERVER_ERROR));
-        }
-
+        imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist
+        imageServiceInterface.updateImage(file, imageId);
+        return ResponseEntity.ok(new ApiResponse("update success!", null));
+    }
 
     @DeleteMapping("/{imageId}")
     public ResponseEntity<ApiResponse> deleteImage(@PathVariable Long imageId){
-        try{
-            Image image = imageServiceInterface.getImageById(imageId);
-            if(image != null){
-                imageServiceInterface.deleteImageById(imageId);
-                return ResponseEntity.noContent().build();
-            }
-
-        }catch (ImageNotFoundException e){
-            return ResponseEntity.status(NOT_FOUND).body(new ApiResponse(e.getMessage(),null));
-        }
-        return ResponseEntity.status(INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse("delete failed!",INTERNAL_SERVER_ERROR));
+        imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist
+        imageServiceInterface.deleteImageById(imageId);
+        return ResponseEntity.noContent().build();
     }
 }
