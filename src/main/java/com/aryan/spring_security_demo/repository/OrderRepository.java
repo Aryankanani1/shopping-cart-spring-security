@@ -12,11 +12,17 @@ import java.util.Optional;
 @Repository
 public interface OrderRepository extends JpaRepository<Order,Long> {
 
-    // JOIN FETCH the order items up-front to avoid the N+1 that would otherwise
-    // fire one extra query per order when the items are mapped to DTOs.
-    @Query("SELECT DISTINCT o FROM Order o LEFT JOIN FETCH o.orderItems WHERE o.user.id = :userId")
+    // JOIN FETCH the order items AND each item's product up-front. Mapping to
+    // OrderItemDto reads product.name/brand, so without fetching the product we
+    // get an N+1: one query per line item. Only one collection (orderItems) is
+    // fetched, so this stays a single, safe round trip.
+    @Query("SELECT DISTINCT o FROM Order o " +
+            "LEFT JOIN FETCH o.orderItems oi LEFT JOIN FETCH oi.product " +
+            "WHERE o.user.id = :userId")
     List<Order> findByUserId(@Param("userId") Long userId);
 
-    @Query("SELECT o FROM Order o LEFT JOIN FETCH o.orderItems WHERE o.Id = :orderId")
+    @Query("SELECT DISTINCT o FROM Order o " +
+            "LEFT JOIN FETCH o.orderItems oi LEFT JOIN FETCH oi.product " +
+            "WHERE o.Id = :orderId")
     Optional<Order> findByIdWithItems(@Param("orderId") Long orderId);
 }
