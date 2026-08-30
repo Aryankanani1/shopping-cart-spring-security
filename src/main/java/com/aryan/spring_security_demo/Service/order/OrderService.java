@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.HashSet;
 import java.util.List;
 
 @Service
@@ -34,8 +33,8 @@ public class OrderService implements OrderServiceInterface{
     public OrderDto placeOrder(Long userId) {
         Cart cart = cartService.getCartByUserId(userId);
         Order order = careatOrder(cart);
-        List<OrderItem> orderItems = createOrderItems(order,cart);
-        order.setOrderItems(new HashSet<>(orderItems));
+        List<OrderItem> orderItems = createOrderItems(cart);
+        orderItems.forEach(order::addOrderItem);
         order.setTotalAmount(calculateTotalAmount(orderItems));
         Order savedOrdered = orderRepository.save(order);
 
@@ -63,17 +62,16 @@ public class OrderService implements OrderServiceInterface{
         return order;
 
     }
-    private List<OrderItem> createOrderItems(Order order, Cart cart){
+    private List<OrderItem> createOrderItems(Cart cart){
         //keeping track of the inventory by calculating the total price
         return cart.getCartItems().stream()
                 .map(cartItem -> {
                     Product product = cartItem.getProduct();
                     product.setInventory(product.getInventory() - cartItem.getQuantity());
                     productRepository.save(product);
-                    // return ordered items via constructor
+                    // the order is wired in by Order.addOrderItem (owning side)
                     return
-                           new OrderItem( order,
-                                   product,
+                           new OrderItem(product,
                                  cartItem.getQuantity(),
                                  cartItem.getUnitPrice());
 
