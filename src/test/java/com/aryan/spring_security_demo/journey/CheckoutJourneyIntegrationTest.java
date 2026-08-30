@@ -158,6 +158,31 @@ class CheckoutJourneyIntegrationTest {
     }
 
     @Test
+    @DisplayName("GET cart serializes its lazy items without a LazyInitializationException")
+    void getCart_serializesLazyItems() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+
+        mockMvc.perform(post("/api/v1/cartItems")
+                        .header("Authorization", "Bearer " + token)
+                        .param("productId", String.valueOf(productId))
+                        .param("quantity", String.valueOf(ORDER_QUANTITY)))
+                .andExpect(status().isCreated());
+
+        Long cartId = cartRepository.findByUserId(userId).getId();
+
+        // With open-in-view off, this used to throw because the controller
+        // serialized the Cart entity's lazy cartItems after the tx had closed.
+        // The service now maps to a DTO inside the transaction.
+        mockMvc.perform(get("/api/v1/carts/{cartId}", cartId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cartId").value(cartId))
+                .andExpect(jsonPath("$.data.cartItems", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.data.cartItems[0].quantity").value(ORDER_QUANTITY))
+                .andExpect(jsonPath("$.data.cartItems[0].product.name").value("Wireless Mouse"));
+    }
+
+    @Test
     @DisplayName("adding to the cart without a token is rejected (guard holds)")
     void addToCart_withoutToken_isUnauthorized() throws Exception {
         mockMvc.perform(post("/api/v1/cartItems")
