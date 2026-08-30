@@ -3,6 +3,7 @@ import com.aryan.spring_security_demo.dto.ImageDto;
 import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.exception.AlreadyExistsException;
 import com.aryan.spring_security_demo.exception.ProductNotFoundException;
+import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Product;
@@ -185,4 +186,70 @@ public class ProductService implements ProductServiceInterface{
         return productDto;
     }
 
+    // ---- DTO-returning operations: load + map in ONE transaction ------------
+    // These delegate to the entity methods above and convert before the
+    // transaction closes, so convertToDto's lazy reads (category, images) are
+    // safe. Controllers call these and never touch a Product entity.
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProductDto getProductDtoById(Long id) {
+        return convertToDto(getProductById(id));
+    }
+
+    @Override
+    @Transactional
+    public ProductDto addProductAndConvert(AddProductRequest request) {
+        return convertToDto(addProduct(request));
+    }
+
+    @Override
+    @Transactional
+    public ProductDto updateProductAndConvert(ProductUpdateRequest request, Long id) {
+        return convertToDto(updateProductById(request, id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductDto> getAllProductDtos() {
+        return getConvertedProducts(getAllProducts());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductDto> getProductDtosByCategory(String category) {
+        return convertNonEmpty(getAllProductsByCategory(category));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductDto> getProductDtosByBrand(String brand) {
+        return convertNonEmpty(getProductsByBrand(brand));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductDto> getProductDtosByCategoryAndBrand(String category, String brand) {
+        return convertNonEmpty(getProductsByCategoryAndBrand(category, brand));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductDto> getProductDtosByName(String name) {
+        return convertNonEmpty(getProductsByName(name));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductDto> getProductDtosByBrandAndName(String brand, String name) {
+        return convertNonEmpty(getProductsByBrandAndName(brand, name));
+    }
+
+    /** Empty search results are surfaced as 404 (mapped by the global handler). */
+    private List<ProductDto> convertNonEmpty(List<Product> products) {
+        if (products.isEmpty()) {
+            throw new ResourceNotFoundException("No Product Found");
+        }
+        return getConvertedProducts(products);
+    }
 }

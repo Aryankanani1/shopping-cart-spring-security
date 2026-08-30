@@ -23,4 +23,17 @@ public interface ProductServiceInterface {
     ProductDto convertToDto(Product product);
     List<ProductDto> getConvertedProducts(List<Product> products);
     ProductDto convertDto(Product product);
+
+    // DTO-returning read/write operations. Each loads AND maps inside one
+    // transaction, so lazy associations (category, images) resolve while the
+    // persistence context is open — safe to serialize with open-in-view off.
+    ProductDto getProductDtoById(Long id);
+    ProductDto addProductAndConvert(AddProductRequest request);
+    ProductDto updateProductAndConvert(ProductUpdateRequest request, Long id);
+    List<ProductDto> getAllProductDtos();
+    List<ProductDto> getProductDtosByCategory(String category);
+    List<ProductDto> getProductDtosByBrand(String brand);
+    List<ProductDto> getProductDtosByCategoryAndBrand(String category, String brand);
+    List<ProductDto> getProductDtosByName(String name);
+    List<ProductDto> getProductDtosByBrandAndName(String brand, String name);
 }

@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.controller;
 
 import com.aryan.spring_security_demo.Service.category.CategoryServiceInterface;
+import com.aryan.spring_security_demo.dto.CategoryDto;
 import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import jakarta.validation.Valid;
@@ -23,7 +24,9 @@ public class CategoryController {
 
     @GetMapping
     public ResponseEntity<ApiResponse> getAllCategories(){
-        List<Category> categories = categoryServiceInterface.getAllCategories();
+        List<CategoryDto> categories = categoryServiceInterface.getAllCategories().stream()
+                .map(categoryServiceInterface::convertToDto)
+                .toList();
         return ResponseEntity.ok(new ApiResponse("success!", categories));
     }
 
@@ -32,19 +35,21 @@ public class CategoryController {
         Category category = categoryServiceInterface.addCategory(name);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(category.getId()).toUri();
-        return ResponseEntity.created(location).body(new ApiResponse("Success!", category));
+        return ResponseEntity.created(location)
+                .body(new ApiResponse("Success!", categoryServiceInterface.convertToDto(category)));
     }
 
     @GetMapping("/{id:\\d+}")
     public ResponseEntity<ApiResponse> getCategoryById(@PathVariable Long id){
         Category category = categoryServiceInterface.getCategoryById(id);
-        return ResponseEntity.ok(new ApiResponse("Success!", category));
+        return ResponseEntity.ok(new ApiResponse("Success!", categoryServiceInterface.convertToDto(category)));
     }
 
     @GetMapping(params = "name")
     public ResponseEntity<ApiResponse> getCategoryByName(@RequestParam String name){
         Category category = categoryServiceInterface.getCategoryByName(name);
-        return ResponseEntity.ok(new ApiResponse("Success!", category));
+        CategoryDto dto = category == null ? null : categoryServiceInterface.convertToDto(category);
+        return ResponseEntity.ok(new ApiResponse("Success!", dto));
     }
 
     @DeleteMapping("/{id}")
@@ -56,6 +61,6 @@ public class CategoryController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse> updateCategoryId(@PathVariable Long id, @Valid @RequestBody Category category){
         Category updatedCategory = categoryServiceInterface.updateCategory(category, id);
-        return ResponseEntity.ok(new ApiResponse("Found!", updatedCategory));
+        return ResponseEntity.ok(new ApiResponse("Found!", categoryServiceInterface.convertToDto(updatedCategory)));
     }
 }
