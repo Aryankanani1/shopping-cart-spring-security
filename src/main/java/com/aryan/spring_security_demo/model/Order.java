@@ -42,6 +42,17 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL,orphanRemoval = true, fetch = FetchType.LAZY)
     Set<OrderItem> orderItems = new HashSet<>();
 
+    /**
+     * Attach an item to this order, keeping both sides of the relationship in
+     * sync. {@code OrderItem.order} is the owning side — the one that controls
+     * the {@code order_id} foreign key — so it must be set here; touching only
+     * {@link #orderItems} would leave the FK null and the link unsaved.
+     */
+    public void addOrderItem(OrderItem orderItem) {
+        this.orderItems.add(orderItem);
+        orderItem.setOrder(this);
+    }
+
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
