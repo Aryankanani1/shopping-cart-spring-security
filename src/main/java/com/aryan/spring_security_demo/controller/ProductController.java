@@ -1,7 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 import com.aryan.spring_security_demo.Service.product.ProductServiceInterface;
-import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
-import com.aryan.spring_security_demo.model.Product;
+import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.request.AddProductRequest;
 import com.aryan.spring_security_demo.request.ProductUpdateRequest;
 import com.aryan.spring_security_demo.response.ApiResponse;
@@ -14,7 +13,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.List;
 
 /**
  * Products resource. Verbs are carried by the HTTP method and the collection is
@@ -33,6 +31,10 @@ import java.util.List;
  *   PUT    /products/{id}                     replace
  *   DELETE /products/{id}                     delete        -> 204
  * </pre>
+ *
+ * <p>Every response is a {@link ProductDto} produced by the service inside its
+ * transaction — controllers never touch a {@code Product} entity, so there is no
+ * lazy-loading or entity-leak risk during serialization.
  */
 @RequiredArgsConstructor
 @RestController
@@ -44,32 +46,28 @@ public class ProductController {
 
     @GetMapping
     public ResponseEntity<ApiResponse> getAllProducts(){
-        List<Product> products = productServiceInterface.getAllProducts();
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getConvertedProducts(products)));
+        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getAllProductDtos()));
     }
 
     @GetMapping("/{productId:\\d+}")
     public ResponseEntity<ApiResponse> getProductById(@PathVariable("productId") Long id){
-        Product product = productServiceInterface.getProductById(id);
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.convertToDto(product)));
+        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtoById(id)));
     }
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PostMapping
     public ResponseEntity<ApiResponse> addProduct(@Valid @RequestBody AddProductRequest name) {
-        Product product = productServiceInterface.addProduct(name);
+        ProductDto product = productServiceInterface.addProductAndConvert(name);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(product.getId()).toUri();
-        return ResponseEntity.created(location)
-                .body(new ApiResponse("Success!", productServiceInterface.convertToDto(product)));
+        return ResponseEntity.created(location).body(new ApiResponse("Success!", product));
     }
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse> updateProduct(@Valid @RequestBody ProductUpdateRequest request,
                                                      @PathVariable Long id) {
-        Product updatedProduct = productServiceInterface.updateProductById(request, id);
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.convertToDto(updatedProduct)));
+        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.updateProductAndConvert(request, id)));
     }
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
@@ -82,46 +80,33 @@ public class ProductController {
     @GetMapping(params = {"brand", "name"})
     public ResponseEntity<ApiResponse> getProductByBrandAndName(@RequestParam("brand") String brandName,
                                                                 @RequestParam("name") String productName){
-        List<Product> products = productServiceInterface.getProductsByBrandAndName(brandName, productName);
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getConvertedProducts(requireNonEmpty(products))));
+        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByBrandAndName(brandName, productName)));
     }
 
     @GetMapping(params = {"category", "name"})
     public ResponseEntity<ApiResponse> getProductByCategoryAndName(@RequestParam("category") String category,
                                                                    @RequestParam("name") String productName){
-        List<Product> products = productServiceInterface.getProductsByCategoryAndBrand(category, productName);
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getConvertedProducts(requireNonEmpty(products))));
+        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByCategoryAndBrand(category, productName)));
     }
 
     @GetMapping(params = "name")
     public ResponseEntity<ApiResponse> getProductByName(@RequestParam("name") String name){
-        List<Product> products = productServiceInterface.getProductsByName(name);
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getConvertedProducts(requireNonEmpty(products))));
+        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByName(name)));
     }
 
     @GetMapping(params = "brand")
     public ResponseEntity<ApiResponse> findProductByBrand(@RequestParam("brand") String brand){
-        List<Product> products = productServiceInterface.getProductsByBrand(brand);
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getConvertedProducts(requireNonEmpty(products))));
+        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByBrand(brand)));
     }
 
     @GetMapping(params = "category")
     public ResponseEntity<ApiResponse> findAllProductByCategory(@RequestParam("category") String category){
-        List<Product> products = productServiceInterface.getAllProductsByCategory(category);
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getConvertedProducts(requireNonEmpty(products))));
+        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByCategory(category)));
     }
 
     @GetMapping(value = "/count", params = {"brand", "name"})
     public ResponseEntity<ApiResponse> countProductByBrandAndName(@RequestParam String brand, @RequestParam String name){
         var productCount = productServiceInterface.countProductsByBrandAndName(brand, name);
         return ResponseEntity.ok(new ApiResponse("Product Count!", productCount));
-    }
-
-    /** Empty search results are surfaced as 404 (mapped by the global handler). */
-    private List<Product> requireNonEmpty(List<Product> products){
-        if (products.isEmpty()) {
-            throw new ResourceNotFoundException("No Product Found");
-        }
-        return products;
     }
 }

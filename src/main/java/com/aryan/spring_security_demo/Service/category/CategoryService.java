@@ -1,4 +1,5 @@
 package com.aryan.spring_security_demo.Service.category;
+import com.aryan.spring_security_demo.dto.CategoryDto;
 import com.aryan.spring_security_demo.exception.AlreadyExistsException;
 import com.aryan.spring_security_demo.exception.CategoryNotFoundException;
 import com.aryan.spring_security_demo.model.Category;
@@ -70,5 +71,13 @@ categoryRepository.findById(id).ifPresentOrElse(categoryRepository::delete,() ->
 
 });
 
+    }
+
+    @Override
+    public CategoryDto convertToDto(Category category) {
+        CategoryDto dto = new CategoryDto();
+        dto.setId(category.getId());
+        dto.setName(category.getName());
+        return dto;
     }
 }

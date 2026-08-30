@@ -158,6 +158,31 @@ class CheckoutJourneyIntegrationTest {
     }
 
     @Test
+    @DisplayName("GET cart serializes its lazy items without a LazyInitializationException")
+    void getCart_serializesLazyItems() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+
+        mockMvc.perform(post("/api/v1/cartItems")
+                        .header("Authorization", "Bearer " + token)
+                        .param("productId", String.valueOf(productId))
+                        .param("quantity", String.valueOf(ORDER_QUANTITY)))
+                .andExpect(status().isCreated());
+
+        Long cartId = cartRepository.findByUserId(userId).getId();
+
+        // With open-in-view off, this used to throw because the controller
+        // serialized the Cart entity's lazy cartItems after the tx had closed.
+        // The service now maps to a DTO inside the transaction.
+        mockMvc.perform(get("/api/v1/carts/{cartId}", cartId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cartId").value(cartId))
+                .andExpect(jsonPath("$.data.cartItems", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.data.cartItems[0].quantity").value(ORDER_QUANTITY))
+                .andExpect(jsonPath("$.data.cartItems[0].product.name").value("Wireless Mouse"));
+    }
+
+    @Test
     @DisplayName("adding to the cart without a token is rejected (guard holds)")
     void addToCart_withoutToken_isUnauthorized() throws Exception {
         mockMvc.perform(post("/api/v1/cartItems")
@@ -219,6 +244,25 @@ class CheckoutJourneyIntegrationTest {
                         .content("{ this is not valid json "))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    @DisplayName("GET product maps to a DTO in-tx: no LazyInitializationException on category/images")
+    void getProductById_serializesDto() throws Exception {
+        mockMvc.perform(get("/api/v1/products/{id}", productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Wireless Mouse"))
+                .andExpect(jsonPath("$.data.categoryName").value("Electronics"))
+                .andExpect(jsonPath("$.data.images").isArray());
+    }
+
+    @Test
+    @DisplayName("GET categories returns DTOs, not the entity (no version leaked)")
+    void getCategories_returnDto() throws Exception {
+        mockMvc.perform(get("/api/v1/categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("Electronics"))
+                .andExpect(jsonPath("$.data[0].version").doesNotExist());
     }
 
     // --- helpers -----------------------------------------------------------
