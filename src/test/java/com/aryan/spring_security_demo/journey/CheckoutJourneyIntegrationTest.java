@@ -246,6 +246,25 @@ class CheckoutJourneyIntegrationTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
     }
 
+    @Test
+    @DisplayName("GET product maps to a DTO in-tx: no LazyInitializationException on category/images")
+    void getProductById_serializesDto() throws Exception {
+        mockMvc.perform(get("/api/v1/products/{id}", productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Wireless Mouse"))
+                .andExpect(jsonPath("$.data.categoryName").value("Electronics"))
+                .andExpect(jsonPath("$.data.images").isArray());
+    }
+
+    @Test
+    @DisplayName("GET categories returns DTOs, not the entity (no version leaked)")
+    void getCategories_returnDto() throws Exception {
+        mockMvc.perform(get("/api/v1/categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("Electronics"))
+                .andExpect(jsonPath("$.data[0].version").doesNotExist());
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private String login(String email, String password) throws Exception {
