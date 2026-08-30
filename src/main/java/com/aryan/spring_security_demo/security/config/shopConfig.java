@@ -1,8 +1,12 @@
 package com.aryan.spring_security_demo.security.config;
 
+import com.aryan.spring_security_demo.dto.CartDto;
+import com.aryan.spring_security_demo.dto.CartItemDto;
 import com.aryan.spring_security_demo.dto.ImageDto;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.dto.ProductDto;
+import com.aryan.spring_security_demo.model.Cart;
+import com.aryan.spring_security_demo.model.CartItem;
 import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Order;
 import com.aryan.spring_security_demo.model.Product;
@@ -65,6 +69,12 @@ public class shopConfig {
             mapper.map(Image::getFileName, ImageDto::setImageName);
             mapper.map(Image::getURL, ImageDto::setDownloadUrl);
         });
+
+        // Cart/CartItem id fields don't match the DTOs, so map them explicitly.
+        modelMapper.typeMap(Cart.class, CartDto.class).addMappings(mapper ->
+            mapper.map(Cart::getId, CartDto::setCartId));
+        modelMapper.typeMap(CartItem.class, CartItemDto.class).addMappings(mapper ->
+            mapper.map(CartItem::getId, CartItemDto::setItemId));
 
         return modelMapper;
     }

@@ -1,11 +1,13 @@
 package com.aryan.spring_security_demo.Service.cart;
 
+import com.aryan.spring_security_demo.dto.CartDto;
 import com.aryan.spring_security_demo.exception.CartNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.CartItemRepository;
 import com.aryan.spring_security_demo.repository.CartRepository;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
@@ -17,6 +19,7 @@ public class CartService implements CartServiceInterface{
 
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
+    private final ModelMapper modelMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -26,6 +29,18 @@ public class CartService implements CartServiceInterface{
         BigDecimal totalAmount = cart.getTotalAmount();
         cart.setTotalAmount(totalAmount);
         return cartRepository.save(cart);
+    }
+
+    /**
+     * Map the cart to a DTO <em>inside</em> this transaction, so the lazy
+     * {@code cartItems} (and their nested product/images) are loaded while the
+     * persistence context is still open. The controller then serializes a plain
+     * DTO — no {@code LazyInitializationException} even with open-in-view off.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public CartDto getCartDto(Long id) {
+        return modelMapper.map(getCart(id), CartDto.class);
     }
 
     @Override

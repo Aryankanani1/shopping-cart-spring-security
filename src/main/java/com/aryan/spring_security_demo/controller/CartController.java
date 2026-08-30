@@ -1,7 +1,7 @@
 package com.aryan.spring_security_demo.controller;
 
 import com.aryan.spring_security_demo.Service.cart.CartServiceInterface;
-import com.aryan.spring_security_demo.model.Cart;
+import com.aryan.spring_security_demo.dto.CartDto;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +18,7 @@ public class CartController {
 
     @GetMapping("/{cartId}")
     public ResponseEntity<ApiResponse> getCart(@PathVariable Long cartId){
-        Cart cart = cartServiceInterface.getCart(cartId);
+        CartDto cart = cartServiceInterface.getCartDto(cartId);
         return ResponseEntity.ok(new ApiResponse("Success", cart));
     }
 
