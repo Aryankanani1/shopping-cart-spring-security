@@ -8,12 +8,10 @@ import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.repository.CategoryRepository;
-import com.aryan.spring_security_demo.repository.ImageRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
 import com.aryan.spring_security_demo.request.AddProductRequest;
 import com.aryan.spring_security_demo.request.ProductUpdateRequest;
 import lombok.RequiredArgsConstructor;
-import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +23,6 @@ import java.util.Optional;
 public class ProductService implements ProductServiceInterface{
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
-    private final ModelMapper modelMapper;
-    private final ImageRepository imageRepository;
     @Override
     @Transactional
     public Product addProduct(AddProductRequest request) {
@@ -44,9 +40,6 @@ public class ProductService implements ProductServiceInterface{
 
        request.setCategory(category);
        return  productRepository.save(createProduct(request,category));
-        // if yes set it as the new product category
-        // if no set as the new category
-        // and then set the product into that category
     }
 
 
@@ -176,15 +169,6 @@ public class ProductService implements ProductServiceInterface{
         return products.stream().map(this::convertToDto).toList();
     }
 
-    @Override
-    public ProductDto convertDto(Product product){
-        ProductDto productDto = modelMapper.map(product,ProductDto.class);
-        List<Image> images = imageRepository.findProductById(product.getId());
-        List<ImageDto> imageDtos = images.stream().map(image -> modelMapper.map(image, ImageDto.class))
-                .toList();
-        productDto.setImages(imageDtos);
-        return productDto;
-    }
 
     // ---- DTO-returning operations: load + map in ONE transaction ------------
     // These delegate to the entity methods above and convert before the
