@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 
-import com.aryan.spring_security_demo.Service.image.ImageServiceInterface;
+import com.aryan.spring_security_demo.service.image.ImageServiceInterface;
 import com.aryan.spring_security_demo.dto.ImageDto;
 import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.response.ApiResponse;

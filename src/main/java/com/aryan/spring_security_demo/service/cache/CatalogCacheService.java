@@ -1,6 +1,6 @@
-package com.aryan.spring_security_demo.Service.cache;
+package com.aryan.spring_security_demo.service.cache;
 
-import com.aryan.spring_security_demo.Service.product.ProductServiceInterface;
+import com.aryan.spring_security_demo.service.product.ProductServiceInterface;
 import com.aryan.spring_security_demo.config.CacheConfig;
 import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.model.Category;

@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 
-import com.aryan.spring_security_demo.Service.order.OrderServiceInterface;
+import com.aryan.spring_security_demo.service.order.OrderServiceInterface;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;

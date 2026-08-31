@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 
-import com.aryan.spring_security_demo.Service.user.UserServiceInterface;
+import com.aryan.spring_security_demo.service.user.UserServiceInterface;
 import com.aryan.spring_security_demo.dto.UserDto;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.request.CreateUserRequest;

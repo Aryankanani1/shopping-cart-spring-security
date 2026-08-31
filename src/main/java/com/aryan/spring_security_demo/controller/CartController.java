@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 
-import com.aryan.spring_security_demo.Service.cart.CartServiceInterface;
+import com.aryan.spring_security_demo.service.cart.CartServiceInterface;
 import com.aryan.spring_security_demo.dto.CartDto;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import lombok.RequiredArgsConstructor;

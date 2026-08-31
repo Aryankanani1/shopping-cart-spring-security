@@ -1,4 +1,4 @@
-package com.aryan.spring_security_demo.Service.user;
+package com.aryan.spring_security_demo.service.user;
 
 import com.aryan.spring_security_demo.dto.UserDto;
 import com.aryan.spring_security_demo.model.User;

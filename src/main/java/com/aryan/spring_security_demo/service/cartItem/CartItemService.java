@@ -1,7 +1,7 @@
-package com.aryan.spring_security_demo.Service.cartItem;
+package com.aryan.spring_security_demo.service.cartItem;
 
-import com.aryan.spring_security_demo.Service.cart.CartService;
-import com.aryan.spring_security_demo.Service.product.ProductService;
+import com.aryan.spring_security_demo.service.cart.CartService;
+import com.aryan.spring_security_demo.service.product.ProductService;
 import com.aryan.spring_security_demo.exception.ProductNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.CartItem;

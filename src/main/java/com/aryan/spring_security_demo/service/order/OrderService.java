@@ -1,6 +1,6 @@
-package com.aryan.spring_security_demo.Service.order;
+package com.aryan.spring_security_demo.service.order;
 
-import com.aryan.spring_security_demo.Service.cart.CartService;
+import com.aryan.spring_security_demo.service.cart.CartService;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;

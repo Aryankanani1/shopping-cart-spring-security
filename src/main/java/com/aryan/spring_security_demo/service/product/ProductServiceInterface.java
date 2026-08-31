@@ -1,4 +1,4 @@
-package com.aryan.spring_security_demo.Service.product;
+package com.aryan.spring_security_demo.service.product;
 
 import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.model.Product;
