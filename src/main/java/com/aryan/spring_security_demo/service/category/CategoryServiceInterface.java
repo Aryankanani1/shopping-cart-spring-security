@@ -1,4 +1,4 @@
-package com.aryan.spring_security_demo.Service.category;
+package com.aryan.spring_security_demo.service.category;
 
 import com.aryan.spring_security_demo.dto.CategoryDto;
 import com.aryan.spring_security_demo.model.Category;

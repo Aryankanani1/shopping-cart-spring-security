@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 
-import com.aryan.spring_security_demo.Service.product.ProductServiceInterface;
+import com.aryan.spring_security_demo.service.product.ProductServiceInterface;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;

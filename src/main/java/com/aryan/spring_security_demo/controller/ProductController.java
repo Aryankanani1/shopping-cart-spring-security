@@ -1,5 +1,5 @@
 package com.aryan.spring_security_demo.controller;
-import com.aryan.spring_security_demo.Service.product.ProductServiceInterface;
+import com.aryan.spring_security_demo.service.product.ProductServiceInterface;
 import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.request.AddProductRequest;
 import com.aryan.spring_security_demo.request.ProductUpdateRequest;

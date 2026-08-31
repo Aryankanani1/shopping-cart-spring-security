@@ -1,4 +1,4 @@
-package com.aryan.spring_security_demo.Service.cart;
+package com.aryan.spring_security_demo.service.cart;
 
 import com.aryan.spring_security_demo.dto.CartDto;
 import com.aryan.spring_security_demo.model.Cart;

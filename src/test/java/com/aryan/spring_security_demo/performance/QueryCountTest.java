@@ -1,7 +1,7 @@
 package com.aryan.spring_security_demo.performance;
 
-import com.aryan.spring_security_demo.Service.order.OrderServiceInterface;
-import com.aryan.spring_security_demo.Service.product.ProductServiceInterface;
+import com.aryan.spring_security_demo.service.order.OrderServiceInterface;
+import com.aryan.spring_security_demo.service.product.ProductServiceInterface;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;

@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.bootstrap;
 
-import com.aryan.spring_security_demo.Service.cache.CatalogCacheService;
+import com.aryan.spring_security_demo.service.cache.CatalogCacheService;
 import com.aryan.spring_security_demo.config.StartupProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

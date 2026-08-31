@@ -1,4 +1,4 @@
-package com.aryan.spring_security_demo.Service.order;
+package com.aryan.spring_security_demo.service.order;
 
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.model.Order;

@@ -1,6 +1,6 @@
-package com.aryan.spring_security_demo.Service.image;
+package com.aryan.spring_security_demo.service.image;
 
-import com.aryan.spring_security_demo.Service.product.ProductServiceInterface;
+import com.aryan.spring_security_demo.service.product.ProductServiceInterface;
 import com.aryan.spring_security_demo.dto.ImageDto;
 import com.aryan.spring_security_demo.exception.CategoryNotFoundException;
 import com.aryan.spring_security_demo.exception.ImageNotFoundException;

@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 
-import com.aryan.spring_security_demo.Service.category.CategoryServiceInterface;
+import com.aryan.spring_security_demo.service.category.CategoryServiceInterface;
 import com.aryan.spring_security_demo.dto.CategoryDto;
 import com.aryan.spring_security_demo.model.Category;
 import com.aryan.spring_security_demo.response.ApiResponse;

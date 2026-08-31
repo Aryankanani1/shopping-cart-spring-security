@@ -1,8 +1,8 @@
 package com.aryan.spring_security_demo.controller;
 
-import com.aryan.spring_security_demo.Service.cart.CartServiceInterface;
-import com.aryan.spring_security_demo.Service.cartItem.CartItemServiceInterface;
-import com.aryan.spring_security_demo.Service.user.UserServiceInterface;
+import com.aryan.spring_security_demo.service.cart.CartServiceInterface;
+import com.aryan.spring_security_demo.service.cartItem.CartItemServiceInterface;
+import com.aryan.spring_security_demo.service.user.UserServiceInterface;
 import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.response.ApiResponse;
