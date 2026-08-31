@@ -45,68 +45,68 @@ public class ProductController {
     private final ProductServiceInterface productServiceInterface;
 
     @GetMapping
-    public ResponseEntity<ApiResponse> getAllProducts(){
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getAllProductDtos()));
+    public ResponseEntity<ApiResponse<?>> getAllProducts(){
+        return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getAllProductDtos()));
     }
 
     @GetMapping("/{productId:\\d+}")
-    public ResponseEntity<ApiResponse> getProductById(@PathVariable("productId") Long id){
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtoById(id)));
+    public ResponseEntity<ApiResponse<?>> getProductById(@PathVariable("productId") Long id){
+        return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getProductDtoById(id)));
     }
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PostMapping
-    public ResponseEntity<ApiResponse> addProduct(@Valid @RequestBody AddProductRequest name) {
+    public ResponseEntity<ApiResponse<?>> addProduct(@Valid @RequestBody AddProductRequest name) {
         ProductDto product = productServiceInterface.addProductAndConvert(name);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(product.getId()).toUri();
-        return ResponseEntity.created(location).body(new ApiResponse("Success!", product));
+        return ResponseEntity.created(location).body(new ApiResponse<>("Success!", product));
     }
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse> updateProduct(@Valid @RequestBody ProductUpdateRequest request,
+    public ResponseEntity<ApiResponse<?>> updateProduct(@Valid @RequestBody ProductUpdateRequest request,
                                                      @PathVariable Long id) {
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.updateProductAndConvert(request, id)));
+        return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.updateProductAndConvert(request, id)));
     }
 
     @PreAuthorize("hasRole('ROLE_ADMIN')")
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse> deleteProduct(@PathVariable Long id){
+    public ResponseEntity<ApiResponse<?>> deleteProduct(@PathVariable Long id){
         productServiceInterface.deleteProductById(id);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping(params = {"brand", "name"})
-    public ResponseEntity<ApiResponse> getProductByBrandAndName(@RequestParam("brand") String brandName,
+    public ResponseEntity<ApiResponse<?>> getProductByBrandAndName(@RequestParam("brand") String brandName,
                                                                 @RequestParam("name") String productName){
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByBrandAndName(brandName, productName)));
+        return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getProductDtosByBrandAndName(brandName, productName)));
     }
 
     @GetMapping(params = {"category", "name"})
-    public ResponseEntity<ApiResponse> getProductByCategoryAndName(@RequestParam("category") String category,
+    public ResponseEntity<ApiResponse<?>> getProductByCategoryAndName(@RequestParam("category") String category,
                                                                    @RequestParam("name") String productName){
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByCategoryAndBrand(category, productName)));
+        return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getProductDtosByCategoryAndBrand(category, productName)));
     }
 
     @GetMapping(params = "name")
-    public ResponseEntity<ApiResponse> getProductByName(@RequestParam("name") String name){
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByName(name)));
+    public ResponseEntity<ApiResponse<?>> getProductByName(@RequestParam("name") String name){
+        return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getProductDtosByName(name)));
     }
 
     @GetMapping(params = "brand")
-    public ResponseEntity<ApiResponse> findProductByBrand(@RequestParam("brand") String brand){
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByBrand(brand)));
+    public ResponseEntity<ApiResponse<?>> findProductByBrand(@RequestParam("brand") String brand){
+        return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getProductDtosByBrand(brand)));
     }
 
     @GetMapping(params = "category")
-    public ResponseEntity<ApiResponse> findAllProductByCategory(@RequestParam("category") String category){
-        return ResponseEntity.ok(new ApiResponse("Success!", productServiceInterface.getProductDtosByCategory(category)));
+    public ResponseEntity<ApiResponse<?>> findAllProductByCategory(@RequestParam("category") String category){
+        return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getProductDtosByCategory(category)));
     }
 
     @GetMapping(value = "/count", params = {"brand", "name"})
-    public ResponseEntity<ApiResponse> countProductByBrandAndName(@RequestParam String brand, @RequestParam String name){
+    public ResponseEntity<ApiResponse<?>> countProductByBrandAndName(@RequestParam String brand, @RequestParam String name){
         var productCount = productServiceInterface.countProductsByBrandAndName(brand, name);
-        return ResponseEntity.ok(new ApiResponse("Product Count!", productCount));
+        return ResponseEntity.ok(new ApiResponse<>("Product Count!", productCount));
     }
 }

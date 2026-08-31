@@ -24,30 +24,30 @@ public class UserController {
     private final UserServiceInterface userServiceInterface;
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse> getUserById(@PathVariable Long id){
+    public ResponseEntity<ApiResponse<?>> getUserById(@PathVariable Long id){
         User user = userServiceInterface.getUserById(id);
         UserDto userDto = userServiceInterface.convertUserToDto(user);
-        return ResponseEntity.ok(new ApiResponse("success!", userDto));
+        return ResponseEntity.ok(new ApiResponse<>("success!", userDto));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse> createUser(@Valid @RequestBody CreateUserRequest createUserRequest){
+    public ResponseEntity<ApiResponse<?>> createUser(@Valid @RequestBody CreateUserRequest createUserRequest){
         User user = userServiceInterface.createUser(createUserRequest);
         UserDto userDto = userServiceInterface.convertUserToDto(user);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(userDto.getId()).toUri();
-        return ResponseEntity.created(location).body(new ApiResponse("success!", userDto));
+        return ResponseEntity.created(location).body(new ApiResponse<>("success!", userDto));
     }
 
     @PutMapping("/{userId}")
-    public ResponseEntity<ApiResponse> updateUser(@Valid @RequestBody UserUpdateRequest request, @PathVariable Long userId){
+    public ResponseEntity<ApiResponse<?>> updateUser(@Valid @RequestBody UserUpdateRequest request, @PathVariable Long userId){
         User user = userServiceInterface.updateUser(request, userId);
         UserDto userDto = userServiceInterface.convertUserToDto(user);
-        return ResponseEntity.ok(new ApiResponse("success!", userDto));
+        return ResponseEntity.ok(new ApiResponse<>("success!", userDto));
     }
 
     @DeleteMapping("/{userId}")
-    public ResponseEntity<ApiResponse> deleteUser(@PathVariable Long userId){
+    public ResponseEntity<ApiResponse<?>> deleteUser(@PathVariable Long userId){
         userServiceInterface.deleteUser(userId);
         return ResponseEntity.noContent().build();
     }

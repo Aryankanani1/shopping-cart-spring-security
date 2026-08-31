@@ -23,7 +23,7 @@ public class CartItemController {
 
 
     @PostMapping
-    public ResponseEntity<ApiResponse> addItemToCart(
+    public ResponseEntity<ApiResponse<?>> addItemToCart(
             @RequestParam Long productId,
             @RequestParam Integer quantity){
 
@@ -31,12 +31,12 @@ public class CartItemController {
         Cart cart = cartServiceInterface.initializeNewCart(user);
 
         cartItemServiceInterface.addItemToCart(cart.getId(), productId, quantity);
-        return ResponseEntity.status(CREATED).body(new ApiResponse("add item successfully!", null));
+        return ResponseEntity.status(CREATED).body(new ApiResponse<>("add item successfully!", null));
     }
 
 
     @DeleteMapping("/cart/{cartId}/product/{productId}")
-    public ResponseEntity<ApiResponse> removeItemFromCart(
+    public ResponseEntity<ApiResponse<?>> removeItemFromCart(
             @PathVariable Long cartId,
             @PathVariable Long productId
     ){
@@ -46,12 +46,12 @@ public class CartItemController {
 
 
     @PutMapping("/cart/{cartId}/item/{itemId}")
-    public ResponseEntity<ApiResponse> updateItemQuantity(
+    public ResponseEntity<ApiResponse<?>> updateItemQuantity(
             @PathVariable Long cartId,
             @PathVariable Long itemId,
             @RequestParam Integer quantity
     ) {
         cartItemServiceInterface.updateItemQuantity(cartId, itemId, quantity);
-        return ResponseEntity.ok(new ApiResponse("item updated successfully", null));
+        return ResponseEntity.ok(new ApiResponse<>("item updated successfully", null));
     }
 }
