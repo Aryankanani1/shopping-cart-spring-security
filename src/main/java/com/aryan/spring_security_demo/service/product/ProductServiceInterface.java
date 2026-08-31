@@ -22,7 +22,6 @@ public interface ProductServiceInterface {
 
     ProductDto convertToDto(Product product);
     List<ProductDto> getConvertedProducts(List<Product> products);
-    ProductDto convertDto(Product product);
 
     // DTO-returning read/write operations. Each loads AND maps inside one
     // transaction, so lazy associations (category, images) resolve while the
