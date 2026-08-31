@@ -37,7 +37,7 @@ import java.util.List;
 @Configuration
 @RequiredArgsConstructor
 @EnableMethodSecurity(prePostEnabled = true)
-public class shopConfig {
+public class ShopConfig {
 
   private final UserDetailsService userDetailsService;
   private final JwtEntryPoint jwtEntryPoint;
