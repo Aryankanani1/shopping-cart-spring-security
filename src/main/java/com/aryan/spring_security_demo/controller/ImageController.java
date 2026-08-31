@@ -26,9 +26,9 @@ public class ImageController {
     private final ImageServiceInterface imageServiceInterface;
 
     @PostMapping
-    public ResponseEntity<ApiResponse> saveImages(@RequestParam List<MultipartFile> files, @RequestParam Long productId){
+    public ResponseEntity<ApiResponse<?>> saveImages(@RequestParam List<MultipartFile> files, @RequestParam Long productId){
         List<ImageDto> imageDtos = imageServiceInterface.saveImages(files, productId);
-        return ResponseEntity.status(CREATED).body(new ApiResponse("Uploaded Successfully", imageDtos));
+        return ResponseEntity.status(CREATED).body(new ApiResponse<>("Uploaded Successfully", imageDtos));
     }
 
     @GetMapping("/{imageId}")
@@ -44,14 +44,14 @@ public class ImageController {
     }
 
     @PutMapping("/{imageId}")
-    public ResponseEntity<ApiResponse> updateImage(@PathVariable Long imageId, @RequestBody MultipartFile file){
+    public ResponseEntity<ApiResponse<?>> updateImage(@PathVariable Long imageId, @RequestBody MultipartFile file){
         imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist
         imageServiceInterface.updateImage(file, imageId);
-        return ResponseEntity.ok(new ApiResponse("update success!", null));
+        return ResponseEntity.ok(new ApiResponse<>("update success!", null));
     }
 
     @DeleteMapping("/{imageId}")
-    public ResponseEntity<ApiResponse> deleteImage(@PathVariable Long imageId){
+    public ResponseEntity<ApiResponse<?>> deleteImage(@PathVariable Long imageId){
         imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist
         imageServiceInterface.deleteImageById(imageId);
         return ResponseEntity.noContent().build();

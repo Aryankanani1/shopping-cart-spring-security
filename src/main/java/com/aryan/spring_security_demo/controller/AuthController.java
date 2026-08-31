@@ -28,7 +28,7 @@ public class AuthController {
     private final JwtUtils jwtUtils;
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse> login(@RequestBody LoginRequest request){
+    public ResponseEntity<ApiResponse<?>> login(@RequestBody LoginRequest request){
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
@@ -39,9 +39,9 @@ public class AuthController {
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
             JwtResponse jwtResponse = new JwtResponse(userDetails.getId(), token);
-            return ResponseEntity.ok(new ApiResponse("Login successful", jwtResponse));
+            return ResponseEntity.ok(new ApiResponse<>("Login successful", jwtResponse));
         } catch (BadCredentialsException e) {
-            return ResponseEntity.status(UNAUTHORIZED).body(new ApiResponse(e.getMessage(), null));
+            return ResponseEntity.status(UNAUTHORIZED).body(new ApiResponse<>(e.getMessage(), null));
         }
     }
 }

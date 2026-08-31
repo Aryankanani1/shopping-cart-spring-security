@@ -17,21 +17,21 @@ public class CartController {
     private final CartServiceInterface cartServiceInterface;
 
     @GetMapping("/{cartId}")
-    public ResponseEntity<ApiResponse> getCart(@PathVariable Long cartId){
+    public ResponseEntity<ApiResponse<?>> getCart(@PathVariable Long cartId){
         CartDto cart = cartServiceInterface.getCartDto(cartId);
-        return ResponseEntity.ok(new ApiResponse("Success", cart));
+        return ResponseEntity.ok(new ApiResponse<>("Success", cart));
     }
 
     @DeleteMapping("/{cartId}/items")
-    public ResponseEntity<ApiResponse> clearCart(@PathVariable Long cartId){
+    public ResponseEntity<ApiResponse<?>> clearCart(@PathVariable Long cartId){
         cartServiceInterface.clearCart(cartId);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{cartId}/total-price")
-    public ResponseEntity<ApiResponse> getTotalAmount(@PathVariable Long cartId){
+    public ResponseEntity<ApiResponse<?>> getTotalAmount(@PathVariable Long cartId){
         BigDecimal totalPrice = cartServiceInterface.getTotalPrice(cartId);
-        return ResponseEntity.ok(new ApiResponse("total price", totalPrice));
+        return ResponseEntity.ok(new ApiResponse<>("total price", totalPrice));
     }
 
 }
