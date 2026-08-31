@@ -56,7 +56,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             ProductNotFoundException.class,
             CategoryNotFoundException.class,
             ImageNotFoundException.class,
-            UserNoFoundException.class
+            UserNotFoundException.class
     })
     public ProblemDetail handleNotFound(RuntimeException ex) {
         log.debug("404 Not found: {}", ex.getMessage());
