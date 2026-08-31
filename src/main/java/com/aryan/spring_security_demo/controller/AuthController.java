@@ -8,7 +8,6 @@ import com.aryan.spring_security_demo.security.user.UserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,8 +15,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @RestController
 @RequestMapping("${api.prefix}/auth")
@@ -28,20 +25,18 @@ public class AuthController {
     private final JwtUtils jwtUtils;
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<?>> login(@RequestBody LoginRequest request){
-        try {
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+    public ResponseEntity<ApiResponse<?>> login(@RequestBody LoginRequest request) {
+        // Bad credentials throw BadCredentialsException, which the global handler
+        // maps to 401 — no try/catch here, consistent with every other endpoint.
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            String token = jwtUtils.generateUserTokenFromUser(authentication);
-            UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        String token = jwtUtils.generateUserTokenFromUser(authentication);
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-            JwtResponse jwtResponse = new JwtResponse(userDetails.getId(), token);
-            return ResponseEntity.ok(new ApiResponse<>("Login successful", jwtResponse));
-        } catch (BadCredentialsException e) {
-            return ResponseEntity.status(UNAUTHORIZED).body(new ApiResponse<>(e.getMessage(), null));
-        }
+        JwtResponse jwtResponse = new JwtResponse(userDetails.getId(), token);
+        return ResponseEntity.ok(new ApiResponse<>("Login successful", jwtResponse));
     }
 }

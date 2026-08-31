@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -75,6 +76,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleJwt(JwtException ex) {
         log.debug("401 Authentication failed: {}", ex.getMessage());
         return problem(HttpStatus.UNAUTHORIZED, "Authentication failed", "Invalid or expired token");
+    }
+
+    /**
+     * 401 — login with a wrong email/password. The detail is deliberately generic
+     * so it cannot be used to probe which accounts exist.
+     */
+    @ExceptionHandler(BadCredentialsException.class)
+    public ProblemDetail handleBadCredentials(BadCredentialsException ex) {
+        log.debug("401 Bad credentials: {}", ex.getMessage());
+        return problem(HttpStatus.UNAUTHORIZED, "Authentication failed", "Invalid email or password");
     }
 
     /**
