@@ -1,7 +1,7 @@
 package com.aryan.spring_security_demo.Service.user;
 import com.aryan.spring_security_demo.dto.UserDto;
 import com.aryan.spring_security_demo.exception.AlreadyExistsException;
-import com.aryan.spring_security_demo.exception.UserNoFoundException;
+import com.aryan.spring_security_demo.exception.UserNotFoundException;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.UserRepository;
 import com.aryan.spring_security_demo.request.CreateUserRequest;
@@ -26,7 +26,7 @@ public class UserService implements UserServiceInterface{
     @Override
     @Transactional(readOnly = true)
     public User getUserById(Long userId) {
-        return userRepository.findByIdWithDetails(userId).orElseThrow(() -> new UserNoFoundException("failed to find user"));
+        return userRepository.findByIdWithDetails(userId).orElseThrow(() -> new UserNotFoundException("failed to find user"));
     }
 
     @Override
@@ -50,7 +50,7 @@ public class UserService implements UserServiceInterface{
             existingUser.setFirstName(request.getFirstName());
             existingUser.setLastName(request.getLastName());
           return userRepository.save(existingUser);
-        }).orElseThrow(() -> new UserNoFoundException("failed to find user"));
+        }).orElseThrow(() -> new UserNotFoundException("failed to find user"));
     }
 
 
@@ -58,7 +58,7 @@ public class UserService implements UserServiceInterface{
     @Transactional
     public void deleteUser(Long userId) {
         userRepository.findById(userId).ifPresentOrElse(userRepository::delete, () -> {
-            throw new UserNoFoundException("failed to find user");
+            throw new UserNotFoundException("failed to find user");
         });
     }
 
@@ -73,6 +73,6 @@ public class UserService implements UserServiceInterface{
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String email = authentication.getName();
         return userRepository.findByEmailWithRoles(email)
-                .orElseThrow(() -> new UserNoFoundException("failed to find user"));
+                .orElseThrow(() -> new UserNotFoundException("failed to find user"));
     }
 }

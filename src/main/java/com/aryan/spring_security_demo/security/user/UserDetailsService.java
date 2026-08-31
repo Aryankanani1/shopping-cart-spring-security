@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.security.user;
 
-import com.aryan.spring_security_demo.exception.UserNoFoundException;
+import com.aryan.spring_security_demo.exception.UserNotFoundException;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +16,7 @@ public class UserDetailsService implements org.springframework.security.core.use
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user =  userRepository.findByEmailWithRoles(email).orElseThrow(() ->
-                new UserNoFoundException("User not found"));
+                new UserNotFoundException("User not found"));
         return com.aryan.spring_security_demo.security.user.UserDetails.buildUserDetails(user);
     }
 }
