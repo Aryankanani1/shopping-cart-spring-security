@@ -24,11 +24,8 @@ public class CartService implements CartServiceInterface{
     @Override
     @Transactional(readOnly = true)
     public Cart getCart(Long id) {
-        Cart cart = cartRepository.findById(id)
+        return cartRepository.findById(id)
                 .orElseThrow(() -> new CartNotFoundException("cart not found"));
-        BigDecimal totalAmount = cart.getTotalAmount();
-        cart.setTotalAmount(totalAmount);
-        return cartRepository.save(cart);
     }
 
     /**
@@ -61,6 +58,7 @@ public class CartService implements CartServiceInterface{
     }
 
     @Override
+    @Transactional
     public Cart initializeNewCart(User user){
         return Optional.ofNullable(getCartByUserId(user.getId()))
                 .orElseGet(() -> {
