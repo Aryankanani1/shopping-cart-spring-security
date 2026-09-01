@@ -8,16 +8,23 @@ import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.Order;
 import com.aryan.spring_security_demo.model.OrderItem;
 import com.aryan.spring_security_demo.model.Product;
+import com.aryan.spring_security_demo.pagination.OrderCursor;
+import com.aryan.spring_security_demo.repository.OrderKeysetRow;
 import com.aryan.spring_security_demo.repository.OrderRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
+import com.aryan.spring_security_demo.response.SlicedResponse;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -86,9 +93,39 @@ public class OrderService implements OrderServiceInterface{
 
     @Override
     @Transactional(readOnly = true)
-    public List<OrderDto> getUserOrders(Long userId){
-        return orderRepository.findByUserId(userId)
-                .stream().map(this::convertToDto).toList();
+    public SlicedResponse<OrderDto> getUserOrders(Long userId, String cursor, int size) {
+        OrderCursor from = OrderCursor.decode(cursor);
+
+        // Phase 1: index-backed keyset scan for this page of ids. Fetch one extra
+        // row so we can tell whether a further slice exists without a COUNT.
+        List<OrderKeysetRow> rows = orderRepository.findUserOrderKeyset(
+                userId,
+                from == null ? null : from.createdAt(),
+                from == null ? null : from.id(),
+                PageRequest.of(0, size + 1));
+
+        boolean hasNext = rows.size() > size;
+        List<OrderKeysetRow> pageRows = hasNext ? rows.subList(0, size) : rows;
+
+        if (pageRows.isEmpty()) {
+            return new SlicedResponse<>(List.of(), size, 0, false, null);
+        }
+
+        // Phase 2: hydrate the page's orders (items + products) in one JOIN FETCH,
+        // then re-impose the keyset order that the id list already carries.
+        List<Long> ids = pageRows.stream().map(OrderKeysetRow::getId).toList();
+        Map<Long, Order> byId = orderRepository.findWithItemsByIdIn(ids).stream()
+                .collect(Collectors.toMap(Order::getId, Function.identity()));
+        List<OrderDto> content = ids.stream()
+                .map(byId::get)
+                .map(this::convertToDto)
+                .toList();
+
+        OrderKeysetRow last = pageRows.get(pageRows.size() - 1);
+        String nextCursor = hasNext
+                ? new OrderCursor(last.getCreatedAt(), last.getId()).encode()
+                : null;
+        return new SlicedResponse<>(content, size, content.size(), hasNext, nextCursor);
     }
 
     private OrderDto convertToDto(Order order){
