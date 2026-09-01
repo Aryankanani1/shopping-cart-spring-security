@@ -28,6 +28,16 @@ spring:
       max-lifetime: 1800000
       leak-detection-threshold: 20000
 
+  # --- Spring Data web: pagination request binding ---
+  # Spring MVC binds Pageable from page/size/sort query params automatically.
+  # max-page-size is a hard cap: a client asking for ?size=100000 is clamped to
+  # 100, so a single request can never ask the DB for an unbounded result set.
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
   # --- JPA / Hibernate: settings that are correct in all environments ---
   jpa:
     # Close the persistence context at the transaction boundary: surfaces

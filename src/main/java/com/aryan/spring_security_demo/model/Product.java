@@ -16,7 +16,14 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "product")
+@Table(name = "product", indexes = {
+        // Back the columns the API is allowed to sort and filter on. Sorting or
+        // filtering on an unindexed column forces a full scan/sort, so the sort
+        // allowlist in ProductController is kept in lockstep with these indexes.
+        @Index(name = "idx_product_name", columnList = "name"),
+        @Index(name = "idx_product_brand", columnList = "brand"),
+        @Index(name = "idx_product_price", columnList = "price")
+})
 public class Product {
 
     @Id

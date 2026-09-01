@@ -4,6 +4,8 @@ import com.aryan.spring_security_demo.dto.ProductDto;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.request.AddProductRequest;
 import com.aryan.spring_security_demo.request.ProductUpdateRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -13,11 +15,6 @@ public interface ProductServiceInterface {
     void deleteProductById(Long productId);
     Product updateProductById(ProductUpdateRequest product, Long productId);
     List<Product> getAllProducts();
-    List<Product> getAllProductsByCategory(String category);
-    List<Product> getProductsByBrand(String brand);
-    List<Product> getProductsByCategoryAndBrand(String category,String brand);
-    List<Product> getProductsByName(String name);
-    List<Product> getProductsByBrandAndName(String brand,String name);
     Long countProductsByBrandAndName(String brand,String name);
 
     ProductDto convertToDto(Product product);
@@ -29,10 +26,11 @@ public interface ProductServiceInterface {
     ProductDto getProductDtoById(Long id);
     ProductDto addProductAndConvert(AddProductRequest request);
     ProductDto updateProductAndConvert(ProductUpdateRequest request, Long id);
-    List<ProductDto> getAllProductDtos();
-    List<ProductDto> getProductDtosByCategory(String category);
-    List<ProductDto> getProductDtosByBrand(String brand);
-    List<ProductDto> getProductDtosByCategoryAndBrand(String category, String brand);
-    List<ProductDto> getProductDtosByName(String name);
-    List<ProductDto> getProductDtosByBrandAndName(String brand, String name);
+
+    /**
+     * Paginated, dynamically filtered listing. Any of {@code brand}/{@code name}/
+     * {@code category} may be {@code null} (absent). Mapping to {@link ProductDto}
+     * happens inside the read transaction so lazy associations resolve safely.
+     */
+    Page<ProductDto> findProducts(String brand, String name, String category, Pageable pageable);
 }

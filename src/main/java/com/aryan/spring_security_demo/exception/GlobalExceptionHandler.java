@@ -118,6 +118,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, problem, headers, HttpStatus.BAD_REQUEST, request);
     }
 
+    /** 400 — client asked to sort on a field outside the endpoint's allowlist. */
+    @ExceptionHandler(InvalidSortException.class)
+    public ProblemDetail handleInvalidSort(InvalidSortException ex) {
+        log.debug("400 Invalid sort: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, "Invalid sort parameter", ex.getMessage());
+    }
+
     /**
      * 400 — constraints on {@code @Validated} controller method parameters. Not
      * covered by the base class (it is a Bean Validation exception, not an MVC
@@ -156,3 +163,5 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 }
+
+

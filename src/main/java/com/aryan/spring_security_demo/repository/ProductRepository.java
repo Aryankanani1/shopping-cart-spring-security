@@ -3,13 +3,19 @@ package com.aryan.spring_security_demo.repository;
 import com.aryan.spring_security_demo.model.Product;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * {@link JpaSpecificationExecutor} adds {@code findAll(Specification, Pageable)},
+ * which powers the single paginated + dynamically filtered listing endpoint —
+ * replacing the former one-method-per-filter-combination approach.
+ */
 @Repository
-public interface ProductRepository extends JpaRepository<Product, Long> {
+public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpecificationExecutor<Product> {
 
     // convertToDto reads product.category.name. category is a to-one, so fetch
     // it with the list (single round trip, no duplicate rows, no DISTINCT).
@@ -19,21 +25,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @NonNull
     @EntityGraph(attributePaths = {"category"})
     List<Product> findAll();
-
-    @EntityGraph(attributePaths = {"category"})
-    List<Product> findByCategoryName(String category);
-
-    @EntityGraph(attributePaths = {"category"})
-    List<Product> findByBrand(String brand);
-
-    @EntityGraph(attributePaths = {"category"})
-    List<Product> findByCategoryNameAndBrand(String category, String brand);
-
-    @EntityGraph(attributePaths = {"category"})
-    List<Product> findByName(String name);
-
-    @EntityGraph(attributePaths = {"category"})
-    List<Product> findByBrandAndName(String brand, String name);
 
     Long countByBrandAndName(String brand, String name);
 
