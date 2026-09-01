@@ -125,6 +125,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, "Invalid sort parameter", ex.getMessage());
     }
 
+    /** 400 — client supplied a malformed/tampered pagination cursor. */
+    @ExceptionHandler(InvalidCursorException.class)
+    public ProblemDetail handleInvalidCursor(InvalidCursorException ex) {
+        log.debug("400 Invalid cursor: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, "Invalid pagination cursor", ex.getMessage());
+    }
+
     /**
      * 400 — constraints on {@code @Validated} controller method parameters. Not
      * covered by the base class (it is a Bean Validation exception, not an MVC
@@ -163,5 +170,3 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 }
-
-

@@ -18,6 +18,7 @@ import com.aryan.spring_security_demo.repository.OrderRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
 import com.aryan.spring_security_demo.repository.RoleRepository;
 import com.aryan.spring_security_demo.repository.UserRepository;
+import com.aryan.spring_security_demo.response.SlicedResponse;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -114,23 +115,25 @@ class QueryCountTest {
     }
 
     @Test
-    @DisplayName("getUserOrders loads orders + items + products in a bounded number of queries")
+    @DisplayName("getUserOrders (keyset) loads a slice + its items + products in a bounded number of queries")
     void getUserOrders_isBounded() {
         Statistics stats = statistics();
         stats.clear();
 
-        List<OrderDto> orders = orderService.getUserOrders(userId);
+        SlicedResponse<OrderDto> slice = orderService.getUserOrders(userId, null, 20);
 
         long queries = stats.getPrepareStatementCount();
-        assertThat(orders).hasSize(1);
-        assertThat(orders.get(0).getItems()).hasSize(ITEM_COUNT);
+        assertThat(slice.content()).hasSize(1);
+        assertThat(slice.hasNext()).isFalse();
+        assertThat(slice.content().get(0).getItems()).hasSize(ITEM_COUNT);
         // Sanity: the product IS mapped, so the query genuinely traverses it.
-        assertThat(orders.get(0).getItems().get(0).getProductName()).isNotBlank();
-        // The JOIN FETCH pulls orders + items + products in ONE query. Dropping
-        // "JOIN FETCH oi.product" adds a second (batched) query -> this trips.
+        assertThat(slice.content().get(0).getItems().get(0).getProductName()).isNotBlank();
+        // Keyset paging is two-phase: (1) an index-backed scan for the page of ids,
+        // (2) one JOIN FETCH hydrating orders + items + products. Two queries, and
+        // — the point — bounded: it does not grow with the number of orders or items.
         assertThat(queries)
-                .as("getUserOrders must load orders, items and products in a single query")
-                .isEqualTo(1);
+                .as("keyset getUserOrders must page ids then hydrate items/products in a bounded query count")
+                .isEqualTo(2);
     }
 
     @Test
