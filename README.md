@@ -116,6 +116,11 @@ the HTTP method on noun-based resource URIs (`GET/POST /products`,
 read/update, and `404`/`409`/`401` on error. All paths are served under the
 `api.prefix` (default `/api/v1`).
 
+Collection endpoints are **paginated**: the product listing uses offset
+pagination (`page`/`size`/`sort`, with a capped page size and an allowlisted
+sort), while order history uses keyset (cursor) pagination for stable,
+deep-scroll access.
+
 ### API documentation
 
 Once the app is running, springdoc-openapi exposes:
