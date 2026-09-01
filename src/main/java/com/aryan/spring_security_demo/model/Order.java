@@ -8,8 +8,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -21,7 +23,13 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", indexes = {
+        // Serves the order-history query end to end:
+        //   WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT n
+        // Leading user_id satisfies the filter; (created_at, id) gives a stable,
+        // unique seek key for keyset pagination without a separate sort step.
+        @Index(name = "idx_orders_user_created", columnList = "user_id, created_at, id")
+})
 public class Order {
 
     @Id
@@ -33,6 +41,13 @@ public class Order {
     private Long version;
 
     private LocalDate localDate;
+
+    // High-cardinality, non-updatable ordering key. Paired with the PK in the
+    // index above so (created_at, id) is a total order even when many orders
+    // share a timestamp — the tiebreaker keyset pagination depends on.
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
     @Enumerated(EnumType.STRING)
     private OrderStatus orderStatus;
 
