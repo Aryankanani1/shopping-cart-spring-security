@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 
+import com.aryan.spring_security_demo.security.AuthUtils;
 import com.aryan.spring_security_demo.service.user.UserServiceInterface;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +27,11 @@ class UserControllerValidationTest {
 
     @MockitoBean
     private UserServiceInterface userService;
+
+    // The controller now depends on AuthUtils for object-level authorization; these
+    // validation tests only exercise public registration, so a mock bean suffices.
+    @MockitoBean
+    private AuthUtils authUtils;
 
     @Test
     void createUser_withBlankFields_returns400() throws Exception {

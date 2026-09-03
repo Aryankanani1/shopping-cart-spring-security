@@ -16,6 +16,7 @@ import com.aryan.spring_security_demo.security.user.UserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.modelmapper.ModelMapper;
+import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -31,8 +32,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-import java.util.List;
-
 @EnableWebSecurity
 @Configuration
 @RequiredArgsConstructor
@@ -41,10 +40,6 @@ public class ShopConfig {
 
   private final UserDetailsService userDetailsService;
   private final JwtEntryPoint jwtEntryPoint;
-
-  private static final List<String> SECURED_URLS =
-          List.of("/api/v1/carts/**", "/api/v1/cartItems/**", "/api/v1/orders/**");
-
 
 
     @Bean
@@ -109,8 +104,25 @@ public class ShopConfig {
             http.csrf(AbstractHttpConfigurer::disable)
                     .exceptionHandling(exception ->exception.authenticationEntryPoint(jwtEntryPoint))
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                    .authorizeHttpRequests(auth ->auth.requestMatchers(SECURED_URLS.toArray(String[]::new))
-                            .authenticated().anyRequest().permitAll());
+                    // Deny by default: only the endpoints listed below are public, so
+                    // adding a new controller can never accidentally expose it. This
+                    // closes the previous gap where /users/** (and catalog writes) were
+                    // reachable with no authentication at all.
+                    .authorizeHttpRequests(auth -> auth
+                            .requestMatchers("/api/v1/auth/**").permitAll()                 // login
+                            .requestMatchers(HttpMethod.POST, "/api/v1/users").permitAll()  // self-registration
+                            // Read-only catalog browsing is open to everyone.
+                            .requestMatchers(HttpMethod.GET,
+                                    "/api/v1/products/**",
+                                    "/api/v1/categories/**",
+                                    "/api/v1/images/**").permitAll()
+                            // API docs.
+                            .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                            .requestMatchers("/error").permitAll()
+                            // Everything else — carts, orders, user management, catalog
+                            // writes — requires authentication (and, where annotated,
+                            // an admin role via @PreAuthorize).
+                            .anyRequest().authenticated());
                     http.authenticationProvider(daoAuthenticationProvider());
                     http.addFilterBefore(authTokenFilter(), UsernamePasswordAuthenticationFilter.class);
                     return http.build();
