@@ -7,6 +7,7 @@ import com.aryan.spring_security_demo.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -30,6 +31,7 @@ public class CategoryController {
         return ResponseEntity.ok(new ApiResponse<>("success!", categories));
     }
 
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PostMapping
     public ResponseEntity<ApiResponse<?>> addCategory(@Valid @RequestBody Category name){
         Category category = categoryServiceInterface.addCategory(name);
@@ -52,12 +54,14 @@ public class CategoryController {
         return ResponseEntity.ok(new ApiResponse<>("Success!", dto));
     }
 
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<?>> deleteCategoryById(@PathVariable Long id){
         categoryServiceInterface.deleteCategoryById(id);
         return ResponseEntity.noContent().build();
     }
 
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<?>> updateCategoryId(@PathVariable Long id, @Valid @RequestBody Category category){
         Category updatedCategory = categoryServiceInterface.updateCategory(category, id);

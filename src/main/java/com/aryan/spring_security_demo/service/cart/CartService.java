@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.CartItemRepository;
 import com.aryan.spring_security_demo.repository.CartRepository;
+import com.aryan.spring_security_demo.security.AuthUtils;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
@@ -20,12 +21,21 @@ public class CartService implements CartServiceInterface{
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final ModelMapper modelMapper;
+    private final AuthUtils authUtils;
 
+    /**
+     * Sole entry point for loading a cart by id, so the ownership check lives in
+     * one place: every cart-scoped operation (view, clear, total, and each
+     * cart-item mutation in {@code CartItemService}) funnels through here, so a
+     * user can never touch another user's cart by guessing its id (IDOR).
+     */
     @Override
     @Transactional(readOnly = true)
     public Cart getCart(Long id) {
-        return cartRepository.findById(id)
+        Cart cart = cartRepository.findById(id)
                 .orElseThrow(() -> new CartNotFoundException("cart not found"));
+        authUtils.requireSelfOrAdmin(cart.getUser() == null ? null : cart.getUser().getId());
+        return cart;
     }
 
     /**

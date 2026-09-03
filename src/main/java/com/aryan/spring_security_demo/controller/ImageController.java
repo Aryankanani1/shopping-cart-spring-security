@@ -10,6 +10,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,6 +26,7 @@ public class ImageController {
 
     private final ImageServiceInterface imageServiceInterface;
 
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PostMapping
     public ResponseEntity<ApiResponse<?>> saveImages(@RequestParam List<MultipartFile> files, @RequestParam Long productId){
         List<ImageDto> imageDtos = imageServiceInterface.saveImages(files, productId);
@@ -43,6 +45,7 @@ public class ImageController {
                 .body(byteArrayResource);
     }
 
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PutMapping("/{imageId}")
     public ResponseEntity<ApiResponse<?>> updateImage(@PathVariable Long imageId, @RequestBody MultipartFile file){
         imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist
@@ -50,6 +53,7 @@ public class ImageController {
         return ResponseEntity.ok(new ApiResponse<>("update success!", null));
     }
 
+    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @DeleteMapping("/{imageId}")
     public ResponseEntity<ApiResponse<?>> deleteImage(@PathVariable Long imageId){
         imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist

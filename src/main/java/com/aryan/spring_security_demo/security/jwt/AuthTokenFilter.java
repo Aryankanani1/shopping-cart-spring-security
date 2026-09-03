@@ -43,14 +43,12 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             }
 
         } catch (JwtException e) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write(e.getMessage() + " : invalid or expired token"
-                    + "try again");
-            return;
-        } catch (Exception e) {
-            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-            response.getWriter().write(e.getMessage());
-            return;
+            // Malformed / expired / forged token: leave the context unauthenticated
+            // and let the request continue. Secured endpoints then hit the entry
+            // point (a clean 401); public ones still work. We deliberately never
+            // echo the parser's message back — it can leak library internals.
+            logger.debug("Rejected JWT: " + e.getMessage());
+            SecurityContextHolder.clearContext();
         }
         filterChain.doFilter(request,response);
 }
