@@ -19,14 +19,18 @@ import com.aryan.spring_security_demo.repository.ProductRepository;
 import com.aryan.spring_security_demo.repository.RoleRepository;
 import com.aryan.spring_security_demo.repository.UserRepository;
 import com.aryan.spring_security_demo.response.SlicedResponse;
+import com.aryan.spring_security_demo.security.user.UserDetails;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -90,6 +94,13 @@ class QueryCountTest {
         user.setRoles(Set.of(customer));
         userId = userRepository.save(user).getId();
 
+        // getUserOrders now enforces self-or-admin (ownership check moved into the
+        // service). Authenticate as the seeded owner so this query-count test
+        // exercises the secured path exactly as a real request would.
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        new UserDetails(userId, user.getEmail(), null, List.of()), null, List.of()));
+
         Order order = new Order();
         order.setUser(user);
         order.setOrderStatus(OrderStatus.PENDING);
@@ -112,6 +123,11 @@ class QueryCountTest {
 
         order.setTotalAmount(PRICE.multiply(BigDecimal.valueOf(ITEM_COUNT)));
         orderRepository.save(order);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test

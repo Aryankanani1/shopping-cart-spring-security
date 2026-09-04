@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.UserRepository;
 import com.aryan.spring_security_demo.request.CreateUserRequest;
 import com.aryan.spring_security_demo.request.UserUpdateRequest;
+import com.aryan.spring_security_demo.security.AuthUtils;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
@@ -23,9 +24,12 @@ public class UserService implements UserServiceInterface{
     private final UserRepository userRepository;
     private final ModelMapper modelMapper;
     private final PasswordEncoder passwordEncoder;
+    private final AuthUtils authUtils;
     @Override
     @Transactional(readOnly = true)
     public User getUserById(Long userId) {
+        // Accounts are private: only the owner (or an admin) may read one.
+        authUtils.requireSelfOrAdmin(userId);
         return userRepository.findByIdWithDetails(userId).orElseThrow(() -> new UserNotFoundException("failed to find user"));
     }
 
@@ -46,6 +50,7 @@ public class UserService implements UserServiceInterface{
     @Override
     @Transactional
     public User updateUser(UserUpdateRequest request, Long userId) {
+        authUtils.requireSelfOrAdmin(userId);
         return userRepository.findById(userId).map(existingUser -> {
             existingUser.setFirstName(request.getFirstName());
             existingUser.setLastName(request.getLastName());
@@ -57,6 +62,7 @@ public class UserService implements UserServiceInterface{
     @Override
     @Transactional
     public void deleteUser(Long userId) {
+        authUtils.requireSelfOrAdmin(userId);
         userRepository.findById(userId).ifPresentOrElse(userRepository::delete, () -> {
             throw new UserNotFoundException("failed to find user");
         });
