@@ -188,7 +188,11 @@ class CheckoutJourneyIntegrationTest {
         mockMvc.perform(post("/api/v1/cartItems")
                         .param("productId", String.valueOf(productId))
                         .param("quantity", "1"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                // The entry point renders the same RFC 7807 shape as every other error.
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Unauthorized"))
+                .andExpect(jsonPath("$.status").value(401));
 
         assertThat(cartRepository.findByUserId(userId))
                 .as("no cart is created for an unauthenticated request")
