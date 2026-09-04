@@ -13,7 +13,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -93,7 +92,6 @@ public class ProductController {
         return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getProductDtoById(id)));
     }
 
-    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PostMapping
     public ResponseEntity<ApiResponse<?>> addProduct(@Valid @RequestBody AddProductRequest name) {
         ProductDto product = productServiceInterface.addProductAndConvert(name);
@@ -102,14 +100,12 @@ public class ProductController {
         return ResponseEntity.created(location).body(new ApiResponse<>("Success!", product));
     }
 
-    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<?>> updateProduct(@Valid @RequestBody ProductUpdateRequest request,
                                                      @PathVariable Long id) {
         return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.updateProductAndConvert(request, id)));
     }
 
-    @PreAuthorize("hasRole('ROLE_ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<?>> deleteProduct(@PathVariable Long id){
         productServiceInterface.deleteProductById(id);

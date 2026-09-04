@@ -10,6 +10,7 @@ import com.aryan.spring_security_demo.model.CartItem;
 import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Order;
 import com.aryan.spring_security_demo.model.Product;
+import com.aryan.spring_security_demo.security.ApiAccessDeniedHandler;
 import com.aryan.spring_security_demo.security.jwt.AuthTokenFilter;
 import com.aryan.spring_security_demo.security.jwt.JwtEntryPoint;
 import com.aryan.spring_security_demo.security.user.UserDetailsService;
@@ -40,6 +41,7 @@ public class ShopConfig {
 
   private final UserDetailsService userDetailsService;
   private final JwtEntryPoint jwtEntryPoint;
+  private final ApiAccessDeniedHandler apiAccessDeniedHandler;
 
 
     @Bean
@@ -102,7 +104,9 @@ public class ShopConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception{
             http.csrf(AbstractHttpConfigurer::disable)
-                    .exceptionHandling(exception ->exception.authenticationEntryPoint(jwtEntryPoint))
+                    .exceptionHandling(exception -> exception
+                            .authenticationEntryPoint(jwtEntryPoint)          // 401 — unauthenticated
+                            .accessDeniedHandler(apiAccessDeniedHandler))     // 403 — authenticated, wrong authority
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     // Deny by default: only the endpoints listed below are public, so
                     // adding a new controller can never accidentally expose it. This
@@ -119,9 +123,27 @@ public class ShopConfig {
                             // API docs.
                             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                             .requestMatchers("/error").permitAll()
-                            // Everything else — carts, orders, user management, catalog
-                            // writes — requires authentication (and, where annotated,
-                            // an admin role via @PreAuthorize).
+                            // Catalog writes are admin-only. These rules live here at the
+                            // edge (not as @PreAuthorize on the controllers) so the whole
+                            // access map is auditable in one place and business code stays
+                            // free of security concerns. Order matters: these sit below the
+                            // GET permitAll above (public reads) and above the catch-all —
+                            // first match wins.
+                            .requestMatchers(HttpMethod.POST,
+                                    "/api/v1/products/**",
+                                    "/api/v1/categories/**",
+                                    "/api/v1/images/**").hasAuthority("ROLE_ADMIN")
+                            .requestMatchers(HttpMethod.PUT,
+                                    "/api/v1/products/**",
+                                    "/api/v1/categories/**",
+                                    "/api/v1/images/**").hasAuthority("ROLE_ADMIN")
+                            .requestMatchers(HttpMethod.DELETE,
+                                    "/api/v1/products/**",
+                                    "/api/v1/categories/**",
+                                    "/api/v1/images/**").hasAuthority("ROLE_ADMIN")
+                            // Everything else — carts, orders, user management — requires
+                            // authentication; object-level ownership is then enforced in
+                            // the service layer (see AuthUtils / CartService).
                             .anyRequest().authenticated());
                     http.authenticationProvider(daoAuthenticationProvider());
                     http.addFilterBefore(authTokenFilter(), UsernamePasswordAuthenticationFilter.class);
