@@ -1,6 +1,5 @@
 package com.aryan.spring_security_demo.controller;
 
-import com.aryan.spring_security_demo.security.AuthUtils;
 import com.aryan.spring_security_demo.service.user.UserServiceInterface;
 import com.aryan.spring_security_demo.dto.UserDto;
 import com.aryan.spring_security_demo.model.User;
@@ -23,12 +22,9 @@ import java.net.URI;
 public class UserController {
 
     private final UserServiceInterface userServiceInterface;
-    private final AuthUtils authUtils;
 
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<?>> getUserById(@PathVariable Long id){
-        // Accounts are private: only the owner (or an admin) may read one.
-        authUtils.requireSelfOrAdmin(id);
         User user = userServiceInterface.getUserById(id);
         UserDto userDto = userServiceInterface.convertUserToDto(user);
         return ResponseEntity.ok(new ApiResponse<>("success!", userDto));
@@ -45,7 +41,6 @@ public class UserController {
 
     @PutMapping("/{userId}")
     public ResponseEntity<ApiResponse<?>> updateUser(@Valid @RequestBody UserUpdateRequest request, @PathVariable Long userId){
-        authUtils.requireSelfOrAdmin(userId);
         User user = userServiceInterface.updateUser(request, userId);
         UserDto userDto = userServiceInterface.convertUserToDto(user);
         return ResponseEntity.ok(new ApiResponse<>("success!", userDto));
@@ -53,7 +48,6 @@ public class UserController {
 
     @DeleteMapping("/{userId}")
     public ResponseEntity<ApiResponse<?>> deleteUser(@PathVariable Long userId){
-        authUtils.requireSelfOrAdmin(userId);
         userServiceInterface.deleteUser(userId);
         return ResponseEntity.noContent().build();
     }

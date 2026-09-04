@@ -13,6 +13,7 @@ import com.aryan.spring_security_demo.repository.OrderKeysetRow;
 import com.aryan.spring_security_demo.repository.OrderRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
 import com.aryan.spring_security_demo.response.SlicedResponse;
+import com.aryan.spring_security_demo.security.AuthUtils;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.PageRequest;
@@ -33,11 +34,14 @@ public class OrderService implements OrderServiceInterface{
     private final OrderRepository orderRepository;
     private final ProductRepository  productRepository;
     private final CartService cartService;
+    private final AuthUtils authUtils;
 
     private final ModelMapper modelMapper;
     @Override
     @Transactional
     public OrderDto placeOrder(Long userId) {
+        // A user may only place an order for themselves; an admin may act for anyone.
+        authUtils.requireSelfOrAdmin(userId);
         Cart cart = cartService.getCartByUserId(userId);
         Order order = careatOrder(cart);
         List<OrderItem> orderItems = createOrderItems(cart);
@@ -53,10 +57,14 @@ public class OrderService implements OrderServiceInterface{
     @Override
     @Transactional(readOnly = true)
     public OrderDto getOrder(Long orderId) {
-        return orderRepository.
+        OrderDto order = orderRepository.
                 findByIdWithItems(orderId).
                 map(this::convertToDto)
                 .orElseThrow(() -> new ResourceNotFoundException("order not found!"));
+        // Reject reading another user's order (IDOR) — after the fetch so a missing
+        // order is still a 404, not a 403 that would confirm the id exists.
+        authUtils.requireSelfOrAdmin(order.getUserId());
+        return order;
     }
 
     private Order careatOrder(Cart cart){
@@ -94,6 +102,8 @@ public class OrderService implements OrderServiceInterface{
     @Override
     @Transactional(readOnly = true)
     public SlicedResponse<OrderDto> getUserOrders(Long userId, String cursor, int size) {
+        // Order history is private: only the owner (or an admin) may page it.
+        authUtils.requireSelfOrAdmin(userId);
         OrderCursor from = OrderCursor.decode(cursor);
 
         // Phase 1: index-backed keyset scan for this page of ids. Fetch one extra
