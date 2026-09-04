@@ -89,9 +89,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * 403 — method security (@PreAuthorize) denied access. Handled explicitly so
-     * the {@link #handleUnexpected(Exception) Exception} catch-all can never turn
-     * a legitimate 403 into a 500.
+     * 403 — a service-layer ownership check (see {@code AuthUtils}) denied access
+     * from within the request dispatch. Edge authorization (role rules in the
+     * filter chain) is rendered by {@code ApiAccessDeniedHandler} instead — both
+     * emit the same body. Handled explicitly so the {@link #handleUnexpected(Exception)
+     * Exception} catch-all can never turn a legitimate 403 into a 500.
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException ex) {
