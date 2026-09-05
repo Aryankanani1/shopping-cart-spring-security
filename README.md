@@ -57,7 +57,8 @@ Environment variables:
 | `DB_USERNAME`     | prod (dev: `root`)   | Database user                                      |
 | `DB_PASSWORD`     | prod (dev: empty)    | Database password                                  |
 | `SPRING_PROFILES_ACTIVE` | optional      | Active profile, default `dev`                      |
-| `JWT_EXPIRATION_MS` | optional           | Token lifetime, default `3600000` (1h)             |
+| `JWT_EXPIRATION_MS` | optional           | Access-token lifetime, default `900000` (15m)      |
+| `JWT_REFRESH_EXPIRATION_MS` | optional   | Refresh-token lifetime, default `604800000` (7d)   |
 
 In **dev** the datasource falls back to a local MySQL (`localhost:3306`,
 `root`, empty password) so the app boots out of the box; any value can still be
@@ -100,10 +101,19 @@ data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev")
 - **`ddl-auto`**: `update` in dev, `validate` in prod (migrations own prod DDL).
 
 ### Security model
-- **Stateless JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`.
-- Secured paths: `/api/v1/carts/**`, `/api/v1/cartItems/**`, `/api/v1/orders/**`.
-  Everything else is currently `permitAll()` (which also exposes the Swagger docs).
-- `@EnableMethodSecurity(prePostEnabled = true)` enables `@PreAuthorize`.
+- **Stateless access JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`
+  and authenticates each request from the bearer token — no server-side session lookup, so reads scale.
+- **Deny-by-default authorization** (`ShopConfig`): only listed paths are public
+  (login, self-registration, GET catalog, docs); catalog writes are `ROLE_ADMIN`;
+  everything else requires authentication. **Object-level ownership** (a user may
+  only touch their own cart/order/account) is enforced in the service layer via
+  `AuthUtils.requireSelfOrAdmin` — role rules at the edge, ownership at the load.
+- **Short access token + revocable refresh token**: the access token is short-lived
+  (15 min) to shrink the exposure window of a leak; clients keep sessions alive by
+  exchanging a longer-lived (7 day) refresh token at `POST /api/v1/auth/refresh`.
+  Refresh tokens are persisted **hashed** and are **rotating** (each refresh revokes
+  the old one and issues a new one, so replay of a spent token is detected).
+  `POST /api/v1/auth/logout` revokes the refresh token, ending the session server-side.
 - Roles: `ROLE_ADMIN`, `ROLE_CUSTOMER`.
 
 ## API

@@ -10,6 +10,8 @@ import lombok.NoArgsConstructor;
 public class JwtResponse {
 
     private Long id;
+    /** Short-lived access token (JWT) sent as the Bearer credential on each request. */
     private String token;
+    /** Longer-lived, revocable refresh token; exchanged at /auth/refresh for a new access token. */
+    private String refreshToken;
 }
-

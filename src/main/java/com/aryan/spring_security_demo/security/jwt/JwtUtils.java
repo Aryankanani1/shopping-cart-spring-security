@@ -22,7 +22,15 @@ public class JwtUtils {
     private final AuthTokenProperties authTokenProperties;
 
     public String generateUserTokenFromUser(Authentication authentication){
-        UserDetails userPrinciple = (UserDetails)  authentication.getPrincipal();
+        return generateTokenFromUserDetails((UserDetails) authentication.getPrincipal());
+    }
+
+    /**
+     * Mint an access token straight from a principal. Used both at login (from the
+     * authenticated {@code Authentication}) and on refresh, where the principal is
+     * rebuilt from the refresh token's user rather than a login.
+     */
+    public String generateTokenFromUserDetails(UserDetails userPrinciple){
         List<String> roles = userPrinciple.getAuthorities()
                 .stream().map(GrantedAuthority::getAuthority).toList();
 

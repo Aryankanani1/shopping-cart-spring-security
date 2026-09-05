@@ -62,10 +62,13 @@ api:
 # --- JWT (see AuthTokenProperties) ---
 # jwtSecret has NO committed default — it must be supplied via JWT_SECRET.
 # Base64 key, >= 256 bits for HS256:  openssl rand -base64 32
+# Access token is short-lived (15 min); sessions are kept alive with a
+# longer-lived but revocable refresh token (7 days) — see RefreshTokenService.
 auth:
   token:
     jwtSecret: ${JWT_SECRET}
-    expirationInMils: ${JWT_EXPIRATION_MS:3600000}
+    expirationInMils: ${JWT_EXPIRATION_MS:900000}
+    refreshExpirationInMils: ${JWT_REFRESH_EXPIRATION_MS:604800000}
 
 # --- Startup pipeline (see StartupProperties) — defaults safe for all envs ---
 app:
