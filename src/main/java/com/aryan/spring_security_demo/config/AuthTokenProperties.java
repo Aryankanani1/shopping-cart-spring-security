@@ -40,4 +40,12 @@ public class AuthTokenProperties {
      */
     @Positive
     private long refreshExpirationInMils = 604_800_000L;
+
+    /**
+     * Cron expression for the scheduled purge of expired refresh tokens (see
+     * {@code RefreshTokenCleanupService}). Rotation leaves a spent row behind on
+     * every refresh, so they are swept periodically. Default: daily at 03:00.
+     */
+    @NotBlank
+    private String cleanupCron = "0 0 3 * * *";
 }
