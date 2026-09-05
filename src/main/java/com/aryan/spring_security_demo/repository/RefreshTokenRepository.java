@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Optional;
 
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
@@ -26,4 +27,15 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     @Modifying
     @Query("update RefreshToken t set t.revoked = true where t.user.id = :userId and t.revoked = false")
     int revokeAllForUser(@Param("userId") Long userId);
+
+    /**
+     * Bulk-delete tokens that expired before {@code cutoff}. Rotation mints a new
+     * row on every refresh, so without this the table grows unbounded. Only
+     * expired rows are purged: a revoked-but-unexpired token must stay put so a
+     * replay of it can still be caught as reuse — once past its expiry it is
+     * useless either way and safe to drop. Returns the number of rows removed.
+     */
+    @Modifying
+    @Query("delete from RefreshToken t where t.expiresAt < :cutoff")
+    int deleteAllExpiredBefore(@Param("cutoff") Instant cutoff);
 }

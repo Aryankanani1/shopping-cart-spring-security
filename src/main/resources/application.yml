@@ -69,6 +69,8 @@ auth:
     jwtSecret: ${JWT_SECRET}
     expirationInMils: ${JWT_EXPIRATION_MS:900000}
     refreshExpirationInMils: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+    # Scheduled purge of expired refresh tokens (Spring cron). Default: daily 03:00.
+    cleanupCron: ${JWT_CLEANUP_CRON:0 0 3 * * *}
 
 # --- Startup pipeline (see StartupProperties) — defaults safe for all envs ---
 app:
