@@ -25,7 +25,19 @@ public class AuthTokenProperties {
     @NotBlank
     private String jwtSecret;
 
-    /** Token lifetime in milliseconds. */
+    /**
+     * Access-token lifetime in milliseconds. Kept short (default 15 min) so a
+     * leaked token's exposure window is small; clients keep sessions alive by
+     * exchanging a refresh token rather than by holding a long-lived access token.
+     */
     @Positive
-    private long expirationInMils = 3_600_000L;
+    private long expirationInMils = 900_000L;
+
+    /**
+     * Refresh-token lifetime in milliseconds (default 7 days). Longer-lived than
+     * the access token but revocable server-side (see {@code RefreshTokenService}),
+     * so control is retained despite the length.
+     */
+    @Positive
+    private long refreshExpirationInMils = 604_800_000L;
 }

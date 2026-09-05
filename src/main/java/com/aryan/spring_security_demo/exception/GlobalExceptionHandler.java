@@ -79,6 +79,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
+     * 401 — the presented refresh token is unknown, expired, or revoked. The
+     * detail is generic so a caller cannot distinguish those cases and probe for
+     * valid tokens.
+     */
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ProblemDetail handleInvalidRefreshToken(InvalidRefreshTokenException ex) {
+        log.debug("401 Invalid refresh token: {}", ex.getMessage());
+        return problem(HttpStatus.UNAUTHORIZED, "Authentication failed", "Invalid or expired refresh token");
+    }
+
+    /**
      * 401 — login with a wrong email/password. The detail is deliberately generic
      * so it cannot be used to probe which accounts exist.
      */

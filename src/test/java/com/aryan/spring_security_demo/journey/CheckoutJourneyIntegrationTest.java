@@ -9,6 +9,7 @@ import com.aryan.spring_security_demo.repository.CartRepository;
 import com.aryan.spring_security_demo.repository.CategoryRepository;
 import com.aryan.spring_security_demo.repository.OrderRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
+import com.aryan.spring_security_demo.repository.RefreshTokenRepository;
 import com.aryan.spring_security_demo.repository.RoleRepository;
 import com.aryan.spring_security_demo.repository.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -65,6 +66,7 @@ class CheckoutJourneyIntegrationTest {
     @Autowired private CartRepository cartRepository;
     @Autowired private CartItemRepository cartItemRepository;
     @Autowired private OrderRepository orderRepository;
+    @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
     private Long userId;
@@ -76,6 +78,7 @@ class CheckoutJourneyIntegrationTest {
         orderRepository.deleteAll();
         cartItemRepository.deleteAll();
         cartRepository.deleteAll();
+        refreshTokenRepository.deleteAll();  // FK on users — must go before the users
         userRepository.deleteAll();
         productRepository.deleteAll();
 
