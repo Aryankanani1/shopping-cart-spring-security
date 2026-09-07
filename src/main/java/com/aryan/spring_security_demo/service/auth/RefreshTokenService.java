@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.time.Instant;
+import java.time.Clock;
 import java.util.Base64;
 import java.util.HexFormat;
 
@@ -36,6 +36,7 @@ public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final AuthTokenProperties authTokenProperties;
+    private final Clock clock;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -68,7 +69,7 @@ public class RefreshTokenService {
             refreshTokenRepository.revokeAllForUser(current.getUser().getId());
             throw new InvalidRefreshTokenException("Refresh token has been revoked");
         }
-        if (current.isExpired()) {
+        if (current.isExpired(clock.instant())) {
             throw new InvalidRefreshTokenException("Refresh token has expired");
         }
 
@@ -94,7 +95,7 @@ public class RefreshTokenService {
         RefreshToken token = new RefreshToken();
         token.setUser(user);
         token.setTokenHash(hash(raw));
-        token.setExpiresAt(Instant.now().plusMillis(authTokenProperties.getRefreshExpirationInMils()));
+        token.setExpiresAt(clock.instant().plusMillis(authTokenProperties.getRefreshExpirationInMils()));
         refreshTokenRepository.save(token);
         return raw;
     }
