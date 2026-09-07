@@ -55,11 +55,16 @@ public class RefreshToken {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    public boolean isExpired() {
-        return Instant.now().isAfter(expiresAt);
+    /**
+     * Expired as of the given instant. Time is a parameter, not a call to
+     * {@code Instant.now()}, so the caller (which holds the injected clock)
+     * controls "now" — the expiry boundary is then a pure, deterministic check.
+     */
+    public boolean isExpired(Instant now) {
+        return now.isAfter(expiresAt);
     }
 
-    public boolean isActive() {
-        return !revoked && !isExpired();
+    public boolean isActive(Instant now) {
+        return !revoked && !isExpired(now);
     }
 }

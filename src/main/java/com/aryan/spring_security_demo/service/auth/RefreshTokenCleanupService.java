@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.Clock;
 
 /**
  * Periodically sweeps expired refresh tokens out of the database. Every refresh
@@ -27,11 +27,12 @@ public class RefreshTokenCleanupService {
     private static final Logger log = LoggerFactory.getLogger(RefreshTokenCleanupService.class);
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final Clock clock;
 
     @Scheduled(cron = "${auth.token.cleanup-cron}")
     @Transactional
     public void purgeExpiredTokens() {
-        int deleted = refreshTokenRepository.deleteAllExpiredBefore(Instant.now());
+        int deleted = refreshTokenRepository.deleteAllExpiredBefore(clock.instant());
         if (deleted > 0) {
             log.info("Purged {} expired refresh token(s)", deleted);
         }
