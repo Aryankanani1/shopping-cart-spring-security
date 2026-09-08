@@ -26,8 +26,11 @@ interactive API documentation is served by **Swagger UI** (springdoc-openapi).
 | Mapping        | ModelMapper 3.2.4                                  |
 | API docs       | springdoc-openapi 3.1.0 (OpenAPI 3 + Swagger UI)   |
 | Caching        | Spring Cache (`ConcurrentMapCacheManager`)         |
+| Migrations     | Flyway (`spring-boot-starter-flyway` + `flyway-mysql`) |
+| Observability  | Spring Boot Actuator (health probes, metrics)      |
 | Boilerplate    | Lombok                                             |
 | Build          | Maven wrapper (`./mvnw`)                           |
+| Container      | Multi-stage Docker (non-root, JRE-only runtime)    |
 
 ## Getting started
 
@@ -42,7 +45,8 @@ Configuration follows a **commit-safe-defaults, override-per-environment** model
 
 - `application.yml` — committed **base** with shared, safe defaults.
 - `application-dev.yml` / `application-prod.yml` — carry only what differs per
-  environment (`ddl-auto`, SQL logging, log levels).
+  environment (SQL logging, log levels, and prod-only hardening: API docs off,
+  actuator health details hidden).
 - **Secrets are never committed** — they are read from environment variables and
   override the committed defaults via Spring's property precedence.
 
@@ -89,6 +93,7 @@ security/     config (shopConfig), jwt (AuthTokenFilter, JwtUtils, JwtEntryPoint
 config/       CacheConfig + OpenApiConfig + typed @ConfigurationProperties (StartupProperties, AuthTokenProperties)
 bootstrap/    Ordered startup runners (see below)
 data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev") test users)
+resources/    application*.yml + db/migration/ (Flyway migrations: V1__baseline.sql, …)
 ```
 
 ### Configuration & profiles
@@ -98,7 +103,31 @@ data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev")
 - **Profiles decide beans, not `if` checks**: `DevDataSeeder` is `@Profile("dev")`,
   so test users/admins exist only in dev; production never creates them. Roles
   (needed everywhere) are seeded unconditionally by `DataInitializer`.
-- **`ddl-auto`**: `update` in dev, `validate` in prod (migrations own prod DDL).
+- **Flyway owns the schema** in every environment: versioned SQL migrations under
+  `resources/db/migration` build the DDL, and Hibernate runs `ddl-auto: validate`
+  in **both dev and prod** — it only checks the entities match the schema, never
+  mutates it. Tests use H2 with `create-drop` and disable Flyway.
+
+### Database migrations
+
+Flyway applies the migrations at startup, before Hibernate validates. The baseline
+`V1__baseline.sql` was generated from the entities via Hibernate's `MySQLDialect`
+export, so `ddl-auto: validate` accepts it verbatim. All later changes go in new
+`V2__…`, `V3__…` files — never edit an applied migration. `baseline-on-migrate`
+is enabled so Flyway can adopt a pre-existing database (e.g. a dev schema built by
+an earlier `ddl-auto: update`) instead of failing on a non-empty schema.
+
+> **Boot 4 note**: the migrations only run because `spring-boot-starter-flyway` is
+> on the classpath. Boot 4 moved the autoconfiguration into a per-module jar, so
+> raw `flyway-core` alone leaves Flyway inert and prod dies on `validate`.
+
+### Observability
+
+Spring Boot Actuator exposes only `health`, `info`, and `metrics` over HTTP.
+`/actuator/health` (and the `liveness` / `readiness` probe groups) is the only
+public actuator endpoint — for load balancers and Kubernetes probes — while the
+rest require authentication. In prod, health `show-details` is `never`, so the
+probe returns just `UP`/`DOWN` and never leaks internals.
 
 ### Security model
 - **Stateless access JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`
@@ -142,6 +171,9 @@ Both sit outside the `api.prefix` and are reachable without authentication. A
 global `bearerAuth` (JWT) scheme is declared (`OpenApiConfig`), so click
 **Authorize** in Swagger UI and paste the token from `POST /api/v1/auth/login`
 to call the secured cart/order endpoints.
+
+Both are **disabled in the `prod` profile** (`springdoc.api-docs.enabled=false`,
+`springdoc.swagger-ui.enabled=false`) to remove needless attack surface.
 
 ## Startup pipeline
 
@@ -212,3 +244,32 @@ accounts are never created in production.
 ./mvnw test            # run tests
 ./mvnw clean package   # build the jar
 ```
+
+## Docker
+
+A multi-stage `Dockerfile` builds the jar with a JDK and ships it on a slim,
+pinned JRE. The image is hardened: it runs as an **unprivileged user**, pins its
+base images (never `:latest`), and a `.dockerignore` keeps build cruft and any
+local config/secrets out of the build context.
+
+**No configuration or secrets live in the image.** The jar carries only
+non-secret defaults; every environment-specific value — and every secret — is
+injected at **runtime**, so the same image runs everywhere.
+
+```bash
+docker build -t shopping-cart:latest .
+
+docker run --rm -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -e DB_URL='jdbc:mysql://db:3306/shopping_cart' \
+  -e DB_USERNAME='shop' \
+  -e DB_PASSWORD='...' \
+  -e JWT_SECRET='...' \
+  shopping-cart:latest
+```
+
+> Never bake `DB_PASSWORD`, `JWT_SECRET`, or any key into the image or the
+> `Dockerfile` — anyone who pulls the image could extract it. Supply them at
+> runtime via `-e`, an env file kept out of source control, or a secrets manager.
+> Kubernetes liveness/readiness probes should target `/actuator/health/liveness`
+> and `/actuator/health/readiness` (the only public actuator endpoints).

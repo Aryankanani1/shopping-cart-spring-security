@@ -54,6 +54,27 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!-- Health/readiness/liveness probes and metrics for ops. Endpoints are
+		     locked down in config: only /actuator/health is public. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+		<!-- Versioned, repeatable schema migrations own the DDL in prod (ddl-auto:
+		     validate). Boot 4 modularised the autoconfiguration: the starter pulls
+		     both flyway-core AND the spring-boot-flyway autoconfig module (raw
+		     flyway-core alone leaves Flyway inert — it never runs at startup).
+		     flyway-mysql adds the MySQL 8 database type. Versions from the BOM. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-mysql</artifactId>
+		</dependency>
+
 		<!-- Bean Validation (JSR-380) — powers @Validated on @ConfigurationProperties. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

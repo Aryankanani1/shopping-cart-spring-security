@@ -11,9 +11,10 @@ spring:
     password: ${DB_PASSWORD:}
 
   jpa:
-    # Let Hibernate evolve the schema during development.
+    # Flyway owns the schema now (same as prod); Hibernate only validates that the
+    # entities match what the migrations built, so dev and prod stay in lockstep.
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     # SQL logging — DEVELOPMENT ONLY. Watch these to catch N+1 early.
     show-sql: true
     properties:

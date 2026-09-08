@@ -16,6 +16,22 @@ spring:
         format_sql: false
         use_sql_comments: false
 
+# Turn off the API docs in production: the OpenAPI spec and Swagger UI describe
+# every endpoint and schema, which is helpful in dev but needless attack surface
+# in prod. Disabled here rather than in the base so local/dev still serves them.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Never expose health internals (DB, disk, versions) to callers in production,
+# even authenticated ones — the probe just needs UP/DOWN.
+management:
+  endpoint:
+    health:
+      show-details: never
+
 logging:
   level:
     root: INFO
