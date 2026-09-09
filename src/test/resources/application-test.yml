@@ -6,6 +6,11 @@
 # profile, so tests own their own data setup.
 # ===========================================================================
 spring:
+  # The MySQL-dialect Flyway migrations don't apply to H2; tests build the schema
+  # from the entities via ddl-auto: create-drop below, so keep Flyway off here.
+  flyway:
+    enabled: false
+
   datasource:
     url: jdbc:h2:mem:checkoutdb;DB_CLOSE_DELAY=-1
     username: sa

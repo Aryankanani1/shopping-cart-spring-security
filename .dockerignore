@@ -1,0 +1,39 @@
+# Keep the build context small and — most importantly — keep secrets, local
+# config, and cruft OUT of the image entirely.
+
+# Build output (the image builds the jar itself)
+target/
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# IDE / editor
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# OS junk
+.DS_Store
+
+# Local tooling / assistant state
+.claude/
+
+# Docs — not needed to build or run
+*.md
+
+# Secrets & local-only config — must never enter the build context
+.env
+*.env
+**/application-local.yml
+**/*.local.yml
+**/*secret*
+**/*.pem
+**/*.key
+
+# Docker files themselves
+Dockerfile
+.dockerignore

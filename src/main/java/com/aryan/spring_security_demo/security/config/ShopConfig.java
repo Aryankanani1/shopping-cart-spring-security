@@ -120,6 +120,10 @@ public class ShopConfig {
                                     "/api/v1/images/**").permitAll()
                             // API docs.
                             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                            // Health probe is public so load balancers / k8s liveness and
+                            // readiness checks can reach it; all other actuator endpoints
+                            // (metrics, info, …) fall through to authenticated below.
+                            .requestMatchers("/actuator/health/**").permitAll()
                             .requestMatchers("/error").permitAll()
                             // Catalog writes are admin-only. These rules live here at the
                             // edge (not as @PreAuthorize on the controllers) so the whole
