@@ -63,6 +63,7 @@ Environment variables:
 | `SPRING_PROFILES_ACTIVE` | optional      | Active profile, default `dev`                      |
 | `JWT_EXPIRATION_MS` | optional           | Access-token lifetime, default `900000` (15m)      |
 | `JWT_REFRESH_EXPIRATION_MS` | optional   | Refresh-token lifetime, default `604800000` (7d)   |
+| `APP_RATELIMIT_EVICTION_CRON` | optional | Sweep of replenished rate-limit buckets, default hourly |
 
 In **dev** the datasource falls back to a local MySQL (`localhost:3306`,
 `root`, empty password) so the app boots out of the box; any value can still be
@@ -89,7 +90,7 @@ Service/      Interface + impl per domain (+ cache/ for read-through catalog cac
 repository/   Spring Data JPA repositories
 model/        JPA entities (User, Role, Product, Category, Image, Cart, CartItem, Order, OrderItem)
 dto/ request/ response/   API boundary objects
-security/     config (shopConfig), jwt (AuthTokenFilter, JwtUtils, JwtEntryPoint), user details
+security/     config (shopConfig), jwt (AuthTokenFilter, JwtUtils, JwtEntryPoint), ratelimit (RateLimitFilter/Service), user details
 config/       CacheConfig + OpenApiConfig + typed @ConfigurationProperties (StartupProperties, AuthTokenProperties)
 bootstrap/    Ordered startup runners (see below)
 data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev") test users)
@@ -143,6 +144,15 @@ probe returns just `UP`/`DOWN` and never leaks internals.
   Refresh tokens are persisted **hashed** and are **rotating** (each refresh revokes
   the old one and issues a new one, so replay of a spent token is detected).
   `POST /api/v1/auth/logout` revokes the refresh token, ending the session server-side.
+- **Rate-limited auth endpoints**: `RateLimitFilter` sits ahead of authentication in
+  the chain and throttles `/auth/**` (login, refresh, logout) per client IP with an
+  in-memory token bucket (`RateLimitService`) — `capacity` requests may burst, then
+  the bucket refills to full over `refill-period`. Over-limit callers get `429 Too
+  Many Requests` (RFC 7807 body + `Retry-After`) *before* any credential/token work,
+  which blunts brute-force and credential stuffing. Tight defaults (5 req / 1 min)
+  because only the auth endpoints are guarded. Single-instance by design (like the
+  in-memory cache); behind a load balancer, back it with a shared store — the call
+  site doesn't change.
 - Roles: `ROLE_ADMIN`, `ROLE_CUSTOMER`.
 
 ## API

@@ -10,13 +10,17 @@ import com.aryan.spring_security_demo.model.CartItem;
 import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Order;
 import com.aryan.spring_security_demo.model.Product;
+import com.aryan.spring_security_demo.config.RateLimitProperties;
 import com.aryan.spring_security_demo.security.ApiAccessDeniedHandler;
 import com.aryan.spring_security_demo.security.jwt.AuthTokenFilter;
 import com.aryan.spring_security_demo.security.jwt.JwtEntryPoint;
+import com.aryan.spring_security_demo.security.ratelimit.RateLimitFilter;
+import com.aryan.spring_security_demo.security.ratelimit.RateLimitService;
 import com.aryan.spring_security_demo.security.user.UserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -100,7 +104,15 @@ public class ShopConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception{
+    public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                                                   RateLimitService rateLimitService,
+                                                   RateLimitProperties rateLimitProperties,
+                                                   @Value("${api.prefix}") String apiPrefix) throws Exception{
+            // Throttle the auth endpoints before any authentication work runs. Built
+            // here (not a @Component) so it isn't dragged into @WebMvcTest slices
+            // without its collaborators — same pattern as authTokenFilter below.
+            RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimitService, rateLimitProperties, apiPrefix);
+
             http.csrf(AbstractHttpConfigurer::disable)
                     .exceptionHandling(exception -> exception
                             .authenticationEntryPoint(jwtEntryPoint)          // 401 — unauthenticated
@@ -149,6 +161,9 @@ public class ShopConfig {
                             .anyRequest().authenticated());
                     http.authenticationProvider(daoAuthenticationProvider());
                     http.addFilterBefore(authTokenFilter(), UsernamePasswordAuthenticationFilter.class);
+                    // Rate limiter sits ahead of authentication so an over-limit caller
+                    // is rejected with 429 before any token/credential processing.
+                    http.addFilterBefore(rateLimitFilter, AuthTokenFilter.class);
                     return http.build();
 
     }

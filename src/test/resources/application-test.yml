@@ -39,6 +39,12 @@ auth:
 # Keep the boot pipeline quiet and the database empty so each test controls its
 # own fixtures: no category seeding, no cache warm-up.
 app:
+  # Off by default under test: the limiter is a singleton whose buckets outlive a
+  # single test, so leaving it on would let repeated logins across the suite trip
+  # the limit and fail unrelated tests. The dedicated RateLimitFilterTest turns it
+  # back on (with a low capacity) via @TestPropertySource, in its own context.
+  ratelimit:
+    enabled: false
   startup:
     seed:
       enabled: false
