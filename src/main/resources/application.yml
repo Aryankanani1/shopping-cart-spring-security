@@ -97,8 +97,20 @@ auth:
     # Scheduled purge of expired refresh tokens (Spring cron). Default: daily 03:00.
     cleanupCron: ${JWT_CLEANUP_CRON:0 0 3 * * *}
 
-# --- Startup pipeline (see StartupProperties) — defaults safe for all envs ---
+# --- Startup pipeline (see StartupProperties) + rate limiting (RateLimitProperties) ---
 app:
+  # Rate limiting protects the unauthenticated auth endpoints (/auth/**) from
+  # brute-force / credential stuffing. Token bucket: `capacity` requests may
+  # burst, then the bucket refills to full over `refill-period`. Applied per
+  # client IP by RateLimitFilter; over-limit callers get 429 + Retry-After. Tight
+  # defaults because only login/refresh/logout are guarded — a real client makes
+  # a handful of calls, an attacker makes thousands.
+  ratelimit:
+    enabled: true
+    capacity: 5
+    refill-period: 1m
+    # Scheduled sweep of buckets that have refilled to full (bounds memory). Hourly.
+    eviction-cron: ${APP_RATELIMIT_EVICTION_CRON:0 0 * * * *}
   startup:
     seed:
       enabled: true
