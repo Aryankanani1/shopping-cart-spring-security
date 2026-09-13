@@ -1,0 +1,97 @@
+# ===========================================================================
+# docker-compose.yml — LOCAL DEVELOPMENT / TESTING ONLY.
+#
+# Brings up the whole stack with one command:  the API (built from the
+# Dockerfile) + a MySQL 8 database, wired together on Compose's default
+# network so the app reaches the DB by the service name `mysql`.
+#
+# This is NOT a production topology. In production the database is a managed
+# service (RDS / Cloud SQL) or a Kubernetes StatefulSet with a
+# PersistentVolumeClaim — never a Compose volume. See README for the why.
+#
+# Design decisions baked in here:
+#   * ONE named volume, for MySQL data only. The app is stateless (JWT, no
+#     sessions; images are stored as BLOBs in MySQL; logs go to stdout), so it
+#     needs no volume. A named volume — not a host bind mount — because on macOS
+#     a bind mount for /var/lib/mysql is slow (Docker VM layer) and prone to
+#     permission/corruption issues; a named volume is Docker-managed, portable,
+#     and just works.
+#   * NO init SQL scripts. Flyway (in the app) owns the schema (V1__baseline.sql,
+#     ddl-auto: validate). Mounting an init script that creates tables would
+#     collide with Flyway. The MySQL image's MYSQL_DATABASE/USER/PASSWORD env
+#     vars create the empty database + app user; Flyway does the rest on boot.
+#   * The app waits for MySQL to be *healthy* (not merely started) so Flyway and
+#     Hibernate don't hit a DB that isn't accepting connections yet.
+#
+# Quick start:
+#   cp .env.example .env      # then edit if you like
+#   docker compose up --build # first build runs the full Maven package; be patient
+#   # API on http://localhost:8080 , MySQL on localhost:3306
+#
+# Data lifecycle:
+#   docker compose down       # stops containers, KEEPS the DB (named volume)
+#   docker compose down -v     # ALSO deletes the volume — fresh DB, Flyway re-runs
+# ===========================================================================
+
+services:
+  mysql:
+    image: mysql:${MYSQL_VERSION:-8.4}
+    container_name: shopping-cart-mysql
+    environment:
+      # These create the database and a dedicated (non-root) app user with full
+      # rights on that database — enough for Flyway to build the schema.
+      MYSQL_DATABASE: ${DB_NAME:-shopping_cart}
+      MYSQL_USER: ${DB_USERNAME:-shop}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-shop}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+    ports:
+      # Exposed to the host so you can connect a GUI client during dev.
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # `app` gates its startup on this passing (see depends_on below). Uses the
+      # container's own MYSQL_ROOT_PASSWORD env var ($$ escapes it from Compose).
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s   # first-run initialisation of an empty data dir takes a bit
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shopping-cart-app
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
+      # Point the app at the `mysql` service (Compose DNS), not localhost. Built
+      # from DB_NAME so you only set the name once. useSSL=false +
+      # allowPublicKeyRetrieval=true are dev-only: they let Connector/J complete
+      # caching_sha2_password auth over the plaintext in-network link on first
+      # connect. Do NOT carry these into production.
+      DB_URL: "jdbc:mysql://mysql:3306/${DB_NAME:-shopping_cart}?useSSL=false&allowPublicKeyRetrieval=true"
+      DB_USERNAME: ${DB_USERNAME:-shop}
+      DB_PASSWORD: ${DB_PASSWORD:-shop}
+      # Required — no default anywhere. Compose refuses to start if unset, with
+      # this message. Put it in .env (see .env.example).
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env — see .env.example (openssl rand -base64 32)}
+      JAVA_OPTS: ${JAVA_OPTS:-}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    # No container healthcheck: the JRE-only runtime image ships no curl/wget to
+    # probe HTTP with. The real readiness signal is Actuator's readiness probe at
+    # http://localhost:${APP_PORT}/actuator/health/readiness (reach it from the
+    # host). To add an in-container check, install curl in the runtime stage and
+    # test that URL here.
+    restart: unless-stopped
+
+volumes:
+  # Named, Docker-managed volume for the MySQL data directory — the only durable
+  # state in the stack. Survives `docker compose down`; removed by `down -v`.
+  mysql-data:
+    name: shopping-cart-mysql-data
