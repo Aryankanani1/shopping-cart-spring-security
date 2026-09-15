@@ -1,0 +1,65 @@
+import { useEffect } from 'react'
+import { Route, Routes, useLocation } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import { CartProvider } from './context/CartContext'
+import { Layout } from './components/Layout'
+import { RequireAuth } from './components/RequireAuth'
+import { HomePage } from './pages/HomePage'
+import { ProductsPage } from './pages/ProductsPage'
+import { ProductDetailPage } from './pages/ProductDetailPage'
+import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
+import { CartPage } from './pages/CartPage'
+import { OrdersPage } from './pages/OrdersPage'
+import { OrderDetailPage } from './pages/OrderDetailPage'
+import { NotFoundPage } from './pages/NotFoundPage'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => window.scrollTo(0, 0), [pathname])
+  return null
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <CartProvider>
+        <ScrollToTop />
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/products" element={<ProductsPage />} />
+            <Route path="/products/:id" element={<ProductDetailPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route
+              path="/cart"
+              element={
+                <RequireAuth>
+                  <CartPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/orders"
+              element={
+                <RequireAuth>
+                  <OrdersPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/orders/:id"
+              element={
+                <RequireAuth>
+                  <OrderDetailPage />
+                </RequireAuth>
+              }
+            />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+      </CartProvider>
+    </AuthProvider>
+  )
+}
