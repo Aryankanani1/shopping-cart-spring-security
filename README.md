@@ -15,6 +15,9 @@ cart, and order flow. Persistence is tuned for Hibernate best practices
 (batching, sequence pooling, optimistic locking, `open-in-view=false`), and
 interactive API documentation is served by **Swagger UI** (springdoc-openapi).
 
+A **React + Vite + TypeScript** customer storefront lives in
+[`frontend/`](frontend/) and consumes this API — see [Frontend](#frontend) to run it.
+
 ## Tech stack
 
 | Concern        | Choice                                             |
@@ -254,6 +257,27 @@ accounts are never created in production.
 ./mvnw test            # run tests
 ./mvnw clean package   # build the jar
 ```
+
+## Frontend
+
+A customer-facing storefront (**React + Vite + TypeScript**) in
+[`frontend/`](frontend/) consumes this API under `/api/v1`: register/login (JWT
+with automatic refresh), browse/filter the catalog, product detail, cart,
+checkout, and order history. In development a Vite proxy forwards `/api` to this
+server, so **no CORS setup is needed**; for production, point `VITE_API_BASE_URL`
+at the API origin.
+
+```bash
+# with the API running on :8080
+cd frontend
+npm install
+npm run dev      # http://localhost:5173
+npm test         # Vitest suite (27 tests, jsdom)
+```
+
+Client-side auth, a typed API client (envelope unwrap, problem+json errors,
+single-flight token refresh), and a Vitest test suite are covered in
+[`frontend/README.md`](frontend/README.md).
 
 ## Docker
 
