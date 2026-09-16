@@ -81,6 +81,16 @@
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 
+		<!-- AspectJ weaver — supplies the @Aspect/@Around annotations for the
+		     service-layer logging aspect (LoggingAspect). spring-aop itself is
+		     already on the classpath via spring-context; Boot 4's BOM manages the
+		     aspectjweaver version (Boot 4 no longer ships spring-boot-starter-aop).
+		     Auto-proxying is switched on explicitly by AopConfig. -->
+		<dependency>
+			<groupId>org.aspectj</groupId>
+			<artifactId>aspectjweaver</artifactId>
+		</dependency>
+
 		<!-- YAML config support (application.yml). Spring Boot 4 no longer pulls
 		     SnakeYAML transitively, so declare it explicitly; version from the BOM. -->
 		<dependency>
