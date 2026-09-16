@@ -2,9 +2,7 @@ package com.aryan.spring_security_demo.aop;
 
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.annotation.Around;
-import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.annotation.Pointcut;
+import org.aspectj.lang.annotation.*;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,6 +26,29 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class LoggingAspect {
 
+
+
+    @Before("execution(public * com.aryan.spring_security_demo.controller..*.*(..))")
+    public void logBeforeControllerMethods(){
+        log.debug("before advice");
+    }
+
+    @AfterReturning(pointcut = "execution(public * com.aryan.spring_security_demo.controller..*.*(..))",
+            returning = "result")
+    public void logAfterControllerMethods(Object result){
+        log.debug("result {}", result);
+    }
+
+
+
+    @AfterThrowing(pointcut = "execution(public * com.aryan.spring_security_demo.controller..*.*(..))",throwing = "exception")
+    public void logAfterThrowingControllerMethod(Exception e){
+        log.error("Exception thrown from controller method: {}", e.getMessage());
+    }
+
+
+
+
     /**
      * Any method on a Spring bean declared in the service package tree. Using the
      * package pointcut (rather than {@code @annotation}) keeps every current and
@@ -36,6 +57,7 @@ public class LoggingAspect {
     @Pointcut("execution(public * com.aryan.spring_security_demo.service..*.*(..))")
     public void serviceMethods() {
     }
+
 
     @Around("serviceMethods()")
     public Object logAround(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -60,4 +82,7 @@ public class LoggingAspect {
             throw ex;
         }
     }
+
+
+
 }
