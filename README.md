@@ -29,6 +29,7 @@ A **React + Vite + TypeScript** customer storefront lives in
 | Mapping        | ModelMapper 3.2.4                                  |
 | API docs       | springdoc-openapi 3.1.0 (OpenAPI 3 + Swagger UI)   |
 | Caching        | Spring Cache (`ConcurrentMapCacheManager`)         |
+| Aspects (AOP)  | Spring AOP + AspectJ (`aspectjweaver`) — service-layer logging |
 | Migrations     | Flyway (`spring-boot-starter-flyway` + `flyway-mysql`) |
 | Observability  | Spring Boot Actuator (health probes, metrics)      |
 | Boilerplate    | Lombok                                             |
@@ -94,7 +95,8 @@ repository/   Spring Data JPA repositories
 model/        JPA entities (User, Role, Product, Category, Image, Cart, CartItem, Order, OrderItem)
 dto/ request/ response/   API boundary objects
 security/     config (shopConfig), jwt (AuthTokenFilter, JwtUtils, JwtEntryPoint), ratelimit (RateLimitFilter/Service), user details
-config/       CacheConfig + OpenApiConfig + typed @ConfigurationProperties (StartupProperties, AuthTokenProperties)
+aop/          LoggingAspect — @Around advice logging service-layer entry/exit/timing
+config/       CacheConfig + AopConfig + OpenApiConfig + typed @ConfigurationProperties (StartupProperties, AuthTokenProperties)
 bootstrap/    Ordered startup runners (see below)
 data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev") test users)
 resources/    application*.yml + db/migration/ (Flyway migrations: V1__baseline.sql, …)
@@ -236,6 +238,27 @@ environment** and only the externalized configuration changes.
 `@Cacheable` reads where fetch **and** DTO conversion happen inside one read-only
 transaction — required because `spring.jpa.open-in-view=false`. Swap the cache
 manager for Redis/Caffeine in production; the annotations stay unchanged.
+
+### Cross-cutting logging (AOP)
+`LoggingAspect` (package `aop`) is a single `@Around` aspect over every public
+method of the service layer (`execution(public * ...service..*.*(..))`). It logs
+method entry, successful exit with elapsed time at **DEBUG**, and failures with
+the exception type/message at **ERROR** before rethrowing — so tracing and timing
+live in one place instead of being scattered through each service, and the
+handling path (`GlobalExceptionHandler`) is unchanged.
+
+Auto-proxying is switched on explicitly by `AopConfig` (`@EnableAspectJAutoProxy`)
+and the AspectJ annotations come from `aspectjweaver` — Boot 4 no longer ships
+`spring-boot-starter-aop`, and `spring-aop` is already on the classpath via
+spring-context. Being proxy-based, advice fires only when a service is called
+**through its proxy** from another bean, not on self-invocation. Output is quiet
+by default; enable it in dev with:
+
+```yaml
+logging:
+  level:
+    com.aryan.spring_security_demo.aop: DEBUG
+```
 
 ## Default seed data
 
