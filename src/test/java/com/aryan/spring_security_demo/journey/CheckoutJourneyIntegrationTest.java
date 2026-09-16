@@ -186,6 +186,32 @@ class CheckoutJourneyIntegrationTest {
     }
 
     @Test
+    @DisplayName("GET user with a non-empty cart serializes the nested lazy graph (no LazyInitializationException)")
+    void getUserById_withCartItems_serializesLazyGraph() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+
+        mockMvc.perform(post("/api/v1/cartItems")
+                        .header("Authorization", "Bearer " + token)
+                        .param("productId", String.valueOf(productId))
+                        .param("quantity", String.valueOf(ORDER_QUANTITY)))
+                .andExpect(status().isCreated());
+
+        // Regression: the controller used to convert the User to a DTO AFTER the
+        // service transaction closed, so ModelMapper walked the lazy
+        // cart.cartItems (only reachable once the cart had items) with no session
+        // and threw LazyInitializationException. The service now loads + converts
+        // inside one read-only transaction.
+        mockMvc.perform(get("/api/v1/users/{id}", userId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(userId))
+                .andExpect(jsonPath("$.data.email").value("shopper@example.com"))
+                .andExpect(jsonPath("$.data.cart.cartItems", org.hamcrest.Matchers.hasSize(1)))
+                .andExpect(jsonPath("$.data.cart.cartItems[0].quantity").value(ORDER_QUANTITY))
+                .andExpect(jsonPath("$.data.cart.cartItems[0].product.name").value("Wireless Mouse"));
+    }
+
+    @Test
     @DisplayName("adding to the cart without a token is rejected (guard holds)")
     void addToCart_withoutToken_isUnauthorized() throws Exception {
         mockMvc.perform(post("/api/v1/cartItems")

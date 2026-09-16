@@ -16,5 +16,11 @@ public interface UserServiceInterface {
 
     UserDto convertUserToDto(User user);
 
+    // Load + convert inside one transaction so the DTO's lazy graph
+    // (cart -> cartItems, orders -> orderItems) resolves before the session closes.
+    UserDto getUserDtoById(Long userId);
+    UserDto createUserAndConvert(CreateUserRequest request);
+    UserDto updateUserAndConvert(UserUpdateRequest request, Long userId);
+
     User getAuthenticatedUser();
 }

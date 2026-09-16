@@ -73,6 +73,33 @@ public class UserService implements UserServiceInterface{
         return modelMapper.map(user,UserDto.class);
     }
 
+    // ---- DTO-returning operations: load + map in ONE transaction --------------
+    // UserDto pulls in cart (-> cartItems) and orders (-> orderItems), all lazy.
+    // findByIdWithDetails can only JOIN FETCH orders + cart (two bags is the
+    // limit), so the nested cartItems/orderItems still lazy-load. Converting
+    // inside the transaction lets those resolve while the session is open —
+    // without this, ModelMapper walks a lazy collection after the tx closed and
+    // (open-in-view=false) throws LazyInitializationException. Controllers call
+    // these and never map a User entity themselves.
+
+    @Override
+    @Transactional(readOnly = true)
+    public UserDto getUserDtoById(Long userId) {
+        return convertUserToDto(getUserById(userId));
+    }
+
+    @Override
+    @Transactional
+    public UserDto createUserAndConvert(CreateUserRequest request) {
+        return convertUserToDto(createUser(request));
+    }
+
+    @Override
+    @Transactional
+    public UserDto updateUserAndConvert(UserUpdateRequest request, Long userId) {
+        return convertUserToDto(updateUser(request, userId));
+    }
+
     @Override
     @Transactional(readOnly = true)
     public User getAuthenticatedUser() {
