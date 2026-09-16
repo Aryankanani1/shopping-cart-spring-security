@@ -28,3 +28,5 @@ logging:
     org.hibernate.SQL: DEBUG
     org.hibernate.orm.jdbc.bind: TRACE
     org.hibernate.orm.query: WARN
+    # Service-layer LoggingAspect entry/exit/timing lines — DEV ONLY.
+    com.aryan.spring_security_demo.aop: DEBUG
