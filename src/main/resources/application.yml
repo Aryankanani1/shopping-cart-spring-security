@@ -114,6 +114,7 @@ app:
   startup:
     seed:
       enabled: true
+      products-enabled: true
       categories: Electronics,Books,Clothing,Home & Kitchen,Toys,Sports,Beauty,Groceries
     connectivity:
       # Comma-separated external endpoints to verify at boot (empty = DB only).
