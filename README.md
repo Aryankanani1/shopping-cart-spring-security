@@ -201,6 +201,7 @@ are left intentionally so new runners can be inserted (e.g. `@Order(25)`).
 |:-----:|---------------------------|---------------------|-------------------------------------------------------|
 | 10    | `StartupInfoRunner`       | `CommandLineRunner` | Log effective config/env (secrets masked)             |
 | 20    | `DefaultDataRunner`       | `ApplicationRunner` | Seed default catalog **categories** (idempotent)      |
+| 25    | `SampleProductRunner`     | `ApplicationRunner` | Seed demo **products**, each with a placeholder image (idempotent) |
 | 30    | `ConnectivityCheckRunner` | `ApplicationRunner` | Validate DB + configured external API endpoints       |
 | 40    | `CacheWarmupRunner`       | `ApplicationRunner` | Warm the `categories` / `products` caches             |
 
@@ -213,6 +214,10 @@ All runners execute **before** `ApplicationReadyEvent`, after which
 # DefaultDataRunner — seed categories (disable per-run with the arg: --skip-seed)
 app.startup.seed.enabled=true
 app.startup.seed.categories=Electronics,Books,Clothing,Home & Kitchen,Toys,Sports,Beauty,Groceries
+
+# SampleProductRunner — seed demo products (with a generated placeholder image),
+# gated by seed.enabled above; the download URL is served by the images endpoint.
+app.startup.seed.products-enabled=true
 
 # ConnectivityCheckRunner — DB is always checked; external endpoints are optional (comma-separated)
 app.startup.connectivity.endpoints=

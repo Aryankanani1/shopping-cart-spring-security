@@ -32,9 +32,10 @@ import java.util.List;
 /**
  * Seeds a small set of demo <b>products</b>, each with one generated placeholder
  * image, so a fresh database exposes a browsable catalog (with downloadable
- * images) out of the box. Runs at {@link Order @Order(30)} — after
+ * images) out of the box. Runs at {@link Order @Order(25)} — after
  * {@link DefaultDataRunner} (@Order(20)) has committed the categories these
- * products reference.
+ * products reference, and before {@code CacheWarmupRunner} (@Order(40)) so the
+ * warmed {@code products} cache already includes these rows.
  *
  * <p>The image is a PNG rendered in memory (a coloured tile with the product
  * name) and stored as a {@link Blob}, exactly like a real upload — so no network
@@ -47,7 +48,7 @@ import java.util.List;
  * off {@code app.startup.seed.enabled}).
  */
 @Component
-@Order(30)
+@Order(25)
 @RequiredArgsConstructor
 @Slf4j
 public class SampleProductRunner implements ApplicationRunner {
