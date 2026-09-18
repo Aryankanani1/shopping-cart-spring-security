@@ -42,6 +42,13 @@ public class StartupProperties {
         /** Whether DefaultDataRunner seeds default categories into an empty catalog. */
         private boolean enabled = true;
 
+        /**
+         * Whether SampleProductRunner seeds a handful of demo products — each with a
+         * generated placeholder image — after the categories are in place. Gated by
+         * {@link #enabled} too, so turning seeding off disables both.
+         */
+        private boolean productsEnabled = true;
+
         /** Categories to seed when missing. Comma-separated in properties. */
         @NotEmpty
         private List<String> categories = new ArrayList<>(List.of(
