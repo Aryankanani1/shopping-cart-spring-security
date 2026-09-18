@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.aop;
 
 import lombok.extern.slf4j.Slf4j;
+import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.*;
 import org.springframework.stereotype.Component;
@@ -29,24 +30,35 @@ public class LoggingAspect {
 
 
     @Before("execution(public * com.aryan.spring_security_demo.controller..*.*(..))")
-    public void logBeforeControllerMethods(){
-        log.debug("before advice");
+    public void logBeforeControllerMethods(JoinPoint joinPoint){
+        if (log.isDebugEnabled()) {
+            log.debug("⇢ [controller] {}.{}({} args)",
+                    joinPoint.getSignature().getDeclaringType().getSimpleName(),
+                    joinPoint.getSignature().getName(),
+                    joinPoint.getArgs().length);
+        }
     }
 
     @AfterReturning(pointcut = "execution(public * com.aryan.spring_security_demo.controller..*.*(..))",
             returning = "result")
-    public void logAfterControllerMethods(Object result){
-        log.debug("result {}", result);
+    public void logAfterControllerMethods(JoinPoint joinPoint, Object result){
+        if (log.isDebugEnabled()) {
+            log.debug("⇠ [controller] {}.{} returned",
+                    joinPoint.getSignature().getDeclaringType().getSimpleName(),
+                    joinPoint.getSignature().getName());
+        }
     }
 
 
 
     @AfterThrowing(pointcut = "execution(public * com.aryan.spring_security_demo.controller..*.*(..))",throwing = "exception")
-    public void logAfterThrowingControllerMethod(Exception e){
-        log.error("Exception thrown from controller method: {}", e.getMessage());
+    public void logAfterThrowingControllerMethod(JoinPoint joinPoint, Exception exception){
+        log.error("⇡ [controller boundary] {}.{} propagated {}: {}",
+                joinPoint.getSignature().getDeclaringType().getSimpleName(),
+                joinPoint.getSignature().getName(),
+                exception.getClass().getSimpleName(),
+                exception.getMessage());
     }
-
-
 
 
     /**
@@ -82,7 +94,4 @@ public class LoggingAspect {
             throw ex;
         }
     }
-
-
-
 }
