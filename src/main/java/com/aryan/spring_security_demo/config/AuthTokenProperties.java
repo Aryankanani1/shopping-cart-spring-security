@@ -44,7 +44,9 @@ public class AuthTokenProperties {
     /**
      * Cron expression for the scheduled purge of expired refresh tokens (see
      * {@code RefreshTokenCleanupService}). Rotation leaves a spent row behind on
-     * every refresh, so they are swept periodically. Default: daily at 03:00.
+     * every refresh, so they are swept at a fixed wall-clock time (default daily
+     * at 03:00, an off-peak window). Overlap across instances is prevented by
+     * ShedLock, not by the schedule itself. Default: {@code 0 0 3 * * *}.
      */
     @NotBlank
     private String cleanupCron = "0 0 3 * * *";

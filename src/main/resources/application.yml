@@ -94,7 +94,8 @@ auth:
     jwtSecret: ${JWT_SECRET}
     expirationInMils: ${JWT_EXPIRATION_MS:900000}
     refreshExpirationInMils: ${JWT_REFRESH_EXPIRATION_MS:604800000}
-    # Scheduled purge of expired refresh tokens (Spring cron). Default: daily 03:00.
+    # Scheduled purge of expired refresh tokens (Spring cron). Runs at an off-peak
+    # wall-clock time; ShedLock guarantees only one instance runs it. Default: daily 03:00.
     cleanupCron: ${JWT_CLEANUP_CRON:0 0 3 * * *}
 
 # --- Startup pipeline (see StartupProperties) + rate limiting (RateLimitProperties) ---
@@ -109,8 +110,9 @@ app:
     enabled: true
     capacity: 5
     refill-period: 1m
-    # Scheduled sweep of buckets that have refilled to full (bounds memory). Hourly.
-    eviction-cron: ${APP_RATELIMIT_EVICTION_CRON:0 0 * * * *}
+    # Scheduled sweep of buckets that have refilled to full (bounds memory), as a
+    # fixed rate in ms. Non-critical/idempotent, so a plain rate is fine. Hourly.
+    eviction-interval-ms: ${APP_RATELIMIT_EVICTION_INTERVAL_MS:3600000}
   startup:
     seed:
       enabled: true

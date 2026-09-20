@@ -53,11 +53,17 @@ public class RateLimitService {
     /**
      * Periodically drops buckets that have refilled to full: an idle client's
      * bucket is identical to a brand-new one, so evicting it changes no behaviour
-     * and simply bounds memory. Mirrors the scheduled sweep in
-     * {@code RefreshTokenCleanupService}; scheduling is enabled by
-     * {@code SchedulingConfig}. Default: hourly.
+     * and simply bounds memory.
+     *
+     * <p>Unlike {@code RefreshTokenCleanupService} this is a <em>non-critical</em>
+     * sweep — it only prunes an in-memory {@link ConcurrentHashMap} whose own
+     * operations are thread-safe, and it is idempotent (running it twice removes
+     * the same full buckets), so overlap is harmless. It therefore uses a plain
+     * <strong>fixed rate</strong> (no {@code synchronized} guard needed). Interval:
+     * {@code app.ratelimit.eviction-interval-ms} (default hourly); scheduling is
+     * enabled by {@code SchedulingConfig}.
      */
-    @Scheduled(cron = "${app.ratelimit.eviction-cron:0 0 * * * *}")
+    @Scheduled(fixedRateString = "${app.ratelimit.eviction-interval-ms:3600000}", initialDelay = 3_600_000)
     public void evictReplenishedBuckets() {
         long now = clock.millis();
         int before = buckets.size();
