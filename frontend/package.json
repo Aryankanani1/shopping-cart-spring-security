@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "clean": "rm -rf node_modules dist",
+    "reset": "npm run clean && npm ci"
   },
   "dependencies": {
     "react": "^18.3.1",
