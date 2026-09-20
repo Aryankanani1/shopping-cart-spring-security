@@ -11,7 +11,7 @@ import java.time.Clock;
  * real UTC clock; tests inject a {@link Clock#fixed} so time-dependent behaviour
  * (token expiry, cleanup cutoffs) is deterministic and testable without sleeping.
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class ClockConfig {
 
     @Bean
