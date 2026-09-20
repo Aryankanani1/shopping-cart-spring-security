@@ -5,6 +5,8 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -160,6 +162,39 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Validation failed", "One or more fields are invalid");
         problem.setProperty("errors", errors);
         return problem;
+    }
+
+    // -----------------------------------------------------------------------
+    // 409 — persistence-layer conflicts that Spring has translated into its
+    // DataAccessException hierarchy. Logged at WARN (not ERROR): these are
+    // expected concurrency/race events under load, not application bugs — but
+    // they are worth surfacing, unlike the 4xx client mistakes above. The detail
+    // is deliberately generic: a DataAccessException message can carry raw SQL,
+    // constraint names and vendor error codes that must never reach the client.
+    // -----------------------------------------------------------------------
+
+    /**
+     * 409 — a unique/constraint check lost a check-then-act race (two concurrent
+     * creates both passed the {@code existsBy...} guard, and the database
+     * constraint rejected the second). Returned as a conflict rather than being
+     * swallowed by the {@link #handleUnexpected(Exception) 500 catch-all}.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("409 Data integrity violation", ex);
+        return problem(HttpStatus.CONFLICT, "Resource already exists",
+                "The request conflicts with existing data");
+    }
+
+    /**
+     * 409 — an optimistic-lock check failed because another request modified the
+     * same {@code @Version}ed entity first. The client should refetch and retry.
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        log.warn("409 Optimistic lock conflict", ex);
+        return problem(HttpStatus.CONFLICT, "Concurrent modification",
+                "The resource was modified by another request; please retry");
     }
 
     // -----------------------------------------------------------------------
