@@ -14,6 +14,7 @@ export const queryKeys = {
     detail: (id: number) => ['products', 'detail', id] as const,
   },
   categories: ['categories'] as const,
+  user: (userId: number | null) => ['user', userId] as const,
   cart: (userId: number | null) => ['cart', userId] as const,
   orders: {
     all: ['orders'] as const,

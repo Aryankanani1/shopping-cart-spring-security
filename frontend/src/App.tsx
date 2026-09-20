@@ -12,6 +12,7 @@ import { RegisterPage } from './pages/RegisterPage'
 import { CartPage } from './pages/CartPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { OrderDetailPage } from './pages/OrderDetailPage'
+import { AccountPage } from './pages/AccountPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 
 function ScrollToTop() {
@@ -55,6 +56,14 @@ export default function App() {
               element={
                 <RequireAuth>
                   <OrderDetailPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/account"
+              element={
+                <RequireAuth>
+                  <AccountPage />
                 </RequireAuth>
               }
             />
