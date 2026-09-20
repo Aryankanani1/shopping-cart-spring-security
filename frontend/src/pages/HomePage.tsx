@@ -1,18 +1,29 @@
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { productsApi } from '../api/products'
 import { categoriesApi } from '../api/categories'
-import type { CategoryDto, PagedResponse, ProductDto } from '../api/types'
-import { useAsync } from '../hooks/useAsync'
+import { queryKeys } from '../api/queryKeys'
+import { errMessage } from '../lib/errors'
 import { ProductCard } from '../components/ProductCard'
 import { Loader, ErrorNote } from '../components/ui'
 
+const FEATURED = { size: 8, sort: 'id,desc' }
+
 export function HomePage() {
-  const { data, loading, error } = useAsync<[PagedResponse<ProductDto>, CategoryDto[]]>(
-    () => Promise.all([productsApi.list({ size: 8, sort: 'id,desc' }), categoriesApi.list()]),
-    [],
-  )
-  const products = data?.[0].content ?? []
-  const categories = data?.[1] ?? []
+  const productsQuery = useQuery({
+    queryKey: queryKeys.products.list(FEATURED),
+    queryFn: () => productsApi.list(FEATURED),
+  })
+  // Shared key with the Shop page — resolves to one cached request, not two.
+  const categoriesQuery = useQuery({
+    queryKey: queryKeys.categories,
+    queryFn: () => categoriesApi.list(),
+  })
+
+  const products = productsQuery.data?.content ?? []
+  const categories = categoriesQuery.data ?? []
+  const loading = productsQuery.isLoading
+  const error = productsQuery.error ? errMessage(productsQuery.error) : null
 
   return (
     <>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { imageUrl } from '../api/client'
 import { ordersApi } from '../api/orders'
@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { QuantityStepper } from '../components/QuantityStepper'
 import { Loader, ErrorNote, EmptyState } from '../components/ui'
-import { errMessage } from '../hooks/useAsync'
+import { errMessage } from '../lib/errors'
 import { formatMoney } from '../lib/format'
 
 export function CartPage() {
@@ -17,10 +17,6 @@ export function CartPage() {
   const [busyItem, setBusyItem] = useState<number | null>(null)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
 
   const items = cart?.cartItems ?? []
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { errMessage } from '../hooks/useAsync'
+import { errMessage } from '../lib/errors'
 import { ErrorNote } from '../components/ui'
 import { vars } from '../lib/format'
 

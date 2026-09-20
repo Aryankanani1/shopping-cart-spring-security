@@ -1,64 +1,40 @@
-import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { ordersApi } from '../api/orders'
-import type { OrderDto } from '../api/types'
+import { queryKeys } from '../api/queryKeys'
+import { errMessage } from '../lib/errors'
 import { useAuth } from '../context/AuthContext'
 import { Loader, ErrorNote, EmptyState } from '../components/ui'
 import { StatusBadge } from '../components/StatusBadge'
-import { errMessage } from '../hooks/useAsync'
 import { formatDate, formatMoney } from '../lib/format'
 
 const PAGE = 10
 
 export function OrdersPage() {
   const { userId } = useAuth()
-  const [orders, setOrders] = useState<OrderDto[]>([])
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [hasNext, setHasNext] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  // Initial slice — newest first. Cursor pagination, so no total to fetch.
-  useEffect(() => {
-    if (!userId) return
-    let active = true
-    setLoading(true)
-    setError(null)
-    ordersApi.history(userId, null, PAGE).then(
-      (slice) => {
-        if (!active) return
-        setOrders(slice.content)
-        setCursor(slice.nextCursor)
-        setHasNext(slice.hasNext)
-        setLoading(false)
-      },
-      (err) => {
-        if (!active) return
-        setError(errMessage(err))
-        setLoading(false)
-      },
-    )
-    return () => {
-      active = false
-    }
-  }, [userId])
+  // Keyset pagination is exactly what useInfiniteQuery models: each slice carries
+  // the cursor for the next. This replaces the manual orders/cursor/hasNext/
+  // loading state machine — and the pages are cached and deduped.
+  const {
+    data,
+    error: queryError,
+    isLoading: loading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage: loadingMore,
+  } = useInfiniteQuery({
+    queryKey: queryKeys.orders.history(userId),
+    queryFn: ({ pageParam }) => ordersApi.history(userId as number, pageParam, PAGE),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last.hasNext ? last.nextCursor : undefined),
+    enabled: userId != null,
+  })
 
-  async function loadMore() {
-    if (!userId || !hasNext) return
-    setLoadingMore(true)
-    setError(null)
-    try {
-      const slice = await ordersApi.history(userId, cursor, PAGE)
-      setOrders((prev) => [...prev, ...slice.content])
-      setCursor(slice.nextCursor)
-      setHasNext(slice.hasNext)
-    } catch (err) {
-      setError(errMessage(err))
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  const orders = data?.pages.flatMap((page) => page.content) ?? []
+  const error = queryError ? errMessage(queryError) : null
+  const hasNext = hasNextPage
+  const loadMore = () => void fetchNextPage()
 
   return (
     <div className="container section">

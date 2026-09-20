@@ -1,6 +1,8 @@
 import { Link, useLocation, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ordersApi } from '../api/orders'
-import { useAsync } from '../hooks/useAsync'
+import { queryKeys } from '../api/queryKeys'
+import { errMessage } from '../lib/errors'
 import { Loader, ErrorNote } from '../components/ui'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatDate, formatMoney } from '../lib/format'
@@ -11,7 +13,16 @@ export function OrderDetailPage() {
   const location = useLocation()
   const justPlaced = (location.state as { justPlaced?: boolean } | null)?.justPlaced ?? false
 
-  const { data: order, loading, error } = useAsync(() => ordersApi.get(orderId), [orderId])
+  const {
+    data: order,
+    isLoading: loading,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.orders.detail(orderId),
+    queryFn: () => ordersApi.get(orderId),
+    enabled: Number.isFinite(orderId),
+  })
+  const error = queryError ? errMessage(queryError) : null
 
   if (loading) {
     return (

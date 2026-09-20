@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { ApiError } from '../api/client'
-import { errMessage } from '../hooks/useAsync'
+import { errMessage } from '../lib/errors'
 import { ErrorNote } from '../components/ui'
 import { vars } from '../lib/format'
 
