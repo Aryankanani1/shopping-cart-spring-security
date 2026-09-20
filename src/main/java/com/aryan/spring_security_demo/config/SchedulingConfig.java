@@ -9,7 +9,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * is discoverable in one place. Currently drives the expired refresh-token purge
  * in {@code RefreshTokenCleanupService}.
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableScheduling
 public class SchedulingConfig {
 }

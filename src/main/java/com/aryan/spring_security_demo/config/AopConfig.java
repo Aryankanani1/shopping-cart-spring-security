@@ -13,7 +13,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
  * is switched on here explicitly rather than relying on that starter's
  * autoconfiguration; the AspectJ annotations come from {@code aspectjweaver}.
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableAspectJAutoProxy
 public class AopConfig {
 }

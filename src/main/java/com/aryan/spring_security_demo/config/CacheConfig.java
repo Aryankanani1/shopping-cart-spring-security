@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
  * For a distributed/production setup, swap this bean for a Redis/Caffeine
  * cache manager — the {@code @Cacheable} annotations elsewhere stay unchanged.
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 @EnableCaching
 public class CacheConfig {
 

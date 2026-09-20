@@ -20,7 +20,7 @@ import org.springframework.context.annotation.Configuration;
  * {@code /swagger-ui.html}. Both sit outside {@code api.prefix}, so the existing
  * "everything not under the secured paths is permitAll" rule already exposes them.
  */
-@Configuration
+@Configuration(proxyBeanMethods = false)
 public class OpenApiConfig {
 
     private static final String BEARER_SCHEME = "bearerAuth";
