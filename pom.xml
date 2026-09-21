@@ -75,6 +75,21 @@
 			<artifactId>flyway-mysql</artifactId>
 		</dependency>
 
+		<!-- Distributed lock for @Scheduled tasks: guarantees the critical
+		     refresh-token purge runs on only one node at a time (see
+		     RefreshTokenCleanupService + SchedulingConfig). The JDBC provider
+		     stores the lock in a `shedlock` table (created by Flyway V2). -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>7.10.1</version>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>7.10.1</version>
+		</dependency>
+
 		<!-- Bean Validation (JSR-380) — powers @Validated on @ConfigurationProperties. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
