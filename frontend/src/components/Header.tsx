@@ -38,6 +38,11 @@ export function Header() {
                 Orders
               </NavLink>
             )}
+            {isAuthenticated && (
+              <NavLink to="/account" className={navLink}>
+                Account
+              </NavLink>
+            )}
             {isAuthenticated ? (
               <button type="button" className="nav__link linkbtn" onClick={handleLogout}>
                 Log out

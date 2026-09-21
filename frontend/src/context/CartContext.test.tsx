@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './AuthContext'
 import { CartProvider, useCart } from './CartContext'
 import { setSession } from '../api/tokenStore'
@@ -52,12 +53,19 @@ function Probe() {
 }
 
 function renderCart() {
+  // Fresh client per render so cache never leaks between tests; no retries so a
+  // rejected query/mutation surfaces immediately.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
   return render(
-    <AuthProvider>
-      <CartProvider>
-        <Probe />
-      </CartProvider>
-    </AuthProvider>,
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <CartProvider>
+          <Probe />
+        </CartProvider>
+      </AuthProvider>
+    </QueryClientProvider>,
   )
 }
 

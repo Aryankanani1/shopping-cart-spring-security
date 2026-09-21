@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { productsApi } from '../api/products'
 import { categoriesApi } from '../api/categories'
-import type { CategoryDto } from '../api/types'
-import { useAsync } from '../hooks/useAsync'
+import { queryKeys } from '../api/queryKeys'
+import { errMessage } from '../lib/errors'
 import { ProductCard } from '../components/ProductCard'
 import { Loader, ErrorNote, EmptyState } from '../components/ui'
 
@@ -27,11 +28,17 @@ export function ProductsPage() {
   const [term, setTerm] = useState(name)
   useEffect(() => setTerm(name), [name])
 
-  const cats = useAsync<CategoryDto[]>(() => categoriesApi.list(), [])
-  const { data, loading, error } = useAsync(
-    () => productsApi.list({ name, category, sort, page, size: PAGE_SIZE }),
-    [name, category, sort, page],
-  )
+  const cats = useQuery({ queryKey: queryKeys.categories, queryFn: () => categoriesApi.list() })
+  const filters = { name, category, sort, page, size: PAGE_SIZE }
+  const productsQuery = useQuery({
+    queryKey: queryKeys.products.list(filters),
+    queryFn: () => productsApi.list(filters),
+    // Keep the previous page visible while the next loads — no loader flash on paging.
+    placeholderData: keepPreviousData,
+  })
+  const data = productsQuery.data
+  const loading = productsQuery.isLoading
+  const error = productsQuery.error ? errMessage(productsQuery.error) : null
 
   function update(next: Record<string, string | undefined>, resetPage = false) {
     const p = new URLSearchParams(params)

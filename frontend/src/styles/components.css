@@ -735,8 +735,41 @@
 }
 
 /* --- Responsive ------------------------------------------------------------ */
+/* --- Account --------------------------------------------------------------- */
+.account {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: start;
+}
+.account__card,
+.account__danger {
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+.account__danger {
+  border-color: var(--danger);
+}
+.account__confirm {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--paper);
+}
+.btn--danger:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
 @media (max-width: 900px) {
   .hero__inner {
+    grid-template-columns: 1fr;
+  }
+  .account {
     grid-template-columns: 1fr;
   }
   .hero__mark {

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { productsApi } from '../api/products'
 import { imageUrl } from '../api/client'
-import { useAsync, errMessage } from '../hooks/useAsync'
+import { queryKeys } from '../api/queryKeys'
+import { errMessage } from '../lib/errors'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { QuantityStepper } from '../components/QuantityStepper'
@@ -17,7 +19,16 @@ export function ProductDetailPage() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const { data: product, loading, error } = useAsync(() => productsApi.get(productId), [productId])
+  const {
+    data: product,
+    isLoading: loading,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.products.detail(productId),
+    queryFn: () => productsApi.get(productId),
+    enabled: Number.isFinite(productId),
+  })
+  const error = queryError ? errMessage(queryError) : null
 
   const [selected, setSelected] = useState(0)
   const [qty, setQty] = useState(1)
