@@ -162,6 +162,11 @@ public class ShopConfig {
                             // own order, so its ownership rule lives in the service layer.
                             .requestMatchers(HttpMethod.PATCH,
                                     "/api/v1/orders/*/status").hasAuthority("ROLE_ADMIN")
+                            // Listing every order (admin order management) is admin-only —
+                            // without this it would fall through to "authenticated" and any
+                            // logged-in user could enumerate all customers' orders.
+                            .requestMatchers(HttpMethod.GET,
+                                    "/api/v1/orders/admin").hasAuthority("ROLE_ADMIN")
                             // Everything else — carts, orders, user management — requires
                             // authentication; object-level ownership is then enforced in
                             // the service layer (see AuthUtils / CartService).

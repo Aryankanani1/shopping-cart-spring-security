@@ -4,7 +4,7 @@ import { useCart } from '../context/CartContext'
 import { cx } from '../lib/format'
 
 export function Header() {
-  const { isAuthenticated, logout } = useAuth()
+  const { isAuthenticated, isAdmin, logout } = useAuth()
   const { itemCount } = useCart()
   const navigate = useNavigate()
 
@@ -41,6 +41,11 @@ export function Header() {
             {isAuthenticated && (
               <NavLink to="/account" className={navLink}>
                 Account
+              </NavLink>
+            )}
+            {isAdmin && (
+              <NavLink to="/admin" className={navLink}>
+                Admin
               </NavLink>
             )}
             {isAuthenticated ? (

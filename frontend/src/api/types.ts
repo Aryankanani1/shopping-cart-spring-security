@@ -77,6 +77,17 @@ export interface OrderDto {
   items: OrderItemDto[]
 }
 
+/** Lightweight order row for the admin order list (no item breakdown). */
+export interface OrderSummaryDto {
+  id: number
+  userId: number
+  userEmail: string
+  /** ISO date, e.g. "2026-09-14". */
+  orderDate: string
+  totalAmount: number
+  status: string
+}
+
 export interface UserDto {
   id: number
   firstName: string

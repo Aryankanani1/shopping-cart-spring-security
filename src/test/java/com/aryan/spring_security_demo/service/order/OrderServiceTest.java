@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.service.order;
 
 import com.aryan.spring_security_demo.dto.OrderDto;
+import com.aryan.spring_security_demo.dto.OrderSummaryDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;
 import com.aryan.spring_security_demo.exception.InvalidOrderStateException;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
@@ -20,7 +21,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -71,6 +79,20 @@ class OrderServiceTest {
         // ModelMapper is a pure transformer here — stub it so convertToDto returns
         // a non-null dto without asserting on the mapping itself.
         lenient().when(modelMapper.map(order, OrderDto.class)).thenReturn(new OrderDto());
+    }
+
+    @Test
+    void getAllOrders_returnsRepositorySummaryPage() {
+        Pageable pageable = PageRequest.of(0, 20);
+        OrderSummaryDto summary = new OrderSummaryDto(
+                ORDER_ID, OWNER_ID, "a@b.com", LocalDate.now(), BigDecimal.TEN, OrderStatus.PENDING);
+        Page<OrderSummaryDto> page = new PageImpl<>(List.of(summary), pageable, 1);
+        when(orderRepository.findAllSummaries(pageable)).thenReturn(page);
+
+        Page<OrderSummaryDto> result = orderService.getAllOrders(pageable);
+
+        assertThat(result.getContent()).containsExactly(summary);
+        verify(orderRepository).findAllSummaries(pageable);
     }
 
     @Test

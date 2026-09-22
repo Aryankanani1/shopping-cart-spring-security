@@ -4,11 +4,14 @@ import { authApi } from '../api/auth'
 import type { RegisterBody } from '../api/auth'
 import { getSession, setSession, subscribe } from '../api/tokenStore'
 import type { AuthSession } from '../api/tokenStore'
+import { isAdminToken } from '../lib/jwt'
 
 interface AuthContextValue {
   session: AuthSession | null
   isAuthenticated: boolean
   userId: number | null
+  /** Derived from the access token's `roles` claim — UI gating only; the server enforces authz. */
+  isAdmin: boolean
   login: (email: string, password: string) => Promise<void>
   register: (body: RegisterBody) => Promise<void>
   logout: () => Promise<void>
@@ -45,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isAuthenticated: session !== null,
       userId: session?.id ?? null,
+      isAdmin: isAdminToken(session?.token),
       login,
       register,
       logout,
