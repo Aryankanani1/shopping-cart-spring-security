@@ -2,8 +2,10 @@ package com.aryan.spring_security_demo.controller;
 
 import com.aryan.spring_security_demo.service.order.OrderServiceInterface;
 import com.aryan.spring_security_demo.dto.OrderDto;
+import com.aryan.spring_security_demo.request.UpdateOrderStatusRequest;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import com.aryan.spring_security_demo.response.SlicedResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,6 +32,31 @@ public class OrderController {
     public ResponseEntity<ApiResponse<?>> getOrderById(@PathVariable Long orderId){
         OrderDto order = orderServiceInterface.getOrder(orderId);
         return ResponseEntity.ok(new ApiResponse<>("Item Order Success!", order));
+    }
+
+    /**
+     * Advance an order along its lifecycle (e.g. PROCESSING → SHIPPED). Admin-only:
+     * the ROLE_ADMIN rule for {@code PATCH /orders/*&#47;status} lives at the edge in
+     * ShopConfig, so this stays free of security wiring. An illegal transition is
+     * rejected as 409 by the service's state-machine check.
+     */
+    @PatchMapping("/{orderId}/status")
+    public ResponseEntity<ApiResponse<?>> updateStatus(
+            @PathVariable Long orderId,
+            @Valid @RequestBody UpdateOrderStatusRequest request){
+        OrderDto order = orderServiceInterface.updateStatus(orderId, request.getStatus());
+        return ResponseEntity.ok(new ApiResponse<>("Order status updated", order));
+    }
+
+    /**
+     * Cancel an order and restock its items. Allowed for the order's owner (or an
+     * admin) and only while still PENDING/PROCESSING — the service enforces both,
+     * returning 403 for a non-owner and 409 once the order has shipped.
+     */
+    @PostMapping("/{orderId}/cancel")
+    public ResponseEntity<ApiResponse<?>> cancelOrder(@PathVariable Long orderId){
+        OrderDto order = orderServiceInterface.cancelOrder(orderId);
+        return ResponseEntity.ok(new ApiResponse<>("Order cancelled", order));
     }
 
     /** Largest slice a client may request; a bigger ?size is clamped to this. */

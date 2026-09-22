@@ -155,6 +155,13 @@ public class ShopConfig {
                                     "/api/v1/products/**",
                                     "/api/v1/categories/**",
                                     "/api/v1/images/**").hasAuthority("ROLE_ADMIN")
+                            // Advancing an order's status (PROCESSING/SHIPPED/DELIVERED)
+                            // is a fulfillment action, so it is admin-only at the edge —
+                            // like the catalog writes above. Cancellation is deliberately
+                            // NOT here: it is a POST that a customer may perform on their
+                            // own order, so its ownership rule lives in the service layer.
+                            .requestMatchers(HttpMethod.PATCH,
+                                    "/api/v1/orders/*/status").hasAuthority("ROLE_ADMIN")
                             // Everything else — carts, orders, user management — requires
                             // authentication; object-level ownership is then enforced in
                             // the service layer (see AuthUtils / CartService).
