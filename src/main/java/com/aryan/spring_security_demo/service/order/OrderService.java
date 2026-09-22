@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo.service.order;
 
 import com.aryan.spring_security_demo.service.cart.CartService;
 import com.aryan.spring_security_demo.dto.OrderDto;
+import com.aryan.spring_security_demo.dto.OrderSummaryDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;
 import com.aryan.spring_security_demo.exception.InvalidOrderStateException;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
@@ -17,7 +18,9 @@ import com.aryan.spring_security_demo.response.SlicedResponse;
 import com.aryan.spring_security_demo.security.AuthUtils;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,6 +69,15 @@ public class OrderService implements OrderServiceInterface{
         // order is still a 404, not a 403 that would confirm the id exists.
         authUtils.requireSelfOrAdmin(order.getUserId());
         return order;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<OrderSummaryDto> getAllOrders(Pageable pageable) {
+        // Admin-only listing (gated at the edge in ShopConfig); returns lightweight
+        // summaries straight from a projection query — no per-order authz needed
+        // because an admin may see every order.
+        return orderRepository.findAllSummaries(pageable);
     }
 
     @Override

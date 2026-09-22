@@ -2,11 +2,16 @@ package com.aryan.spring_security_demo.controller;
 
 import com.aryan.spring_security_demo.service.order.OrderServiceInterface;
 import com.aryan.spring_security_demo.dto.OrderDto;
+import com.aryan.spring_security_demo.dto.OrderSummaryDto;
 import com.aryan.spring_security_demo.request.UpdateOrderStatusRequest;
 import com.aryan.spring_security_demo.response.ApiResponse;
+import com.aryan.spring_security_demo.response.PagedResponse;
 import com.aryan.spring_security_demo.response.SlicedResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -28,10 +33,23 @@ public class OrderController {
         return ResponseEntity.created(location).body(new ApiResponse<>("Item Order Success!", order));
     }
 
-    @GetMapping("/{orderId}")
+    @GetMapping("/{orderId:\\d+}")
     public ResponseEntity<ApiResponse<?>> getOrderById(@PathVariable Long orderId){
         OrderDto order = orderServiceInterface.getOrder(orderId);
         return ResponseEntity.ok(new ApiResponse<>("Item Order Success!", order));
+    }
+
+    /**
+     * Admin order list — every order, newest first, paginated. Admin-only: the
+     * {@code GET /orders/admin} ROLE_ADMIN rule lives at the edge in ShopConfig,
+     * so a normal user can never enumerate other customers' orders here. Returns
+     * {@link OrderSummaryDto} (no item breakdown) — enough to drive the table.
+     */
+    @GetMapping("/admin")
+    public ResponseEntity<ApiResponse<PagedResponse<OrderSummaryDto>>> getAllOrders(
+            @PageableDefault(size = DEFAULT_SIZE) Pageable pageable) {
+        Page<OrderSummaryDto> page = orderServiceInterface.getAllOrders(pageable);
+        return ResponseEntity.ok(new ApiResponse<>("Success!", PagedResponse.from(page)));
     }
 
     /**

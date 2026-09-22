@@ -810,3 +810,173 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Admin section — order/product/category management. Reuses the app's tokens
+   (ink, line, accent, radius) so it reads as part of the same store, not a
+   bolted-on dashboard.
+   ------------------------------------------------------------------------- */
+.admin-title {
+  margin: 0.2rem 0 1.2rem;
+}
+.admin-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1.6rem;
+}
+.admin-tab {
+  padding: 0.6rem 1rem;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.admin-tab:hover {
+  color: var(--ink);
+}
+.admin-tab.is-active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* Toolbar above a table (e.g. the "New product" button). */
+.admin-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+/* Tables ------------------------------------------------------------------ */
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94rem;
+}
+.admin-table th,
+.admin-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.admin-table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.admin-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.admin-table tbody tr:hover {
+  background: var(--card);
+}
+.admin-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.admin-table__right {
+  text-align: right;
+  white-space: nowrap;
+}
+.admin-select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  text-transform: capitalize;
+}
+
+/* Pager ------------------------------------------------------------------- */
+.admin-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  margin-top: 1.4rem;
+}
+
+/* Forms ------------------------------------------------------------------- */
+.admin-form {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+  margin-bottom: 1.6rem;
+  background: var(--card);
+}
+.admin-form__title {
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
+}
+.admin-form__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.admin-field__label {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.admin-form__actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 1.2rem;
+}
+.admin-inline-form {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 1.4rem;
+  max-width: 480px;
+}
+.admin-inline-form--tight {
+  margin-bottom: 0;
+  max-width: none;
+  flex: 1;
+}
+
+/* Simple list (categories) ------------------------------------------------ */
+.admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.admin-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.admin-list__row:last-child {
+  border-bottom: none;
+}
+.admin-list__name {
+  font-weight: 500;
+}
+.admin-list__actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.linkbtn--danger {
+  color: var(--danger);
+}

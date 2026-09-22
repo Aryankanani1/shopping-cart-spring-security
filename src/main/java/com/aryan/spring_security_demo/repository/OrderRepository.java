@@ -1,6 +1,8 @@
 package com.aryan.spring_security_demo.repository;
 
+import com.aryan.spring_security_demo.dto.OrderSummaryDto;
 import com.aryan.spring_security_demo.model.Order;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -56,4 +58,20 @@ public interface OrderRepository extends JpaRepository<Order,Long> {
             "LEFT JOIN FETCH o.orderItems oi LEFT JOIN FETCH oi.product " +
             "WHERE o.Id = :orderId")
     Optional<Order> findByIdWithItems(@Param("orderId") Long orderId);
+
+    /**
+     * Admin order list: a page of every order, newest first, as lightweight
+     * summaries. A constructor expression selects scalar columns only (plus the
+     * customer id/email via the {@code user} join), so no order-item collection is
+     * touched — the table view has no need for it, and this keeps the query a
+     * single flat, index-friendly scan. Ordering matches the user-facing history
+     * (createdAt DESC, id DESC) for a stable, total order across pages.
+     */
+    @Query("""
+            SELECT new com.aryan.spring_security_demo.dto.OrderSummaryDto(
+                o.id, o.user.id, o.user.email, o.localDate, o.totalAmount, o.orderStatus)
+            FROM Order o
+            ORDER BY o.createdAt DESC, o.id DESC
+            """)
+    Page<OrderSummaryDto> findAllSummaries(Pageable pageable);
 }

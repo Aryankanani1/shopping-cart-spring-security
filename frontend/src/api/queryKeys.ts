@@ -20,5 +20,10 @@ export const queryKeys = {
     all: ['orders'] as const,
     history: (userId: number | null) => ['orders', 'history', userId] as const,
     detail: (id: number) => ['orders', 'detail', id] as const,
+    adminList: (page: number) => ['orders', 'admin', page] as const,
+  },
+  admin: {
+    products: (page: number) => ['admin', 'products', page] as const,
+    categories: ['admin', 'categories'] as const,
   },
 } as const
