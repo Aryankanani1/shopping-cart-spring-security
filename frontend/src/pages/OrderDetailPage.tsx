@@ -1,5 +1,5 @@
 import { Link, useLocation, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ordersApi } from '../api/orders'
 import { queryKeys } from '../api/queryKeys'
 import { errMessage } from '../lib/errors'
@@ -7,11 +7,16 @@ import { Loader, ErrorNote } from '../components/ui'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatDate, formatMoney } from '../lib/format'
 
+// Statuses from which the owner may still cancel — mirrors the server's rule
+// (PENDING/PROCESSING only; once SHIPPED it can no longer be cancelled).
+const CANCELLABLE = new Set(['PENDING', 'PROCESSING'])
+
 export function OrderDetailPage() {
   const { id } = useParams()
   const orderId = Number(id)
   const location = useLocation()
   const justPlaced = (location.state as { justPlaced?: boolean } | null)?.justPlaced ?? false
+  const queryClient = useQueryClient()
 
   const {
     data: order,
@@ -23,6 +28,15 @@ export function OrderDetailPage() {
     enabled: Number.isFinite(orderId),
   })
   const error = queryError ? errMessage(queryError) : null
+
+  const cancel = useMutation({
+    mutationFn: () => ordersApi.cancel(orderId),
+    onSuccess: (updated) => {
+      // Push the returned order into the detail cache and refresh any history list.
+      queryClient.setQueryData(queryKeys.orders.detail(orderId), updated)
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
+    },
+  })
 
   if (loading) {
     return (
@@ -65,8 +79,23 @@ export function OrderDetailPage() {
         <div className="order-head__meta">
           <StatusBadge status={order.status} />
           <span className="price order-head__total">{formatMoney(order.totalAmount)}</span>
+          {CANCELLABLE.has(order.status) && (
+            <button
+              className="linkbtn"
+              onClick={() => {
+                if (window.confirm('Cancel this order? Items will be returned to stock.')) {
+                  cancel.mutate()
+                }
+              }}
+              disabled={cancel.isPending}
+            >
+              {cancel.isPending ? 'Cancelling…' : 'Cancel order'}
+            </button>
+          )}
         </div>
       </div>
+
+      {cancel.isError && <ErrorNote message={errMessage(cancel.error)} />}
 
       <ul className="order-items">
         <li className="order-item order-item--head">

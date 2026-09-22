@@ -73,6 +73,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Resource already exists", ex.getMessage());
     }
 
+    /** 409 — an order-status change that the lifecycle state machine forbids. */
+    @ExceptionHandler(InvalidOrderStateException.class)
+    public ProblemDetail handleInvalidOrderState(InvalidOrderStateException ex) {
+        log.debug("409 Invalid order state: {}", ex.getMessage());
+        return problem(HttpStatus.CONFLICT, "Invalid order state", ex.getMessage());
+    }
+
     /** 401 — a bad or expired JWT surfaced from within a controller. */
     @ExceptionHandler(JwtException.class)
     public ProblemDetail handleJwt(JwtException ex) {

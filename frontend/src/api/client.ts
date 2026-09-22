@@ -8,7 +8,7 @@ const API_ROOT = (import.meta.env.VITE_API_BASE_URL ?? '') + '/api/v1'
 export type QueryValue = string | number | boolean | null | undefined
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   /** JSON request body; serialized and sent as application/json. */
   body?: unknown
   /** Query params; nullish and empty-string values are dropped. */

@@ -12,4 +12,11 @@ export const ordersApi = {
     request<SlicedResponse<OrderDto>>('/orders', {
       query: { userId, cursor: cursor ?? undefined, size },
     }),
+
+  /** Advance an order's lifecycle status (admin only, e.g. PROCESSING → SHIPPED). */
+  updateStatus: (orderId: number, status: string) =>
+    request<OrderDto>(`/orders/${orderId}/status`, { method: 'PATCH', body: { status } }),
+
+  /** Cancel an order (owner or admin, while PENDING/PROCESSING); restocks inventory. */
+  cancel: (orderId: number) => request<OrderDto>(`/orders/${orderId}/cancel`, { method: 'POST' }),
 }

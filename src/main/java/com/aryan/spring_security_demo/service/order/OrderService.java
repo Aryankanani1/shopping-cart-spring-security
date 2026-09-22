@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.service.order;
 import com.aryan.spring_security_demo.service.cart.CartService;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;
+import com.aryan.spring_security_demo.exception.InvalidOrderStateException;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.Order;
@@ -65,6 +66,59 @@ public class OrderService implements OrderServiceInterface{
         // order is still a 404, not a 403 that would confirm the id exists.
         authUtils.requireSelfOrAdmin(order.getUserId());
         return order;
+    }
+
+    @Override
+    @Transactional
+    public OrderDto updateStatus(Long orderId, OrderStatus newStatus) {
+        // Admin-only fulfillment action; the edge rule in ShopConfig already
+        // requires ROLE_ADMIN for PATCH /orders/*/status, so no owner check here.
+        Order order = loadOrderWithItems(orderId);
+        applyTransition(order, newStatus);
+        return convertToDto(order);
+    }
+
+    @Override
+    @Transactional
+    public OrderDto cancelOrder(Long orderId) {
+        Order order = loadOrderWithItems(orderId);
+        // Owner or admin only. Checked after the fetch so a missing order stays a
+        // 404 rather than a 403 that would confirm the id exists (IDOR).
+        authUtils.requireSelfOrAdmin(order.getUser().getId());
+        applyTransition(order, OrderStatus.CANCELLED);
+        return convertToDto(order);
+    }
+
+    /**
+     * Apply a single lifecycle transition to a managed order: validate it against
+     * the state machine, restock inventory when cancelling, then set the new
+     * status. The order is already managed, so the status change (and any restock)
+     * flushes at the transaction boundary; {@code @Version} guards concurrent
+     * changes, surfacing as a 409 via the global handler.
+     */
+    private void applyTransition(Order order, OrderStatus target) {
+        OrderStatus current = order.getOrderStatus();
+        if (!current.canTransitionTo(target)) {
+            throw new InvalidOrderStateException(
+                    "Cannot change order status from " + current + " to " + target);
+        }
+        if (target == OrderStatus.CANCELLED) {
+            restock(order);
+        }
+        order.setOrderStatus(target);
+    }
+
+    /** Return each item's quantity to product inventory when an order is cancelled. */
+    private void restock(Order order) {
+        order.getOrderItems().forEach(item -> {
+            Product product = item.getProduct();
+            product.setInventory(product.getInventory() + item.getQuantity());
+        });
+    }
+
+    private Order loadOrderWithItems(Long orderId) {
+        return orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("order not found!"));
     }
 
     private Order careatOrder(Cart cart){
