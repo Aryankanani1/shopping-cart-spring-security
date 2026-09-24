@@ -104,6 +104,7 @@ export function CartPage() {
                   <div className="cart-line__qty">
                     <QuantityStepper
                       value={item.quantity}
+                      max={Math.max(1, Math.min(item.product.inventory, 99))}
                       busy={busy}
                       onChange={(v) => changeQty(item.itemId, v)}
                     />

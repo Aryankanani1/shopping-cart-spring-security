@@ -4,9 +4,12 @@ import com.aryan.spring_security_demo.service.cart.CartService;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.dto.OrderSummaryDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;
+import com.aryan.spring_security_demo.exception.EmptyCartException;
+import com.aryan.spring_security_demo.exception.InsufficientStockException;
 import com.aryan.spring_security_demo.exception.InvalidOrderStateException;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
+import com.aryan.spring_security_demo.model.CartItem;
 import com.aryan.spring_security_demo.model.Order;
 import com.aryan.spring_security_demo.model.OrderItem;
 import com.aryan.spring_security_demo.model.Product;
@@ -48,6 +51,12 @@ public class OrderService implements OrderServiceInterface{
         // A user may only place an order for themselves; an admin may act for anyone.
         authUtils.requireSelfOrAdmin(userId);
         Cart cart = cartService.getCartByUserId(userId);
+        // The cart is deleted after every order and recreated on the next
+        // add-to-cart, so "no cart" and "empty cart" both mean nothing to buy.
+        if (cart == null || cart.getCartItems().isEmpty()) {
+            throw new EmptyCartException("Your cart is empty");
+        }
+        requireStock(cart);
         Order order = careatOrder(cart);
         applyShippingAddress(order, shippingAddress);
         List<OrderItem> orderItems = createOrderItems(cart);
@@ -156,6 +165,23 @@ public class OrderService implements OrderServiceInterface{
         order.setPostalCode(address.getPostalCode());
         order.setCountry(address.getCountry());
     }
+
+    /**
+     * Reject the order if any line asks for more than is in stock now — inventory
+     * may have dropped since the item went into the cart. Every line is checked
+     * before any is decremented. The decrement itself is guarded by Product's
+     * {@code @Version}, so two checkouts racing for the last unit cannot both
+     * succeed: the loser fails at commit and gets a 409 via the global handler.
+     */
+    private void requireStock(Cart cart){
+        for (CartItem item : cart.getCartItems()) {
+            Product product = item.getProduct();
+            if (item.getQuantity() > product.getInventory()) {
+                throw new InsufficientStockException(product.getName(), product.getInventory());
+            }
+        }
+    }
+
     private List<OrderItem> createOrderItems(Cart cart){
         //keeping track of the inventory by calculating the total price
         return cart.getCartItems().stream()

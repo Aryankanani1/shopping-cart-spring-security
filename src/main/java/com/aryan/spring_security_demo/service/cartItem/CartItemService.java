@@ -2,7 +2,9 @@ package com.aryan.spring_security_demo.service.cartItem;
 
 import com.aryan.spring_security_demo.service.cart.CartService;
 import com.aryan.spring_security_demo.service.product.ProductService;
+import com.aryan.spring_security_demo.exception.InsufficientStockException;
 import com.aryan.spring_security_demo.exception.ProductNotFoundException;
+import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.CartItem;
 import com.aryan.spring_security_demo.model.Product;
@@ -11,8 +13,6 @@ import com.aryan.spring_security_demo.repository.CartRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
@@ -38,6 +38,9 @@ public class CartItemService implements CartItemServiceInterface {
                 .stream()
                 .filter(item -> item.getProduct().getId().equals(productId))
                 .findFirst().orElse(new CartItem());
+        // Check the combined quantity: the cart may already hold some of this
+        // product (a new CartItem starts at 0).
+        requireStock(product, cartItem.getQuantity() + quantity);
         if(cartItem.getId() == null){
            cartItem.setCart(cart);
            cartItem.setProduct(product);
@@ -65,19 +68,28 @@ public class CartItemService implements CartItemServiceInterface {
 
     @Override
     @Transactional
-    public void updateItemQuantity(Long cartId, Long productId, int quantity) {
+    public void updateItemQuantity(Long cartId, Long itemId, int quantity) {
 
         Cart cart = cartService.getCart(cartId);
-        cart.getCartItems().stream().filter(item -> item.getProduct().getId().equals(productId))
-                .findFirst().ifPresent(item -> {
-                            item.setQuantity(quantity);
-                            item.setUnitPrice(item.getProduct().getPrice());
-                            item.setTotalPrice();
-                        });
-                    BigDecimal totalAmount = cart.getCartItems().stream().map(CartItem::getTotalPrice)
-                                    .reduce(BigDecimal.ZERO,BigDecimal::add);
-                    cart.setTotalAmount(totalAmount);
-                    cartRepository.save(cart);
+        // Match on the cart line's own id — the id the API path carries — not the
+        // product id.
+        CartItem item = cart.getCartItems().stream()
+                .filter(line -> line.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("cart item not found"));
+        Product product = item.getProduct();
+        requireStock(product, quantity);
+        item.setQuantity(quantity);
+        item.setUnitPrice(product.getPrice());
+        item.setTotalPrice();
+        cart.updateTotalAmount();
+        cartRepository.save(cart);
+    }
+
+    private void requireStock(Product product, int quantity) {
+        if (quantity > product.getInventory()) {
+            throw new InsufficientStockException(product.getName(), product.getInventory());
+        }
     }
 
 
