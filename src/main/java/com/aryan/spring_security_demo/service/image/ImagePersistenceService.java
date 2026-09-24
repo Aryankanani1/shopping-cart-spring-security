@@ -24,7 +24,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ImagePersistenceService {
 
-    private static final String DOWNLOAD_URL_PREFIX = "/api/v1/images/image/download/";
+    /**
+     * Path of the public download endpoint ({@code GET /images/{id}} on
+     * ImageController); an image's stored URL is this prefix plus its id. Shared
+     * with SampleProductRunner so seeded and uploaded images can't drift apart.
+     */
+    public static final String DOWNLOAD_URL_PREFIX = "/api/v1/images/";
 
     private final ImageRepository imageRepository;
     private final ProductServiceInterface productServiceInterface;

@@ -9,6 +9,7 @@ import { errMessage } from '../../lib/errors'
 import { formatMoney } from '../../lib/format'
 import { Loader, ErrorNote, EmptyState } from '../../components/ui'
 import { ProductForm } from './ProductForm'
+import { ProductImages } from './ProductImages'
 
 export function AdminProductsPage() {
   const [page, setPage] = useState(0)
@@ -32,9 +33,11 @@ export function AdminProductsPage() {
   const save = useMutation({
     mutationFn: (input: ProductInput) =>
       editing && editing !== 'new' ? productsApi.update(editing.id, input) : productsApi.create(input),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       invalidate()
-      setEditing(null)
+      // A new product stays open (now in edit mode) so images can be added right
+      // away — uploads need the product's id. Saving an edit closes the form.
+      setEditing(editing === 'new' ? saved : null)
     },
   })
 
@@ -65,6 +68,8 @@ export function AdminProductsPage() {
           error={save.isError ? errMessage(save.error) : null}
         />
       )}
+
+      {editing !== null && editing !== 'new' && <ProductImages key={editing.id} productId={editing.id} />}
 
       {remove.isError && <ErrorNote message={errMessage(remove.error)} />}
 

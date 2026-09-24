@@ -82,6 +82,18 @@ describe('request', () => {
     expect(JSON.parse(init.body)).toEqual({ email: 'a@b.com', password: 'x' })
   })
 
+  it('sends a FormData body as-is, leaving the multipart content-type to the browser', async () => {
+    fetchMock.mockResolvedValueOnce(resp(201, { message: 'ok', data: [] }))
+    const form = new FormData()
+    form.append('files', new File(['x'], 'a.png', { type: 'image/png' }))
+
+    await request('/images', { method: 'POST', body: form })
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.body).toBe(form)
+    expect(init.headers['Content-Type']).toBeUndefined()
+  })
+
   it('returns undefined for 204 No Content', async () => {
     fetchMock.mockResolvedValueOnce(resp(204))
     const data = await request('/carts/1/items', { method: 'DELETE' })

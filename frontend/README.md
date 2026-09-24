@@ -112,10 +112,11 @@ src/
   cart (and its id, needed for quantity/remove/clear) is read back from
   `GET /users/{id}` → `cart`. `CartContext` centralises this.
 - **Product images** are served at `GET /api/v1/images/{id}` (public). The client
-  builds `src` from the image id via `imageUrl()`. Note the backend's stored
-  `downloadUrl` field currently points at a non-matching path
-  (`/images/image/download/{id}`) and is intentionally **not** used here — worth
-  fixing backend-side.
+  builds `src` from the image id via `imageUrl()` rather than using `downloadUrl`,
+  because `downloadUrl` is a same-origin path and `imageUrl()` honours
+  `VITE_API_BASE_URL` when the API lives on another origin. Admins upload and
+  remove images from the product edit form (`POST /images`, multipart:
+  JPEG/PNG/WebP/GIF, up to 5 MB each).
 - **Sorting** is allowlisted to `id, name, price, brand`; the sort dropdown only
   offers those.
 

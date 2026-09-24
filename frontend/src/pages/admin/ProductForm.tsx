@@ -41,6 +41,7 @@ export function ProductForm({ initial, categories, onSubmit, onCancel, busy, err
   return (
     <form className="admin-form" onSubmit={handleSubmit}>
       <h2 className="admin-form__title serif">{initial ? `Edit ${initial.name}` : 'New product'}</h2>
+      {!initial && <p className="faint">You can add images once the product is created.</p>}
 
       {error && <ErrorNote message={error} />}
 

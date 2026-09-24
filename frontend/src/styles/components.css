@@ -977,6 +977,33 @@
   gap: 1rem;
 }
 
+/* Product images (admin) ------------------------------------------------- */
+.admin-images {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1rem;
+}
+.admin-images__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+.admin-images__thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.admin-images__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+}
+
 .linkbtn--danger {
   color: var(--danger);
 }

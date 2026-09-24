@@ -9,7 +9,10 @@ export type QueryValue = string | number | boolean | null | undefined
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-  /** JSON request body; serialized and sent as application/json. */
+  /**
+   * Request body. A FormData is sent as-is (multipart, e.g. image uploads);
+   * anything else is serialized and sent as application/json.
+   */
   body?: unknown
   /** Query params; nullish and empty-string values are dropped. */
   query?: Record<string, QueryValue>
@@ -122,8 +125,11 @@ async function doRequest<T>(path: string, opts: RequestOptions, allowRefresh: bo
   const session = getSession()
   if (useAuth && session) headers.Authorization = `Bearer ${session.token}`
 
-  let body: string | undefined
-  if (opts.body !== undefined) {
+  let body: BodyInit | undefined
+  if (opts.body instanceof FormData) {
+    // No Content-Type: the browser sets multipart/form-data with its boundary.
+    body = opts.body
+  } else if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json'
     body = JSON.stringify(opts.body)
   }
