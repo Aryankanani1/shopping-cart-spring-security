@@ -116,6 +116,21 @@ export function OrderDetailPage() {
           </li>
         ))}
       </ul>
+
+      {order.addressLine1 && (
+        <div className="order-address">
+          <span className="eyebrow">Shipping to</span>
+          <address className="order-address__body">
+            {order.recipientName && <div>{order.recipientName}</div>}
+            <div>{order.addressLine1}</div>
+            {order.addressLine2 && <div>{order.addressLine2}</div>}
+            <div>
+              {[order.city, order.state, order.postalCode].filter(Boolean).join(', ')}
+            </div>
+            {order.country && <div>{order.country}</div>}
+          </address>
+        </div>
+      )}
     </div>
   )
 }

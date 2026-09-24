@@ -11,6 +11,7 @@ import com.aryan.spring_security_demo.model.Order;
 import com.aryan.spring_security_demo.model.OrderItem;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.pagination.OrderCursor;
+import com.aryan.spring_security_demo.request.PlaceOrderRequest;
 import com.aryan.spring_security_demo.repository.OrderKeysetRow;
 import com.aryan.spring_security_demo.repository.OrderRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
@@ -43,11 +44,12 @@ public class OrderService implements OrderServiceInterface{
     private final ModelMapper modelMapper;
     @Override
     @Transactional
-    public OrderDto placeOrder(Long userId) {
+    public OrderDto placeOrder(Long userId, PlaceOrderRequest shippingAddress) {
         // A user may only place an order for themselves; an admin may act for anyone.
         authUtils.requireSelfOrAdmin(userId);
         Cart cart = cartService.getCartByUserId(userId);
         Order order = careatOrder(cart);
+        applyShippingAddress(order, shippingAddress);
         List<OrderItem> orderItems = createOrderItems(cart);
         orderItems.forEach(order::addOrderItem);
         order.setTotalAmount(calculateTotalAmount(orderItems));
@@ -142,6 +144,17 @@ public class OrderService implements OrderServiceInterface{
         order.setLocalDate(LocalDate.now());
         return order;
 
+    }
+
+    /** Copy the checkout address onto the order as a shipping snapshot. */
+    private void applyShippingAddress(Order order, PlaceOrderRequest address){
+        order.setRecipientName(address.getRecipientName());
+        order.setAddressLine1(address.getAddressLine1());
+        order.setAddressLine2(address.getAddressLine2());
+        order.setCity(address.getCity());
+        order.setState(address.getState());
+        order.setPostalCode(address.getPostalCode());
+        order.setCountry(address.getCountry());
     }
     private List<OrderItem> createOrderItems(Cart cart){
         //keeping track of the inventory by calculating the total price

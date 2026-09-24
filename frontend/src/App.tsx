@@ -11,6 +11,7 @@ import { ProductDetailPage } from './pages/ProductDetailPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { CartPage } from './pages/CartPage'
+import { CheckoutPage } from './pages/CheckoutPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { OrderDetailPage } from './pages/OrderDetailPage'
 import { AccountPage } from './pages/AccountPage'
@@ -45,6 +46,14 @@ export default function App() {
               element={
                 <RequireAuth>
                   <CartPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/checkout"
+              element={
+                <RequireAuth>
+                  <CheckoutPage />
                 </RequireAuth>
               }
             />

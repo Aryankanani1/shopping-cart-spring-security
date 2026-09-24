@@ -53,6 +53,17 @@ public class Order {
 
     private BigDecimal totalAmount;
 
+    // Shipping address — a snapshot captured at checkout (V3 migration), stored on
+    // the order itself so it reflects where THIS order shipped, independent of any
+    // later profile changes. Nullable for orders created before the feature existed.
+    private String recipientName;
+    private String addressLine1;
+    private String addressLine2;
+    private String city;
+    private String state;
+    private String postalCode;
+    private String country;
+
     @BatchSize(size = 20)
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL,orphanRemoval = true, fetch = FetchType.LAZY)
     Set<OrderItem> orderItems = new HashSet<>();

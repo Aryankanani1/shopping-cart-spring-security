@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { imageUrl } from '../api/client'
-import { ordersApi } from '../api/orders'
-import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { QuantityStepper } from '../components/QuantityStepper'
 import { Loader, ErrorNote, EmptyState } from '../components/ui'
@@ -10,12 +8,10 @@ import { errMessage } from '../lib/errors'
 import { formatMoney } from '../lib/format'
 
 export function CartPage() {
-  const { userId } = useAuth()
-  const { cart, loading, refresh, setQuantity, removeItem, clear } = useCart()
+  const { cart, loading, setQuantity, removeItem, clear } = useCart()
   const navigate = useNavigate()
 
   const [busyItem, setBusyItem] = useState<number | null>(null)
-  const [placing, setPlacing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const items = cart?.cartItems ?? []
@@ -53,18 +49,9 @@ export function CartPage() {
     }
   }
 
-  async function checkout() {
-    if (!userId) return
-    setPlacing(true)
-    setError(null)
-    try {
-      const order = await ordersApi.place(userId)
-      await refresh()
-      navigate(`/orders/${order.id}`, { state: { justPlaced: true } })
-    } catch (err) {
-      setError(errMessage(err))
-      setPlacing(false)
-    }
+  // Order placement (with the shipping address) happens on the checkout page.
+  function goToCheckout() {
+    navigate('/checkout')
   }
 
   if (loading && !cart) {
@@ -152,10 +139,10 @@ export function CartPage() {
               <span>Total</span>
               <span className="price">{formatMoney(cart?.totalAmount)}</span>
             </div>
-            <button className="btn btn--accent btn--block" onClick={checkout} disabled={placing}>
-              {placing ? 'Placing order…' : 'Checkout'}
+            <button className="btn btn--accent btn--block" onClick={goToCheckout}>
+              Checkout
             </button>
-            <button className="linkbtn cart-summary__clear" onClick={emptyBag} disabled={placing}>
+            <button className="linkbtn cart-summary__clear" onClick={emptyBag}>
               Empty bag
             </button>
           </aside>

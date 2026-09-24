@@ -67,6 +67,17 @@ export interface OrderItemDto {
   price: number
 }
 
+/** Shipping address captured at checkout and stored on the order. */
+export interface ShippingAddress {
+  recipientName: string
+  addressLine1: string
+  addressLine2?: string
+  city: string
+  state: string
+  postalCode: string
+  country: string
+}
+
 export interface OrderDto {
   id: number
   userId: number
@@ -74,6 +85,13 @@ export interface OrderDto {
   orderDate: string
   totalAmount: number
   status: string
+  recipientName?: string
+  addressLine1?: string
+  addressLine2?: string
+  city?: string
+  state?: string
+  postalCode?: string
+  country?: string
   items: OrderItemDto[]
 }
 

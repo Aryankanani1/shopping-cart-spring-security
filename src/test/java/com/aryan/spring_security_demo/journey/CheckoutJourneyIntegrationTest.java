@@ -133,16 +133,23 @@ class CheckoutJourneyIntegrationTest {
                 .as("cart total = unit price * quantity")
                 .isEqualByComparingTo(expectedTotal);
 
-        // 3) CHECKOUT — place the order for this user.
+        // 3) CHECKOUT — place the order for this user, with a shipping address.
+        String addressBody = """
+                {"recipientName":"Test Shopper","addressLine1":"1 Test St","addressLine2":"",
+                 "city":"Testville","state":"TS","postalCode":"12345","country":"Testland"}
+                """;
         MvcResult orderResult = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + token)
-                        .param("userId", String.valueOf(userId)))
+                        .param("userId", String.valueOf(userId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(addressBody))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("Item Order Success!"))
                 .andReturn();
 
         JsonNode order = dataOf(orderResult);
         assertThat(order.path("status").asText()).isEqualTo("PENDING");
+        assertThat(order.path("city").asText()).isEqualTo("Testville");
         assertThat(order.path("userId").asLong()).isEqualTo(userId);
         assertThat(order.path("items")).hasSize(1);
         assertThat(order.path("totalAmount").decimalValue())
