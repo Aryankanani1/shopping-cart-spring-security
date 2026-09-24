@@ -3,6 +3,8 @@ package com.aryan.spring_security_demo.service.order;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.dto.OrderSummaryDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;
+import com.aryan.spring_security_demo.exception.EmptyCartException;
+import com.aryan.spring_security_demo.exception.InsufficientStockException;
 import com.aryan.spring_security_demo.exception.InvalidOrderStateException;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.model.Cart;
@@ -40,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -148,6 +151,50 @@ class OrderServiceTest {
         assertThat(saved.getOrderItems()).hasSize(1);
         // And the cart is emptied after a successful order.
         verify(cartService).clearCart(99L);
+    }
+
+    @Test
+    void placeOrder_withNoCart_isRejectedAsEmpty() {
+        // The cart is deleted after each order, so a repeat checkout finds none.
+        when(cartService.getCartByUserId(OWNER_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> orderService.placeOrder(OWNER_ID, new PlaceOrderRequest()))
+                .isInstanceOf(EmptyCartException.class);
+
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void placeOrder_withEmptyCart_isRejected() {
+        Cart cart = new Cart();
+        cart.setId(99L);
+        when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
+
+        assertThatThrownBy(() -> orderService.placeOrder(OWNER_ID, new PlaceOrderRequest()))
+                .isInstanceOf(EmptyCartException.class);
+
+        verify(orderRepository, never()).save(any());
+        verify(cartService, never()).clearCart(any());
+    }
+
+    @Test
+    void placeOrder_lineBeyondStock_isRejectedAndInventoryUntouched() {
+        // Stock fell to 5 after 6 went into the cart.
+        CartItem ci = new CartItem();
+        ci.setProduct(product);
+        ci.setQuantity(6);
+        ci.setUnitPrice(BigDecimal.TEN);
+        Cart cart = new Cart();
+        cart.setId(99L);
+        cart.getCartItems().add(ci);
+        when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
+
+        assertThatThrownBy(() -> orderService.placeOrder(OWNER_ID, new PlaceOrderRequest()))
+                .isInstanceOf(InsufficientStockException.class);
+
+        assertThat(product.getInventory()).isEqualTo(5);
+        verify(orderRepository, never()).save(any());
+        verify(cartService, never()).clearCart(any());
     }
 
     @Test
