@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.model.Image;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.repository.CategoryRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
+import com.aryan.spring_security_demo.service.image.ImagePersistenceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -52,8 +53,6 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class SampleProductRunner implements ApplicationRunner {
-
-    private static final String DOWNLOAD_URL_PREFIX = "/api/v1/images/";
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
@@ -115,7 +114,7 @@ public class SampleProductRunner implements ApplicationRunner {
             // set the download URL from that id and save again (dirty-checked flush).
             Product saved = productRepository.save(product);
             Image image = saved.getImageList().get(0);
-            image.setURL(DOWNLOAD_URL_PREFIX + image.getId());
+            image.setURL(ImagePersistenceService.DOWNLOAD_URL_PREFIX + image.getId());
             productRepository.save(saved);
             created++;
         }

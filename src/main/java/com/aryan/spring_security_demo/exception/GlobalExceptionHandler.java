@@ -154,6 +154,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, "Invalid pagination cursor", ex.getMessage());
     }
 
+    /** 400 — an uploaded file is empty or not a supported image type. */
+    @ExceptionHandler(InvalidImageException.class)
+    public ProblemDetail handleInvalidImage(InvalidImageException ex) {
+        log.debug("400 Invalid image: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, "Invalid image", ex.getMessage());
+    }
+
     /**
      * 400 — constraints on {@code @Validated} controller method parameters. Not
      * covered by the base class (it is a Bean Validation exception, not an MVC
