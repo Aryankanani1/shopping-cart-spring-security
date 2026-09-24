@@ -3,13 +3,15 @@ package com.aryan.spring_security_demo.service.order;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.dto.OrderSummaryDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;
+import com.aryan.spring_security_demo.request.PlaceOrderRequest;
 import com.aryan.spring_security_demo.response.SlicedResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface OrderServiceInterface {
 
-    OrderDto placeOrder(Long userId);
+    /** Turn the user's cart into an order shipped to the given address. */
+    OrderDto placeOrder(Long userId, PlaceOrderRequest shippingAddress);
     OrderDto getOrder(Long orderId);
 
     /** A page of all orders (newest first) as summaries — admin order management. */

@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { OrderDto, OrderSummaryDto, PagedResponse, SlicedResponse } from './types'
+import type { OrderDto, OrderSummaryDto, PagedResponse, ShippingAddress, SlicedResponse } from './types'
 
 /** The order lifecycle states, in fulfillment order (mirrors the backend enum). */
 export const ORDER_STATUSES = [
@@ -24,8 +24,9 @@ export const NEXT_STATUSES: Record<string, string[]> = {
 }
 
 export const ordersApi = {
-  /** Turn the user's cart into an order (clears the cart server-side). */
-  place: (userId: number) => request<OrderDto>('/orders', { method: 'POST', query: { userId } }),
+  /** Turn the user's cart into an order shipped to `address` (clears the cart server-side). */
+  place: (userId: number, address: ShippingAddress) =>
+    request<OrderDto>('/orders', { method: 'POST', query: { userId }, body: address }),
 
   get: (orderId: number) => request<OrderDto>(`/orders/${orderId}`),
 

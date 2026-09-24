@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.controller;
 import com.aryan.spring_security_demo.service.order.OrderServiceInterface;
 import com.aryan.spring_security_demo.dto.OrderDto;
 import com.aryan.spring_security_demo.dto.OrderSummaryDto;
+import com.aryan.spring_security_demo.request.PlaceOrderRequest;
 import com.aryan.spring_security_demo.request.UpdateOrderStatusRequest;
 import com.aryan.spring_security_demo.response.ApiResponse;
 import com.aryan.spring_security_demo.response.PagedResponse;
@@ -26,8 +27,9 @@ public class OrderController {
     private final OrderServiceInterface orderServiceInterface;
 
     @PostMapping
-    public ResponseEntity<ApiResponse<?>> createOrder(@RequestParam Long userId){
-        OrderDto order = orderServiceInterface.placeOrder(userId);
+    public ResponseEntity<ApiResponse<?>> createOrder(@RequestParam Long userId,
+                                                      @Valid @RequestBody PlaceOrderRequest shippingAddress){
+        OrderDto order = orderServiceInterface.placeOrder(userId, shippingAddress);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(order.getId()).toUri();
         return ResponseEntity.created(location).body(new ApiResponse<>("Item Order Success!", order));

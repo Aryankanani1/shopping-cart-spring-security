@@ -980,3 +980,56 @@
 .linkbtn--danger {
   color: var(--danger);
 }
+
+/* ---------------------------------------------------------------------------
+   Checkout — shipping address form + order summary, side by side.
+   ------------------------------------------------------------------------- */
+.checkout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 2rem;
+  align-items: start;
+}
+.checkout__field {
+  margin-bottom: 1rem;
+}
+.checkout__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.checkout__note {
+  text-align: center;
+  margin-top: 0.75rem;
+}
+.checkout__items {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+.checkout__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  font-size: 0.94rem;
+}
+
+/* Shipping address block on the order detail page. */
+.order-address {
+  margin-top: 2rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line);
+}
+.order-address__body {
+  font-style: normal;
+  margin-top: 0.5rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+@media (max-width: 720px) {
+  .checkout {
+    grid-template-columns: 1fr;
+  }
+}

@@ -5,17 +5,21 @@ import com.aryan.spring_security_demo.dto.OrderSummaryDto;
 import com.aryan.spring_security_demo.enums.OrderStatus;
 import com.aryan.spring_security_demo.exception.InvalidOrderStateException;
 import com.aryan.spring_security_demo.exception.ResourceNotFoundException;
+import com.aryan.spring_security_demo.model.Cart;
+import com.aryan.spring_security_demo.model.CartItem;
 import com.aryan.spring_security_demo.model.Order;
 import com.aryan.spring_security_demo.model.OrderItem;
 import com.aryan.spring_security_demo.model.Product;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.OrderRepository;
 import com.aryan.spring_security_demo.repository.ProductRepository;
+import com.aryan.spring_security_demo.request.PlaceOrderRequest;
 import com.aryan.spring_security_demo.security.AuthUtils;
 import com.aryan.spring_security_demo.service.cart.CartService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +37,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -93,6 +99,55 @@ class OrderServiceTest {
 
         assertThat(result.getContent()).containsExactly(summary);
         verify(orderRepository).findAllSummaries(pageable);
+    }
+
+    @Test
+    void placeOrder_persistsShippingAddressAndClearsCart() {
+        // A cart with one item, owned by OWNER_ID.
+        Product p = new Product();
+        p.setId(7L);
+        p.setInventory(5);
+        CartItem ci = new CartItem();
+        ci.setProduct(p);
+        ci.setQuantity(2);
+        ci.setUnitPrice(BigDecimal.TEN);
+        User owner = new User();
+        owner.setId(OWNER_ID);
+        Cart cart = new Cart();
+        cart.setId(99L);
+        cart.setUser(owner);
+        cart.getCartItems().add(ci);
+
+        when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(modelMapper.map(any(Order.class), eq(OrderDto.class))).thenReturn(new OrderDto());
+
+        PlaceOrderRequest addr = new PlaceOrderRequest();
+        addr.setRecipientName("Ada Lovelace");
+        addr.setAddressLine1("1 Analytical Way");
+        addr.setAddressLine2("Apt 2");
+        addr.setCity("London");
+        addr.setState("LDN");
+        addr.setPostalCode("EC1A");
+        addr.setCountry("UK");
+
+        orderService.placeOrder(OWNER_ID, addr);
+
+        // The saved order carries the address snapshot, starts PENDING, and has the item.
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(captor.capture());
+        Order saved = captor.getValue();
+        assertThat(saved.getRecipientName()).isEqualTo("Ada Lovelace");
+        assertThat(saved.getAddressLine1()).isEqualTo("1 Analytical Way");
+        assertThat(saved.getAddressLine2()).isEqualTo("Apt 2");
+        assertThat(saved.getCity()).isEqualTo("London");
+        assertThat(saved.getState()).isEqualTo("LDN");
+        assertThat(saved.getPostalCode()).isEqualTo("EC1A");
+        assertThat(saved.getCountry()).isEqualTo("UK");
+        assertThat(saved.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(saved.getOrderItems()).hasSize(1);
+        // And the cart is emptied after a successful order.
+        verify(cartService).clearCart(99L);
     }
 
     @Test
