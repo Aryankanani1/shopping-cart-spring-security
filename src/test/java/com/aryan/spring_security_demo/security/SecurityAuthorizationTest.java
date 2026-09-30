@@ -1,15 +1,15 @@
 package com.aryan.spring_security_demo.security;
 
-import com.aryan.spring_security_demo.model.Cart;
-import com.aryan.spring_security_demo.model.Role;
-import com.aryan.spring_security_demo.model.User;
-import com.aryan.spring_security_demo.repository.CartItemRepository;
-import com.aryan.spring_security_demo.repository.CartRepository;
-import com.aryan.spring_security_demo.repository.OrderRepository;
-import com.aryan.spring_security_demo.repository.RefreshTokenRepository;
-import com.aryan.spring_security_demo.repository.RoleRepository;
-import com.aryan.spring_security_demo.repository.UserRepository;
-import com.aryan.spring_security_demo.security.user.UserDetails;
+import com.aryan.spring_security_demo.cart.Cart;
+import com.aryan.spring_security_demo.cart.CartItemRepository;
+import com.aryan.spring_security_demo.cart.CartRepository;
+import com.aryan.spring_security_demo.identity.RefreshTokenRepository;
+import com.aryan.spring_security_demo.identity.Role;
+import com.aryan.spring_security_demo.identity.RoleRepository;
+import com.aryan.spring_security_demo.identity.User;
+import com.aryan.spring_security_demo.identity.UserRepository;
+import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.order.OrderRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

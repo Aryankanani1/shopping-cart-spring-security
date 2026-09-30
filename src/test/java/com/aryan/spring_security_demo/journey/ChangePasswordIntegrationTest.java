@@ -1,10 +1,10 @@
 package com.aryan.spring_security_demo.journey;
 
-import com.aryan.spring_security_demo.model.Role;
-import com.aryan.spring_security_demo.model.User;
-import com.aryan.spring_security_demo.repository.RefreshTokenRepository;
-import com.aryan.spring_security_demo.repository.RoleRepository;
-import com.aryan.spring_security_demo.repository.UserRepository;
+import com.aryan.spring_security_demo.identity.RefreshTokenRepository;
+import com.aryan.spring_security_demo.identity.Role;
+import com.aryan.spring_security_demo.identity.RoleRepository;
+import com.aryan.spring_security_demo.identity.User;
+import com.aryan.spring_security_demo.identity.UserRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;

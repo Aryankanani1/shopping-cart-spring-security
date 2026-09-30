@@ -69,6 +69,7 @@ Environment variables:
 | `JWT_REFRESH_EXPIRATION_MS` | optional   | Refresh-token lifetime, default `604800000` (7d)   |
 | `APP_RATELIMIT_EVICTION_CRON` | optional | Sweep of replenished rate-limit buckets, default hourly |
 | `APP_WISHLIST_ALERT_CRON` | optional       | Wishlist reminder/alert scan, default every minute (`-` disables) |
+| `APP_MODULES_WISHLIST_ENABLED` | optional  | `false` switches the whole wishlist module off (default `true`) |
 
 In **dev** the datasource falls back to a local MySQL (`localhost:3306`,
 `root`, empty password) so the app boots out of the box; any value can still be
@@ -89,19 +90,56 @@ The API is served under the `api.prefix` (default `/api/v1`).
 
 ## Architecture
 
+The code is organised **by feature module**, not by layer: each module package
+holds its own controllers, services, repositories, entities, DTOs and
+exceptions.
+
 ```
-controller/   REST controllers (Auth, Product, Cart, CartItem, Category, Image, Order, User, Wishlist, Notification)
-Service/      Interface + impl per domain (+ cache/ for read-through catalog caching)
-repository/   Spring Data JPA repositories
-model/        JPA entities (User, Role, Product, Category, Image, Cart, CartItem, Order, OrderItem, WishlistItem, Notification)
-dto/ request/ response/   API boundary objects
-security/     config (shopConfig), jwt (AuthTokenFilter, JwtUtils, JwtEntryPoint), ratelimit (RateLimitFilter/Service), user details
-aop/          LoggingAspect — @Around advice logging service-layer entry/exit/timing
-config/       CacheConfig + AopConfig + OpenApiConfig + typed @ConfigurationProperties (StartupProperties, AuthTokenProperties)
-bootstrap/    Ordered startup runners (see below)
-data/         DataInitializer (roles, all envs) + DevDataSeeder (@Profile("dev") test users)
-resources/    application*.yml + db/migration/ (Flyway migrations: V1__baseline.sql, …)
+common/        Shared infrastructure: config (cache, scheduling, AOP, clock, OpenAPI),
+               aop/ (logging + security-audit aspects), exception/ (global handler),
+               web/ (ApiResponse, paging envelopes), validation/, bootstrap/ (startup diagnostics)
+identity/      Users, roles, auth (login/refresh/logout/password), refresh tokens, role
+               + dev-user seeding; security/ (filter chain, JWT, rate limiting, ownership checks)
+catalog/       Products, categories, images, catalog caching, catalog seeding + cache warm-up
+cart/          Carts and cart items
+order/         Checkout, order lifecycle, keyset-paged history
+notification/  In-app inbox
+wishlist/      Wishlist, dated reminders, price/stock alert job   (optional module)
+resources/     application*.yml + db/migration/ (Flyway migrations: V1__baseline.sql, …)
 ```
+
+Dependencies point one way: `catalog` ← `cart` ← `order`; `identity` and
+`catalog` ← `wishlist` → `notification`; everything may use `common`.
+
+### Modular component scanning
+
+There is **no app-wide component scan**. `SpringSecurityDemoApplication` uses
+`@SpringBootConfiguration` + `@EnableAutoConfiguration` (not
+`@SpringBootApplication`) and lists its modules with `@Import`:
+
+```java
+@Import({ CommonModule.class, IdentityModule.class, CatalogModule.class, CartModule.class,
+          OrderModule.class, NotificationModule.class, WishlistModule.class })
+```
+
+Each `XxxModule` class is marked `@ModuleConfiguration`, which scans **only that
+module's package** (components and `@ConfigurationProperties`). So the
+application's contents are stated in one place rather than implied by where
+files happen to sit, and a module can be conditional as a unit:
+
+- **Optional module** — `WishlistModule` is `@ConditionalOnBooleanProperty`
+  on `app.modules.wishlist.enabled`. Setting `APP_MODULES_WISHLIST_ENABLED=false`
+  removes its endpoints, services and scheduled alert job, with no code change.
+  Its tables and repository stay, so switching it back on resumes where it left off.
+- **Slice tests still work** — module scans apply Boot's `TypeExcludeFilter`
+  (as `@SpringBootApplication` does), which is how `@WebMvcTest` narrows scanning
+  to the web layer.
+- **Persistence stays app-wide** — `@EnableAutoConfiguration` registers the
+  root package, so entities and repositories are found in every module. Declaring
+  `@EnableJpaRepositories` per module would break the database-less test slices.
+- **Guard rail** — a class in a package no module covers is never registered.
+  `ModuleCompositionTest` fails if one appears, and proves a stray `@Component`
+  outside every module is not picked up.
 
 ### Configuration & profiles
 - **Typed, validated config**: `app.startup.*` and `auth.token.*` bind to
@@ -238,7 +276,8 @@ path carries a user id.
 ## Startup pipeline
 
 Initial setup is handled by ordered `ApplicationRunner` / `CommandLineRunner`
-beans in the `bootstrap` package. Spring sorts **all** runners together by
+beans (catalog seeding/warm-up in `catalog`, diagnostics in `common.bootstrap`).
+Spring sorts **all** runners together by
 `@Order` and invokes them **ascending — lowest number runs first**. Gaps of 10
 are left intentionally so new runners can be inserted (e.g. `@Order(25)`).
 
@@ -290,8 +329,12 @@ transaction — required because `spring.jpa.open-in-view=false`. Swap the cache
 manager for Redis/Caffeine in production; the annotations stay unchanged.
 
 ### Cross-cutting logging (AOP)
-`LoggingAspect` (package `aop`) is a single `@Around` aspect over every public
-method of the service layer (`execution(public * ...service..*.*(..))`). It logs
+`LoggingAspect` (package `common.aop`) is a single `@Around` aspect over every
+public method of every `@Service`. Because each module holds its own services, a
+layer is no longer a package, so layers are matched **by annotation** — the
+shared pointcuts live in `Layers` (`services()`, `requestHandlers()`), limited to
+this application's packages (otherwise library controllers such as springdoc's
+would be advised too) and leaving out the per-request security infrastructure. It logs
 method entry, successful exit with elapsed time at **DEBUG**, and failures with
 the exception type/message at **ERROR** before rethrowing — so tracing and timing
 live in one place instead of being scattered through each service, and the
@@ -307,7 +350,7 @@ by default; enable it in dev with:
 ```yaml
 logging:
   level:
-    com.aryan.spring_security_demo.aop: DEBUG
+    com.aryan.spring_security_demo.common.aop: DEBUG
 ```
 
 ## Default seed data

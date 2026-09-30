@@ -1,0 +1,238 @@
+package com.aryan.spring_security_demo.order;
+
+import com.aryan.spring_security_demo.cart.Cart;
+import com.aryan.spring_security_demo.cart.CartItem;
+import com.aryan.spring_security_demo.cart.CartService;
+import com.aryan.spring_security_demo.catalog.InsufficientStockException;
+import com.aryan.spring_security_demo.catalog.Product;
+import com.aryan.spring_security_demo.catalog.ProductRepository;
+import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
+import com.aryan.spring_security_demo.common.web.SlicedResponse;
+import com.aryan.spring_security_demo.identity.security.AuthUtils;
+import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class OrderService implements OrderServiceInterface{
+
+    private final OrderRepository orderRepository;
+    private final ProductRepository  productRepository;
+    private final CartService cartService;
+    private final AuthUtils authUtils;
+
+    private final ModelMapper modelMapper;
+    @Override
+    @Transactional
+    public OrderDto placeOrder(Long userId, PlaceOrderRequest shippingAddress) {
+        // A user may only place an order for themselves; an admin may act for anyone.
+        authUtils.requireSelfOrAdmin(userId);
+        Cart cart = cartService.getCartByUserId(userId);
+        // The cart is deleted after every order and recreated on the next
+        // add-to-cart, so "no cart" and "empty cart" both mean nothing to buy.
+        if (cart == null || cart.getCartItems().isEmpty()) {
+            throw new EmptyCartException("Your cart is empty");
+        }
+        requireStock(cart);
+        Order order = careatOrder(cart);
+        applyShippingAddress(order, shippingAddress);
+        List<OrderItem> orderItems = createOrderItems(cart);
+        orderItems.forEach(order::addOrderItem);
+        order.setTotalAmount(calculateTotalAmount(orderItems));
+        Order savedOrdered = orderRepository.save(order);
+
+        cartService.clearCart(cart.getId());
+
+        return convertToDto(savedOrdered);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public OrderDto getOrder(Long orderId) {
+        OrderDto order = orderRepository.
+                findByIdWithItems(orderId).
+                map(this::convertToDto)
+                .orElseThrow(() -> new ResourceNotFoundException("order not found!"));
+        // Reject reading another user's order (IDOR) — after the fetch so a missing
+        // order is still a 404, not a 403 that would confirm the id exists.
+        authUtils.requireSelfOrAdmin(order.getUserId());
+        return order;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<OrderSummaryDto> getAllOrders(Pageable pageable) {
+        // Admin-only listing (gated at the edge in ShopConfig); returns lightweight
+        // summaries straight from a projection query — no per-order authz needed
+        // because an admin may see every order.
+        return orderRepository.findAllSummaries(pageable);
+    }
+
+    @Override
+    @Transactional
+    public OrderDto updateStatus(Long orderId, OrderStatus newStatus) {
+        // Admin-only fulfillment action; the edge rule in ShopConfig already
+        // requires ROLE_ADMIN for PATCH /orders/*/status, so no owner check here.
+        Order order = loadOrderWithItems(orderId);
+        applyTransition(order, newStatus);
+        return convertToDto(order);
+    }
+
+    @Override
+    @Transactional
+    public OrderDto cancelOrder(Long orderId) {
+        Order order = loadOrderWithItems(orderId);
+        // Owner or admin only. Checked after the fetch so a missing order stays a
+        // 404 rather than a 403 that would confirm the id exists (IDOR).
+        authUtils.requireSelfOrAdmin(order.getUser().getId());
+        applyTransition(order, OrderStatus.CANCELLED);
+        return convertToDto(order);
+    }
+
+    /**
+     * Apply a single lifecycle transition to a managed order: validate it against
+     * the state machine, restock inventory when cancelling, then set the new
+     * status. The order is already managed, so the status change (and any restock)
+     * flushes at the transaction boundary; {@code @Version} guards concurrent
+     * changes, surfacing as a 409 via the global handler.
+     */
+    private void applyTransition(Order order, OrderStatus target) {
+        OrderStatus current = order.getOrderStatus();
+        if (!current.canTransitionTo(target)) {
+            throw new InvalidOrderStateException(
+                    "Cannot change order status from " + current + " to " + target);
+        }
+        if (target == OrderStatus.CANCELLED) {
+            restock(order);
+        }
+        order.setOrderStatus(target);
+    }
+
+    /** Return each item's quantity to product inventory when an order is cancelled. */
+    private void restock(Order order) {
+        order.getOrderItems().forEach(item -> {
+            Product product = item.getProduct();
+            product.setInventory(product.getInventory() + item.getQuantity());
+        });
+    }
+
+    private Order loadOrderWithItems(Long orderId) {
+        return orderRepository.findByIdWithItems(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("order not found!"));
+    }
+
+    private Order careatOrder(Cart cart){
+
+        Order order = new Order();
+        //set the user
+        order.setUser(cart.getUser());
+        order.setOrderStatus(OrderStatus.PENDING);
+        order.setLocalDate(LocalDate.now());
+        return order;
+
+    }
+
+    /** Copy the checkout address onto the order as a shipping snapshot. */
+    private void applyShippingAddress(Order order, PlaceOrderRequest address){
+        order.setRecipientName(address.getRecipientName());
+        order.setAddressLine1(address.getAddressLine1());
+        order.setAddressLine2(address.getAddressLine2());
+        order.setCity(address.getCity());
+        order.setState(address.getState());
+        order.setPostalCode(address.getPostalCode());
+        order.setCountry(address.getCountry());
+    }
+
+    /**
+     * Reject the order if any line asks for more than is in stock now — inventory
+     * may have dropped since the item went into the cart. Every line is checked
+     * before any is decremented. The decrement itself is guarded by Product's
+     * {@code @Version}, so two checkouts racing for the last unit cannot both
+     * succeed: the loser fails at commit and gets a 409 via the global handler.
+     */
+    private void requireStock(Cart cart){
+        for (CartItem item : cart.getCartItems()) {
+            Product product = item.getProduct();
+            if (item.getQuantity() > product.getInventory()) {
+                throw new InsufficientStockException(product.getName(), product.getInventory());
+            }
+        }
+    }
+
+    private List<OrderItem> createOrderItems(Cart cart){
+        //keeping track of the inventory by calculating the total price
+        return cart.getCartItems().stream()
+                .map(cartItem -> {
+                    Product product = cartItem.getProduct();
+                    product.setInventory(product.getInventory() - cartItem.getQuantity());
+                    productRepository.save(product);
+                    // the order is wired in by Order.addOrderItem (owning side)
+                    return
+                           new OrderItem(product,
+                                 cartItem.getQuantity(),
+                                 cartItem.getUnitPrice());
+
+                }).toList();
+    }
+
+    private BigDecimal calculateTotalAmount(List<OrderItem> orderItemList){
+        return  orderItemList.stream()
+                .map(item -> item.getPrice()
+                        .multiply(new BigDecimal(item.getQuantity()))).reduce(BigDecimal.ZERO,BigDecimal::add);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SlicedResponse<OrderDto> getUserOrders(Long userId, String cursor, int size) {
+        // Order history is private: only the owner (or an admin) may page it.
+        authUtils.requireSelfOrAdmin(userId);
+        OrderCursor from = OrderCursor.decode(cursor);
+
+        // Phase 1: index-backed keyset scan for this page of ids. Fetch one extra
+        // row so we can tell whether a further slice exists without a COUNT.
+        List<OrderKeysetRow> rows = orderRepository.findUserOrderKeyset(
+                userId,
+                from == null ? null : from.createdAt(),
+                from == null ? null : from.id(),
+                PageRequest.of(0, size + 1));
+
+        boolean hasNext = rows.size() > size;
+        List<OrderKeysetRow> pageRows = hasNext ? rows.subList(0, size) : rows;
+
+        if (pageRows.isEmpty()) {
+            return new SlicedResponse<>(List.of(), size, 0, false, null);
+        }
+
+        // Phase 2: hydrate the page's orders (items + products) in one JOIN FETCH,
+        // then re-impose the keyset order that the id list already carries.
+        List<Long> ids = pageRows.stream().map(OrderKeysetRow::getId).toList();
+        Map<Long, Order> byId = orderRepository.findWithItemsByIdIn(ids).stream()
+                .collect(Collectors.toMap(Order::getId, Function.identity()));
+        List<OrderDto> content = ids.stream()
+                .map(byId::get)
+                .map(this::convertToDto)
+                .toList();
+
+        OrderKeysetRow last = pageRows.get(pageRows.size() - 1);
+        String nextCursor = hasNext
+                ? new OrderCursor(last.getCreatedAt(), last.getId()).encode()
+                : null;
+        return new SlicedResponse<>(content, size, content.size(), hasNext, nextCursor);
+    }
+
+    private OrderDto convertToDto(Order order){
+        return modelMapper.map(order,OrderDto.class);
+    }
+}
