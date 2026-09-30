@@ -80,6 +80,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Invalid order state", ex.getMessage());
     }
 
+    /** 409 — a cart line or order asks for more units than are in stock. */
+    @ExceptionHandler(InsufficientStockException.class)
+    public ProblemDetail handleInsufficientStock(InsufficientStockException ex) {
+        log.debug("409 Insufficient stock: {}", ex.getMessage());
+        return problem(HttpStatus.CONFLICT, "Insufficient stock", ex.getMessage());
+    }
+
+    /** 409 — checkout attempted with nothing in the cart. */
+    @ExceptionHandler(EmptyCartException.class)
+    public ProblemDetail handleEmptyCart(EmptyCartException ex) {
+        log.debug("409 Empty cart: {}", ex.getMessage());
+        return problem(HttpStatus.CONFLICT, "Cart is empty", ex.getMessage());
+    }
+
     /** 401 — a bad or expired JWT surfaced from within a controller. */
     @ExceptionHandler(JwtException.class)
     public ProblemDetail handleJwt(JwtException ex) {

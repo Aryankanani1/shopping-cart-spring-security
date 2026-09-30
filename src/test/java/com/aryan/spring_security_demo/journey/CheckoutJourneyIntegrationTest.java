@@ -25,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
 import java.util.Set;
@@ -32,6 +33,7 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -54,6 +56,10 @@ class CheckoutJourneyIntegrationTest {
     private static final BigDecimal UNIT_PRICE = new BigDecimal("19.99");
     private static final int INITIAL_INVENTORY = 10;
     private static final int ORDER_QUANTITY = 2;
+    private static final String ADDRESS_BODY = """
+            {"recipientName":"Test Shopper","addressLine1":"1 Test St","addressLine2":"",
+             "city":"Testville","state":"TS","postalCode":"12345","country":"Testland"}
+            """;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -134,15 +140,11 @@ class CheckoutJourneyIntegrationTest {
                 .isEqualByComparingTo(expectedTotal);
 
         // 3) CHECKOUT — place the order for this user, with a shipping address.
-        String addressBody = """
-                {"recipientName":"Test Shopper","addressLine1":"1 Test St","addressLine2":"",
-                 "city":"Testville","state":"TS","postalCode":"12345","country":"Testland"}
-                """;
         MvcResult orderResult = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + token)
                         .param("userId", String.valueOf(userId))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(addressBody))
+                        .content(ADDRESS_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("Item Order Success!"))
                 .andReturn();
@@ -216,6 +218,82 @@ class CheckoutJourneyIntegrationTest {
                 .andExpect(jsonPath("$.data.cart.cartItems", org.hamcrest.Matchers.hasSize(1)))
                 .andExpect(jsonPath("$.data.cart.cartItems[0].quantity").value(ORDER_QUANTITY))
                 .andExpect(jsonPath("$.data.cart.cartItems[0].product.name").value("Wireless Mouse"));
+    }
+
+    @Test
+    @DisplayName("PUT quantity addresses the cart line by its item id and updates the cart")
+    void updateQuantity_byItemId_updatesLineAndTotal() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+        addToCart(token, 1).andExpect(status().isCreated());
+
+        Long cartId = cartRepository.findByUserId(userId).getId();
+        Long itemId = cartItemRepository.findAll().get(0).getId();
+
+        mockMvc.perform(put("/api/v1/cartItems/cart/{cartId}/item/{itemId}", cartId, itemId)
+                        .header("Authorization", "Bearer " + token)
+                        .param("quantity", "3"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/carts/{cartId}", cartId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cartItems[0].quantity").value(3))
+                .andExpect(jsonPath("$.data.totalAmount").value(59.97));
+    }
+
+    @Test
+    @DisplayName("adding more than is in stock returns 409 and adds nothing")
+    void addToCart_beyondStock_isConflict() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+
+        addToCart(token, INITIAL_INVENTORY + 1)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Insufficient stock"))
+                .andExpect(jsonPath("$.detail").value("Only 10 of Wireless Mouse left in stock"));
+
+        assertThat(cartItemRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("a quantity below 1 is a 400 validation error")
+    void addToCart_zeroQuantity_isBadRequest() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+
+        addToCart(token, 0)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Validation failed"));
+    }
+
+    @Test
+    @DisplayName("checkout with no cart returns 409, not a 500")
+    void checkout_withNoCart_isConflict() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+
+        placeOrder(token)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Cart is empty"));
+
+        assertThat(orderRepository.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("checkout after stock dropped below the cart quantity returns 409 and changes nothing")
+    void checkout_whenStockDroppedBelowCart_isConflict() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+        addToCart(token, ORDER_QUANTITY).andExpect(status().isCreated());
+
+        // Someone else bought most of the stock after this shopper filled the cart.
+        Product product = productRepository.findById(productId).orElseThrow();
+        product.setInventory(1);
+        productRepository.save(product);
+
+        placeOrder(token)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Insufficient stock"));
+
+        assertThat(orderRepository.count()).isZero();
+        assertThat(productRepository.findById(productId).orElseThrow().getInventory()).isEqualTo(1);
+        assertThat(cartItemRepository.count()).as("cart kept so the shopper can adjust it").isEqualTo(1);
     }
 
     @Test
@@ -316,6 +394,21 @@ class CheckoutJourneyIntegrationTest {
                 .andExpect(jsonPath("$.data.token").isNotEmpty())
                 .andReturn();
         return dataOf(result).path("token").asText();
+    }
+
+    private ResultActions addToCart(String token, int quantity) throws Exception {
+        return mockMvc.perform(post("/api/v1/cartItems")
+                .header("Authorization", "Bearer " + token)
+                .param("productId", String.valueOf(productId))
+                .param("quantity", String.valueOf(quantity)));
+    }
+
+    private ResultActions placeOrder(String token) throws Exception {
+        return mockMvc.perform(post("/api/v1/orders")
+                .header("Authorization", "Bearer " + token)
+                .param("userId", String.valueOf(userId))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ADDRESS_BODY));
     }
 
     private String loginBody(String email, String password) throws Exception {

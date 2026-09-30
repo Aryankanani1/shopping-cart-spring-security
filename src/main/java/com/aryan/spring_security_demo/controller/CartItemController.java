@@ -6,14 +6,17 @@ import com.aryan.spring_security_demo.service.user.UserServiceInterface;
 import com.aryan.spring_security_demo.model.Cart;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.response.ApiResponse;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import static org.springframework.http.HttpStatus.CREATED;
 
 @RequiredArgsConstructor
 @RestController
+@Validated
 @RequestMapping("${api.prefix}/cartItems")
 public class CartItemController {
 
@@ -25,7 +28,7 @@ public class CartItemController {
     @PostMapping
     public ResponseEntity<ApiResponse<?>> addItemToCart(
             @RequestParam Long productId,
-            @RequestParam Integer quantity){
+            @RequestParam @Min(value = 1, message = "Quantity must be at least 1") Integer quantity){
 
         User user = userServiceInterface.getAuthenticatedUser();
         Cart cart = cartServiceInterface.initializeNewCart(user);
@@ -49,7 +52,7 @@ public class CartItemController {
     public ResponseEntity<ApiResponse<?>> updateItemQuantity(
             @PathVariable Long cartId,
             @PathVariable Long itemId,
-            @RequestParam Integer quantity
+            @RequestParam @Min(value = 1, message = "Quantity must be at least 1") Integer quantity
     ) {
         cartItemServiceInterface.updateItemQuantity(cartId, itemId, quantity);
         return ResponseEntity.ok(new ApiResponse<>("item updated successfully", null));
