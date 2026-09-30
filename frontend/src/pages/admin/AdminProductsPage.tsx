@@ -22,7 +22,7 @@ export function AdminProductsPage() {
     queryFn: () => productsApi.list({ page, size: 20, sort: 'id' }),
     placeholderData: keepPreviousData,
   })
-  const categories = useQuery({ queryKey: queryKeys.categories, queryFn: categoriesApi.list })
+  const categories = useQuery({ queryKey: queryKeys.categories, queryFn: () => categoriesApi.list() })
 
   // A write touches both the admin list and the public catalogue.
   function invalidate() {
