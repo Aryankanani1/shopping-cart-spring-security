@@ -67,7 +67,13 @@ public class UserService implements UserServiceInterface{
     @Transactional
     public void deleteUser(Long userId) {
         authUtils.requireSelfOrAdmin(userId);
-        userRepository.findById(userId).ifPresentOrElse(userRepository::delete, () -> {
+        userRepository.findById(userId).ifPresentOrElse(user -> {
+            // refresh_tokens.user_id is a foreign key that User doesn't map (so no
+            // cascade), and any signed-in user has at least one token row — clear
+            // them first or the delete fails on the constraint (surfacing as 409).
+            refreshTokenService.endAllSessions(userId);
+            userRepository.delete(user);
+        }, () -> {
             throw new UserNotFoundException("failed to find user");
         });
     }
