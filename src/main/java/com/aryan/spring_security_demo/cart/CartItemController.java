@@ -1,0 +1,57 @@
+package com.aryan.spring_security_demo.cart;
+
+import com.aryan.spring_security_demo.common.web.ApiResponse;
+import com.aryan.spring_security_demo.identity.User;
+import com.aryan.spring_security_demo.identity.UserServiceInterface;
+import jakarta.validation.constraints.Min;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+import static org.springframework.http.HttpStatus.CREATED;
+
+@RequiredArgsConstructor
+@RestController
+@Validated
+@RequestMapping("${api.prefix}/cartItems")
+public class CartItemController {
+
+    private final CartItemServiceInterface cartItemServiceInterface;
+    private final CartServiceInterface cartServiceInterface;
+    private final UserServiceInterface userServiceInterface;
+
+
+    @PostMapping
+    public ResponseEntity<ApiResponse<?>> addItemToCart(
+            @RequestParam Long productId,
+            @RequestParam @Min(value = 1, message = "Quantity must be at least 1") Integer quantity){
+
+        User user = userServiceInterface.getAuthenticatedUser();
+        Cart cart = cartServiceInterface.initializeNewCart(user);
+
+        cartItemServiceInterface.addItemToCart(cart.getId(), productId, quantity);
+        return ResponseEntity.status(CREATED).body(new ApiResponse<>("add item successfully!", null));
+    }
+
+
+    @DeleteMapping("/cart/{cartId}/product/{productId}")
+    public ResponseEntity<ApiResponse<?>> removeItemFromCart(
+            @PathVariable Long cartId,
+            @PathVariable Long productId
+    ){
+        cartItemServiceInterface.removeItemFromCart(cartId, productId);
+        return ResponseEntity.noContent().build();
+    }
+
+
+    @PutMapping("/cart/{cartId}/item/{itemId}")
+    public ResponseEntity<ApiResponse<?>> updateItemQuantity(
+            @PathVariable Long cartId,
+            @PathVariable Long itemId,
+            @RequestParam @Min(value = 1, message = "Quantity must be at least 1") Integer quantity
+    ) {
+        cartItemServiceInterface.updateItemQuantity(cartId, itemId, quantity);
+        return ResponseEntity.ok(new ApiResponse<>("item updated successfully", null));
+    }
+}

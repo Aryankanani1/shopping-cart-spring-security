@@ -1,0 +1,11 @@
+package com.aryan.spring_security_demo.cart;
+
+
+public interface CartItemServiceInterface {
+     void addItemToCart(Long CartId, Long productId, Integer quantity);
+
+     void removeItemFromCart(Long cartId, Long productId);
+
+     void updateItemQuantity(Long cartId, Long itemId, int quantity);
+     CartItem getCartItem(Long cartId, Long productId);
+}

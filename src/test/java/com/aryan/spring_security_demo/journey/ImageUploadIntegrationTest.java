@@ -1,9 +1,9 @@
 package com.aryan.spring_security_demo.journey;
 
-import com.aryan.spring_security_demo.model.Category;
-import com.aryan.spring_security_demo.model.Product;
-import com.aryan.spring_security_demo.repository.CategoryRepository;
-import com.aryan.spring_security_demo.repository.ProductRepository;
+import com.aryan.spring_security_demo.catalog.Category;
+import com.aryan.spring_security_demo.catalog.CategoryRepository;
+import com.aryan.spring_security_demo.catalog.Product;
+import com.aryan.spring_security_demo.catalog.ProductRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
