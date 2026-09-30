@@ -14,7 +14,7 @@ export function AdminCategoriesPage() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.categories,
-    queryFn: categoriesApi.list,
+    queryFn: () => categoriesApi.list(),
   })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.categories })
