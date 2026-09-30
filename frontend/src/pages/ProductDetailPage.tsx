@@ -8,6 +8,7 @@ import { errMessage } from '../lib/errors'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { QuantityStepper } from '../components/QuantityStepper'
+import { WishlistButton } from '../components/WishlistButton'
 import { Loader, ErrorNote } from '../components/ui'
 import { cx, formatMoney, vars } from '../lib/format'
 
@@ -181,6 +182,8 @@ export function ProductDetailPage() {
               {soldOut ? 'Sold out' : adding ? 'Adding…' : 'Add to bag'}
             </button>
           </div>
+
+          <WishlistButton productId={product.id} />
 
           {!isAuthenticated && (
             <p className="faint pdp__signin">

@@ -122,6 +122,11 @@ app:
     # Scheduled sweep of buckets that have refilled to full (bounds memory), as a
     # fixed rate in ms. Non-critical/idempotent, so a plain rate is fine. Hourly.
     eviction-interval-ms: ${APP_RATELIMIT_EVICTION_INTERVAL_MS:3600000}
+  # Wishlist reminder + price/stock alert scan (WishlistAlertJob). Spring cron,
+  # every minute by default so a reminder fires within a minute of its time;
+  # ShedLock makes only one instance run each tick. "-" disables it.
+  wishlist:
+    alert-cron: ${APP_WISHLIST_ALERT_CRON:0 * * * * *}
   startup:
     seed:
       enabled: true

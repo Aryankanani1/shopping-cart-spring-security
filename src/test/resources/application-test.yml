@@ -45,6 +45,10 @@ app:
   # back on (with a low capacity) via @TestPropertySource, in its own context.
   ratelimit:
     enabled: false
+  # Off under test ("-" disables the cron): a background run could race a test
+  # that drives WishlistAlertService directly. Tests call the service themselves.
+  wishlist:
+    alert-cron: "-"
   startup:
     seed:
       enabled: false

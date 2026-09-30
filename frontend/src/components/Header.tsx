@@ -2,6 +2,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
 import { cx } from '../lib/format'
+import { NotificationBell } from './NotificationBell'
 
 export function Header() {
   const { isAuthenticated, isAdmin, logout } = useAuth()
@@ -34,10 +35,16 @@ export function Header() {
               Shop
             </NavLink>
             {isAuthenticated && (
+              <NavLink to="/wishlist" className={navLink}>
+                Wishlist
+              </NavLink>
+            )}
+            {isAuthenticated && (
               <NavLink to="/orders" className={navLink}>
                 Orders
               </NavLink>
             )}
+            {isAuthenticated && <NotificationBell />}
             {isAuthenticated && (
               <NavLink to="/account" className={navLink}>
                 Account
