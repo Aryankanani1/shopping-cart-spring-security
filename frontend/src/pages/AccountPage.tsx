@@ -8,6 +8,7 @@ import { queryKeys } from '../api/queryKeys'
 import { errMessage } from '../lib/errors'
 import { useAuth } from '../context/AuthContext'
 import { Loader, ErrorNote } from '../components/ui'
+import { ChangePasswordForm } from './ChangePasswordForm'
 import { vars } from '../lib/format'
 
 export function AccountPage() {
@@ -106,67 +107,71 @@ export function AccountPage() {
       </div>
 
       <div className="account">
-        <form className="account__card card stack" style={vars({ '--gap': '1.1rem' })} onSubmit={onSubmit}>
-          <h3 className="serif">Profile</h3>
-          {error && <ErrorNote message={error} />}
-          {saved && (
-            <p className="note note--ok" role="status">
-              Your details have been saved.
-            </p>
-          )}
+        <div className="stack" style={vars({ '--gap': 'clamp(1.5rem, 4vw, 3rem)' })}>
+          <form className="account__card card stack" style={vars({ '--gap': '1.1rem' })} onSubmit={onSubmit}>
+            <h3 className="serif">Profile</h3>
+            {error && <ErrorNote message={error} />}
+            {saved && (
+              <p className="note note--ok" role="status">
+                Your details have been saved.
+              </p>
+            )}
 
-          <div className="auth__names">
-            <div>
-              <label className="label" htmlFor="firstName">
-                First name
-              </label>
-              <input
-                id="firstName"
-                className="field"
-                value={firstName}
-                onChange={(e) => {
-                  setFirstName(e.target.value)
-                  setSaved(false)
-                }}
-                required
-              />
-              {fieldErrors.firstName && <span className="field__err">{fieldErrors.firstName}</span>}
+            <div className="auth__names">
+              <div>
+                <label className="label" htmlFor="firstName">
+                  First name
+                </label>
+                <input
+                  id="firstName"
+                  className="field"
+                  value={firstName}
+                  onChange={(e) => {
+                    setFirstName(e.target.value)
+                    setSaved(false)
+                  }}
+                  required
+                />
+                {fieldErrors.firstName && <span className="field__err">{fieldErrors.firstName}</span>}
+              </div>
+              <div>
+                <label className="label" htmlFor="lastName">
+                  Last name
+                </label>
+                <input
+                  id="lastName"
+                  className="field"
+                  value={lastName}
+                  onChange={(e) => {
+                    setLastName(e.target.value)
+                    setSaved(false)
+                  }}
+                  required
+                />
+                {fieldErrors.lastName && <span className="field__err">{fieldErrors.lastName}</span>}
+              </div>
             </div>
+
             <div>
-              <label className="label" htmlFor="lastName">
-                Last name
+              <label className="label" htmlFor="email">
+                Email
               </label>
-              <input
-                id="lastName"
-                className="field"
-                value={lastName}
-                onChange={(e) => {
-                  setLastName(e.target.value)
-                  setSaved(false)
-                }}
-                required
-              />
-              {fieldErrors.lastName && <span className="field__err">{fieldErrors.lastName}</span>}
+              {/* Email is the login identity and isn't editable via the API. */}
+              <input id="email" className="field" type="email" value={user.email} disabled readOnly />
+              <span className="faint">Email can’t be changed.</span>
             </div>
-          </div>
 
-          <div>
-            <label className="label" htmlFor="email">
-              Email
-            </label>
-            {/* Email is the login identity and isn't editable via the API. */}
-            <input id="email" className="field" type="email" value={user.email} disabled readOnly />
-            <span className="faint">Email can’t be changed.</span>
-          </div>
+            <button
+              className="btn btn--accent"
+              type="submit"
+              disabled={!dirty || updateMutation.isPending}
+            >
+              {updateMutation.isPending ? 'Saving…' : 'Save changes'}
+            </button>
+          </form>
 
-          <button
-            className="btn btn--accent"
-            type="submit"
-            disabled={!dirty || updateMutation.isPending}
-          >
-            {updateMutation.isPending ? 'Saving…' : 'Save changes'}
-          </button>
-        </form>
+          <ChangePasswordForm />
+        </div>
 
         <aside className="account__danger card stack" style={vars({ '--gap': '0.75rem' })}>
           <h3 className="serif">Delete account</h3>

@@ -15,6 +15,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>
   register: (body: RegisterBody) => Promise<void>
   logout: () => Promise<void>
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -44,6 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setSession(null)
     }
+    async function changePassword(currentPassword: string, newPassword: string) {
+      // Every existing refresh token (ours included) is dead after this, so adopt
+      // the fresh pair the server hands back to stay signed in.
+      const jwt = await authApi.changePassword(currentPassword, newPassword)
+      setSession({ id: jwt.id, token: jwt.token, refreshToken: jwt.refreshToken })
+    }
     return {
       session,
       isAuthenticated: session !== null,
@@ -52,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      changePassword,
     }
   }, [session])
 

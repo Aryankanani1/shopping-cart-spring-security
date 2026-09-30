@@ -19,4 +19,11 @@ export const authApi = {
   /** Revoke the refresh token server-side. Idempotent. */
   logout: (refreshToken: string) =>
     request<null>('/auth/logout', { method: 'POST', auth: false, body: { refreshToken } }),
+
+  /**
+   * PUT /auth/password — change the caller's password. The server ends every
+   * existing session and returns a fresh token pair for this one.
+   */
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<JwtResponse>('/auth/password', { method: 'PUT', body: { currentPassword, newPassword } }),
 }

@@ -162,6 +162,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
+     * 400 — a password change was rejected (wrong current password, or the new one
+     * is unchanged). Shaped like a validation failure, with the message under the
+     * offending field, so clients render it exactly like an {@code @Valid} error.
+     */
+    @ExceptionHandler(InvalidPasswordException.class)
+    public ProblemDetail handleInvalidPassword(InvalidPasswordException ex) {
+        log.debug("400 Invalid password change: {}", ex.getMessage());
+        ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Validation failed", ex.getMessage());
+        problem.setProperty("errors", Map.of(ex.getField(), ex.getMessage()));
+        return problem;
+    }
+
+    /**
      * 400 — constraints on {@code @Validated} controller method parameters. Not
      * covered by the base class (it is a Bean Validation exception, not an MVC
      * one), so it stays a plain {@code @ExceptionHandler}.

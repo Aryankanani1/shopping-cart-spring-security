@@ -29,6 +29,16 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     int revokeAllForUser(@Param("userId") Long userId);
 
     /**
+     * Hard-delete every token a user holds — used when the password changes.
+     * Deleted rather than revoked on purpose: a revoked token presented later
+     * trips reuse detection, which would also kill the fresh token just issued to
+     * the session that made the change. A deleted token is simply unknown (401).
+     */
+    @Modifying
+    @Query("delete from RefreshToken t where t.user.id = :userId")
+    int deleteAllForUser(@Param("userId") Long userId);
+
+    /**
      * Bulk-delete tokens that expired before {@code cutoff}. Rotation mints a new
      * row on every refresh, so without this the table grows unbounded. Only
      * expired rows are purged: a revoked-but-unexpired token must stay put so a

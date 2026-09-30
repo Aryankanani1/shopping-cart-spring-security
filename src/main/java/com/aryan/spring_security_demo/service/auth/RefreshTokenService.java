@@ -90,6 +90,16 @@ public class RefreshTokenService {
                 .ifPresent(token -> token.setRevoked(true));
     }
 
+    /**
+     * End every session a user has (password change). Access tokens already out
+     * there stay valid until their short expiry, but none can be refreshed. See
+     * {@link RefreshTokenRepository#deleteAllForUser} for why this deletes.
+     */
+    @Transactional
+    public void endAllSessions(Long userId) {
+        refreshTokenRepository.deleteAllForUser(userId);
+    }
+
     private String persistNewToken(User user) {
         String raw = generateRawToken();
         RefreshToken token = new RefreshToken();

@@ -14,6 +14,8 @@ endpoints under `/api/v1` — no backend changes required for local development.
   header.
 - **Checkout** — turn the cart into an order, then land on an order confirmation.
 - **Orders** — order history with keyset "load more", plus order detail.
+- **Account** — edit your name, change your password (other devices are signed
+  out; this one stays signed in), or delete your account.
 
 ## Prerequisites
 
@@ -68,10 +70,11 @@ npm test          # run once
 npm run test:watch
 ```
 
-**27 tests across 6 files** cover the hand-written logic: the API client (envelope
+**37 tests across 8 files** cover the hand-written logic: the API client (envelope
 unwrapping, problem+json → `ApiError`, and the 401 → refresh → retry / single-flight
 path), the token store, `CartContext` (cart resolution + item-count), the
-`RequireAuth` redirect, `ProductCard`, and the formatting helpers.
+`RequireAuth` redirect, `ProductCard`, the Account page (profile edit and password
+change), admin product images, and the formatting helpers.
 
 > **iCloud caveat:** this repo lives in the iCloud-synced `~/Desktop`, and Vitest
 > hangs at config-load/dep-scan here — esbuild/Vite stall re-materializing evicted
@@ -95,9 +98,11 @@ src/
                - tokenStore.ts localStorage-backed session, source of truth
   context/     AuthContext (session) + CartContext (cart + header badge)
   components/  Layout, Header, Footer, ProductCard, RequireAuth, stepper, ui atoms
-  pages/       Home, Products, ProductDetail, Login, Register, Cart, Orders, OrderDetail
-  hooks/       useAsync (load/loading/error), errMessage
-  lib/         formatting helpers (money, date, class names, CSS vars)
+  pages/       Home, Products, ProductDetail, Login, Register, Cart, Checkout, Orders,
+               OrderDetail, Account (+ ChangePasswordForm); admin/ for orders,
+               products and categories
+  lib/         formatting helpers (money, date, class names, CSS vars), errMessage,
+               JWT role decoding
   styles/      global.css (design tokens + primitives) + components.css
 ```
 
@@ -105,8 +110,14 @@ src/
 
 - **Success envelope** — every endpoint returns `{ message, data }`; the client
   unwraps and hands callers the `data`. Errors are RFC 7807 `problem+json`;
-  `ApiError` surfaces `detail`/`title` and the per-field `errors` map (used for
-  form validation on register).
+  `ApiError` surfaces `detail`/`title` and the per-field `errors` map (shown
+  under the matching input on the register, account and password forms).
+- **Changing the password replaces the session** — `PUT /auth/password` deletes
+  every refresh token the user has, *including the current one*, and returns a
+  fresh `{ id, token, refreshToken }`. `AuthContext.changePassword` stores it;
+  dropping it would sign the user out at the next token refresh. A wrong current
+  password comes back as a 400 field error, not a 401, so the client's
+  refresh-and-retry path never kicks in.
 - **The cart id isn't known up front** — `POST /cartItems` takes only
   `productId`/`quantity` and resolves the current user's cart server-side. The
   cart (and its id, needed for quantity/remove/clear) is read back from

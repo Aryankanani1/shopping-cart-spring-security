@@ -123,6 +123,10 @@ public class ShopConfig {
                     // closes the previous gap where /users/** (and catalog writes) were
                     // reachable with no authentication at all.
                     .authorizeHttpRequests(auth -> auth
+                            // Password change is the one /auth endpoint that needs a
+                            // signed-in caller (it lives under /auth to be rate-limited
+                            // like login). Listed above the permitAll: first match wins.
+                            .requestMatchers(HttpMethod.PUT, "/api/v1/auth/password").authenticated()
                             .requestMatchers("/api/v1/auth/**").permitAll()                 // login
                             .requestMatchers(HttpMethod.POST, "/api/v1/users").permitAll()  // self-registration
                             // Read-only catalog browsing is open to everyone.

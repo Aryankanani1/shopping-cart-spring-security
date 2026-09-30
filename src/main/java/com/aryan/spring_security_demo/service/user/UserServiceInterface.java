@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo.service.user;
 
 import com.aryan.spring_security_demo.dto.UserDto;
 import com.aryan.spring_security_demo.model.User;
+import com.aryan.spring_security_demo.request.ChangePasswordRequest;
 import com.aryan.spring_security_demo.request.CreateUserRequest;
 import com.aryan.spring_security_demo.request.UserUpdateRequest;
 
@@ -23,4 +24,10 @@ public interface UserServiceInterface {
     UserDto updateUserAndConvert(UserUpdateRequest request, Long userId);
 
     User getAuthenticatedUser();
+
+    /**
+     * Change the authenticated caller's password after re-verifying the current
+     * one, and end every existing session in the same transaction.
+     */
+    void changePassword(ChangePasswordRequest request);
 }

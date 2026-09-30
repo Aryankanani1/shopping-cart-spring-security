@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.controller;
 
+import com.aryan.spring_security_demo.request.ChangePasswordRequest;
 import com.aryan.spring_security_demo.request.LoginRequest;
 import com.aryan.spring_security_demo.request.RefreshTokenRequest;
 import com.aryan.spring_security_demo.response.ApiResponse;
@@ -7,14 +8,17 @@ import com.aryan.spring_security_demo.response.JwtResponse;
 import com.aryan.spring_security_demo.security.jwt.JwtUtils;
 import com.aryan.spring_security_demo.security.user.UserDetails;
 import com.aryan.spring_security_demo.service.auth.RefreshTokenService;
+import com.aryan.spring_security_demo.service.user.UserServiceInterface;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,6 +31,7 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtUtils jwtUtils;
     private final RefreshTokenService refreshTokenService;
+    private final UserServiceInterface userService;
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<?>> login(@RequestBody LoginRequest request) {
@@ -69,5 +74,29 @@ public class AuthController {
     public ResponseEntity<ApiResponse<?>> logout(@Valid @RequestBody RefreshTokenRequest request) {
         refreshTokenService.revoke(request.getRefreshToken());
         return ResponseEntity.ok(new ApiResponse<>("Logged out", null));
+    }
+
+    /**
+     * Change the signed-in user's password. The current password must be given
+     * (a valid access token alone isn't enough), and every existing session is
+     * ended so an old, possibly stolen refresh token stops working. The caller
+     * gets a fresh token pair back and stays signed in.
+     *
+     * <p>Kept under {@code /auth} so {@code RateLimitFilter} throttles it — it
+     * checks a password, so it is a brute-force target just like login. Unlike
+     * the other {@code /auth} endpoints it requires authentication (see ShopConfig).
+     */
+    @PutMapping("/password")
+    public ResponseEntity<ApiResponse<?>> changePassword(@Valid @RequestBody ChangePasswordRequest request,
+                                                         @AuthenticationPrincipal UserDetails principal) {
+        userService.changePassword(request);
+
+        // Issued after the change has committed. If this step fails, the caller is
+        // simply signed out and logs in again with the new password (fails closed).
+        String accessToken = jwtUtils.generateTokenFromUserDetails(principal);
+        String refreshToken = refreshTokenService.issueFor(principal.getId());
+
+        JwtResponse jwtResponse = new JwtResponse(principal.getId(), accessToken, refreshToken);
+        return ResponseEntity.ok(new ApiResponse<>("Password changed", jwtResponse));
     }
 }
