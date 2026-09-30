@@ -298,7 +298,8 @@ accounts are never created in production.
 A customer-facing storefront (**React + Vite + TypeScript**) in
 [`frontend/`](frontend/) consumes this API under `/api/v1`: register/login (JWT
 with automatic refresh), browse/filter the catalog, product detail, cart,
-checkout, and order history. In development a Vite proxy forwards `/api` to this
+checkout, order history, and account management (edit profile, change password,
+delete account). In development a Vite proxy forwards `/api` to this
 server, so **no CORS setup is needed**; for production, point `VITE_API_BASE_URL`
 at the API origin.
 
