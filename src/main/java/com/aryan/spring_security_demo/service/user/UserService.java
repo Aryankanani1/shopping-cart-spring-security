@@ -1,12 +1,15 @@
 package com.aryan.spring_security_demo.service.user;
 import com.aryan.spring_security_demo.dto.UserDto;
 import com.aryan.spring_security_demo.exception.AlreadyExistsException;
+import com.aryan.spring_security_demo.exception.InvalidPasswordException;
 import com.aryan.spring_security_demo.exception.UserNotFoundException;
 import com.aryan.spring_security_demo.model.User;
 import com.aryan.spring_security_demo.repository.UserRepository;
+import com.aryan.spring_security_demo.request.ChangePasswordRequest;
 import com.aryan.spring_security_demo.request.CreateUserRequest;
 import com.aryan.spring_security_demo.request.UserUpdateRequest;
 import com.aryan.spring_security_demo.security.AuthUtils;
+import com.aryan.spring_security_demo.service.auth.RefreshTokenService;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
@@ -25,6 +28,7 @@ public class UserService implements UserServiceInterface{
     private final ModelMapper modelMapper;
     private final PasswordEncoder passwordEncoder;
     private final AuthUtils authUtils;
+    private final RefreshTokenService refreshTokenService;
     @Override
     @Transactional(readOnly = true)
     public User getUserById(Long userId) {
@@ -107,5 +111,29 @@ public class UserService implements UserServiceInterface{
         String email = authentication.getName();
         return userRepository.findByEmailWithRoles(email)
                 .orElseThrow(() -> new UserNotFoundException("failed to find user"));
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(ChangePasswordRequest request) {
+        // Always the caller's own account: an admin can't use this to set someone
+        // else's password, since it hinges on knowing the current one.
+        Long userId = authUtils.currentUserId();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("failed to find user"));
+
+        // Re-verify even though the caller holds a valid token — a stolen or
+        // left-open session alone must not be enough to take over the account.
+        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+            throw new InvalidPasswordException("currentPassword", "Current password is incorrect");
+        }
+        if (request.getNewPassword().equals(request.getCurrentPassword())) {
+            throw new InvalidPasswordException("newPassword", "New password must be different from the current one");
+        }
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+
+        // Same transaction as the password update, so the change can never commit
+        // while a stolen refresh token stays usable.
+        refreshTokenService.endAllSessions(userId);
     }
 }

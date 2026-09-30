@@ -149,8 +149,15 @@ probe returns just `UP`/`DOWN` and never leaks internals.
   Refresh tokens are persisted **hashed** and are **rotating** (each refresh revokes
   the old one and issues a new one, so replay of a spent token is detected).
   `POST /api/v1/auth/logout` revokes the refresh token, ending the session server-side.
+- **Password change ends every session**: `PUT /api/v1/auth/password` (authenticated)
+  re-verifies the current password (a valid token alone isn't enough), stores the new
+  BCrypt hash, and deletes all of the user's refresh tokens in the same transaction,
+  so other devices are signed out. It then returns a fresh token pair, so the caller
+  stays signed in. The old tokens are *deleted* rather than revoked: replaying a
+  revoked token trips reuse detection, which would also kill the caller's new token.
+  Other devices' access tokens still lapse within their 15-minute lifetime.
 - **Rate-limited auth endpoints**: `RateLimitFilter` sits ahead of authentication in
-  the chain and throttles `/auth/**` (login, refresh, logout) per client IP with an
+  the chain and throttles `/auth/**` (login, refresh, logout, password change) per client IP with an
   in-memory token bucket (`RateLimitService`) — `capacity` requests may burst, then
   the bucket refills to full over `refill-period`. Over-limit callers get `429 Too
   Many Requests` (RFC 7807 body + `Retry-After`) *before* any credential/token work,
@@ -300,7 +307,7 @@ at the API origin.
 cd frontend
 npm install
 npm run dev      # http://localhost:5173
-npm test         # Vitest suite (27 tests, jsdom)
+npm test         # Vitest suite (37 tests, jsdom)
 ```
 
 Client-side auth, a typed API client (envelope unwrap, problem+json errors,

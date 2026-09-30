@@ -17,9 +17,9 @@ import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 
 /**
- * Throttles the unauthenticated auth endpoints ({@code /auth/**}: login, refresh,
- * logout) so credential-stuffing and refresh-token guessing can't hammer them at
- * machine speed. Everything else is unaffected.
+ * Throttles the auth endpoints ({@code /auth/**}: login, refresh, logout, password
+ * change) so credential-stuffing, password guessing and refresh-token guessing
+ * can't hammer them at machine speed. Everything else is unaffected.
  *
  * <p>Wired into the security filter chain ahead of {@code AuthTokenFilter} (see
  * {@code ShopConfig}) — like {@code AuthTokenFilter} it is a plain class, not a
