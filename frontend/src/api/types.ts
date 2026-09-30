@@ -115,6 +115,34 @@ export interface UserDto {
   cart?: CartDto | null
 }
 
+export interface WishlistItemDto {
+  product: ProductDto
+  /** ISO instant. */
+  addedAt: string
+  priceWhenAdded: number
+  /** ISO instant of a pending reminder; absent when none is set. */
+  remindAt?: string | null
+  /** Price-drop and back-in-stock alerts. */
+  alertsEnabled: boolean
+}
+
+export type NotificationType = 'WISHLIST_REMINDER' | 'PRICE_DROP' | 'BACK_IN_STOCK'
+
+/** In-app inbox entry. Structured facts — the client writes the sentence. */
+export interface NotificationDto {
+  id: number
+  type: NotificationType
+  /** Absent once the product has been deleted; productName is always present. */
+  productId?: number | null
+  productName: string
+  /** PRICE_DROP only. */
+  oldPrice?: number | null
+  newPrice?: number | null
+  /** ISO instant. */
+  createdAt: string
+  read: boolean
+}
+
 /** Offset pagination envelope (products). */
 export interface PagedResponse<T> {
   content: T[]

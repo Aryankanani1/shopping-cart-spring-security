@@ -14,7 +14,8 @@ import javax.sql.DataSource;
  * Turns on Spring's {@code @Scheduled} support. Kept as a dedicated config (rather
  * than an annotation on the main class) so the app's use of background scheduling
  * is discoverable in one place. Drives the expired refresh-token purge in
- * {@code RefreshTokenCleanupService} and the rate-limit bucket sweep in
+ * {@code RefreshTokenCleanupService}, the wishlist reminder/alert scan in
+ * {@code WishlistAlertJob}, and the rate-limit bucket sweep in
  * {@code RateLimitService}.
  *
  * <p>Also enables <strong>ShedLock</strong> ({@code @EnableSchedulerLock}) so that

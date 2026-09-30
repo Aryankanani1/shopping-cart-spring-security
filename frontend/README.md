@@ -14,6 +14,12 @@ endpoints under `/api/v1` — no backend changes required for local development.
   header.
 - **Checkout** — turn the cart into an order, then land on an order confirmation.
 - **Orders** — order history with keyset "load more", plus order detail.
+- **Wishlist** — save products from the product page; per item, set a dated
+  reminder and switch price-drop / back-in-stock alerts on or off; move items
+  into the bag.
+- **Alerts** — an inbox for reminders and alerts with an unread badge in the
+  header (polled every minute and on tab focus); mark read, mark all read,
+  dismiss.
 - **Account** — edit your name, change your password (other devices are signed
   out; this one stays signed in), or delete your account.
 
@@ -70,11 +76,12 @@ npm test          # run once
 npm run test:watch
 ```
 
-**37 tests across 8 files** cover the hand-written logic: the API client (envelope
+**50 tests across 11 files** cover the hand-written logic: the API client (envelope
 unwrapping, problem+json → `ApiError`, and the 401 → refresh → retry / single-flight
 path), the token store, `CartContext` (cart resolution + item-count), the
 `RequireAuth` redirect, `ProductCard`, the Account page (profile edit and password
-change), admin product images, and the formatting helpers.
+change), the Wishlist page (reminders, alerts, removal), the Alerts inbox, the
+save-to-wishlist button, admin product images, and the formatting helpers.
 
 > **iCloud caveat:** this repo lives in the iCloud-synced `~/Desktop`, and Vitest
 > hangs at config-load/dep-scan here — esbuild/Vite stall re-materializing evicted
@@ -97,12 +104,14 @@ src/
                - types.ts      TS mirrors of the backend DTOs / envelopes
                - tokenStore.ts localStorage-backed session, source of truth
   context/     AuthContext (session) + CartContext (cart + header badge)
-  components/  Layout, Header, Footer, ProductCard, RequireAuth, stepper, ui atoms
+  components/  Layout, Header, Footer, ProductCard, RequireAuth, stepper, ui atoms,
+               WishlistButton, NotificationBell
+  hooks/       useWishlist (shared wishlist cache + mutations)
   pages/       Home, Products, ProductDetail, Login, Register, Cart, Checkout, Orders,
-               OrderDetail, Account (+ ChangePasswordForm); admin/ for orders,
-               products and categories
-  lib/         formatting helpers (money, date, class names, CSS vars), errMessage,
-               JWT role decoding
+               OrderDetail, Wishlist, Notifications, Account (+ ChangePasswordForm);
+               admin/ for orders, products and categories
+  lib/         formatting helpers (money, date/time, class names, CSS vars),
+               errMessage, JWT role decoding, alert wording
   styles/      global.css (design tokens + primitives) + components.css
 ```
 
@@ -128,6 +137,10 @@ src/
   `VITE_API_BASE_URL` when the API lives on another origin. Admins upload and
   remove images from the product edit form (`POST /images`, multipart:
   JPEG/PNG/WebP/GIF, up to 5 MB each).
+- **Alerts are structured, not text** — `GET /notifications` returns a type,
+  product name and (for price drops) old/new prices; `lib/notifications.ts`
+  writes the sentence and formats the money. Reminder times are picked in local
+  time and sent as an ISO instant.
 - **Sorting** is allowlisted to `id, name, price, brand`; the sort dropdown only
   offers those.
 

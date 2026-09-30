@@ -15,6 +15,8 @@ import { CheckoutPage } from './pages/CheckoutPage'
 import { OrdersPage } from './pages/OrdersPage'
 import { OrderDetailPage } from './pages/OrderDetailPage'
 import { AccountPage } from './pages/AccountPage'
+import { WishlistPage } from './pages/WishlistPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { AdminLayout } from './pages/admin/AdminLayout'
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage'
@@ -70,6 +72,22 @@ export default function App() {
               element={
                 <RequireAuth>
                   <OrderDetailPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/wishlist"
+              element={
+                <RequireAuth>
+                  <WishlistPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <RequireAuth>
+                  <NotificationsPage />
                 </RequireAuth>
               }
             />

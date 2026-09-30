@@ -26,4 +26,11 @@ export const queryKeys = {
     products: (page: number) => ['admin', 'products', page] as const,
     categories: ['admin', 'categories'] as const,
   },
+  wishlist: (userId: number | null) => ['wishlist', userId] as const,
+  notifications: {
+    /** Prefix of every inbox key — invalidate this after any inbox change. */
+    all: (userId: number | null) => ['notifications', userId] as const,
+    list: (userId: number | null) => ['notifications', userId, 'list'] as const,
+    unread: (userId: number | null) => ['notifications', userId, 'unread'] as const,
+  },
 } as const

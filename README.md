@@ -68,6 +68,7 @@ Environment variables:
 | `JWT_EXPIRATION_MS` | optional           | Access-token lifetime, default `900000` (15m)      |
 | `JWT_REFRESH_EXPIRATION_MS` | optional   | Refresh-token lifetime, default `604800000` (7d)   |
 | `APP_RATELIMIT_EVICTION_CRON` | optional | Sweep of replenished rate-limit buckets, default hourly |
+| `APP_WISHLIST_ALERT_CRON` | optional       | Wishlist reminder/alert scan, default every minute (`-` disables) |
 
 In **dev** the datasource falls back to a local MySQL (`localhost:3306`,
 `root`, empty password) so the app boots out of the box; any value can still be
@@ -89,10 +90,10 @@ The API is served under the `api.prefix` (default `/api/v1`).
 ## Architecture
 
 ```
-controller/   REST controllers (Auth, Product, Cart, CartItem, Category, Image, Order, User)
+controller/   REST controllers (Auth, Product, Cart, CartItem, Category, Image, Order, User, Wishlist, Notification)
 Service/      Interface + impl per domain (+ cache/ for read-through catalog caching)
 repository/   Spring Data JPA repositories
-model/        JPA entities (User, Role, Product, Category, Image, Cart, CartItem, Order, OrderItem)
+model/        JPA entities (User, Role, Product, Category, Image, Cart, CartItem, Order, OrderItem, WishlistItem, Notification)
 dto/ request/ response/   API boundary objects
 security/     config (shopConfig), jwt (AuthTokenFilter, JwtUtils, JwtEntryPoint), ratelimit (RateLimitFilter/Service), user details
 aop/          LoggingAspect — @Around advice logging service-layer entry/exit/timing
@@ -197,6 +198,43 @@ to call the secured cart/order endpoints.
 Both are **disabled in the `prod` profile** (`springdoc.api-docs.enabled=false`,
 `springdoc.swagger-ui.enabled=false`) to remove needless attack surface.
 
+### Wishlist, reminders & alerts
+
+Customers save products to a wishlist and hear about them later through an
+**in-app inbox** (no email). Every endpoint acts on the signed-in caller, so no
+path carries a user id.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /wishlist` | The caller's wishlist, newest first |
+| `PUT /wishlist/items/{productId}` | Save a product — idempotent: `201` the first time, `200` after |
+| `DELETE /wishlist/items/{productId}` | Remove it (`204`) |
+| `PUT` / `DELETE /wishlist/items/{productId}/reminder` | Set (`{"remindAt": "<ISO instant, future>"}`) or clear a dated reminder |
+| `PUT /wishlist/items/{productId}/alerts` | `{"enabled": bool}` — price-drop and back-in-stock alerts (on by default) |
+| `GET /notifications` | The inbox, newest first, paginated |
+| `GET /notifications/unread-count` | Unread count for the header badge |
+| `POST /notifications/{id}/read`, `POST /notifications/read-all` | Mark read |
+| `DELETE /notifications/{id}` | Dismiss |
+
+- **Three kinds of notification.** A *reminder* fires once at the time the user
+  picked and then clears. A *price drop* fires when the price goes below the
+  lowest price already announced (initially the price when saved), so a price
+  that bounces around doesn't spam. A *back-in-stock* alert fires when a
+  sold-out item is restocked.
+- **Scheduled scan.** `WishlistAlertJob` runs on `APP_WISHLIST_ALERT_CRON` (every
+  minute by default) under **ShedLock**, so only one instance runs each tick. It
+  *polls* price and stock rather than hooking every place they change (admin
+  edits, orders, cancellation restocks), so no code path can forget to raise an
+  alert. Each notification is written in the same transaction that advances the
+  item's baseline, so every event is announced exactly once, and a failed run is
+  simply retried on the next tick.
+- **Deletes never get blocked.** The new foreign keys cascade in the database
+  (Flyway `V5`): deleting a user removes their wishlist and inbox; deleting a
+  product removes it from wishlists and keeps past notifications (the product
+  name is stored with them) with the link cleared.
+- Someone else's notification id returns `404`, not `403`, so ids can't be
+  probed for existence.
+
 ## Startup pipeline
 
 Initial setup is handled by ordered `ApplicationRunner` / `CommandLineRunner`
@@ -298,8 +336,8 @@ accounts are never created in production.
 A customer-facing storefront (**React + Vite + TypeScript**) in
 [`frontend/`](frontend/) consumes this API under `/api/v1`: register/login (JWT
 with automatic refresh), browse/filter the catalog, product detail, cart,
-checkout, order history, and account management (edit profile, change password,
-delete account). In development a Vite proxy forwards `/api` to this
+checkout, order history, a wishlist with reminders and price/stock alerts,
+and account management (edit profile, change password, delete account). In development a Vite proxy forwards `/api` to this
 server, so **no CORS setup is needed**; for production, point `VITE_API_BASE_URL`
 at the API origin.
 
