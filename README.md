@@ -31,7 +31,7 @@ A **React + Vite + TypeScript** customer storefront lives in
 | Caching        | Spring Cache (`ConcurrentMapCacheManager`)         |
 | Aspects (AOP)  | Spring AOP + AspectJ (`aspectjweaver`) — service-layer logging |
 | Migrations     | Flyway (`spring-boot-starter-flyway` + `flyway-mysql`) |
-| Observability  | Spring Boot Actuator (health probes, metrics)      |
+| Observability  | Spring Boot Actuator (health probes, metrics), Prometheus, Grafana |
 | Boilerplate    | Lombok                                             |
 | Build          | Maven wrapper (`./mvnw`)                           |
 | Container      | Multi-stage Docker (non-root, JRE-only runtime)    |
@@ -168,7 +168,7 @@ an earlier `ddl-auto: update`) instead of failing on a non-empty schema.
 
 ### Observability
 
-Spring Boot Actuator exposes only `health`, `info`, and `metrics` over HTTP.
+Spring Boot Actuator exposes only `health`, `info`, `metrics` and `prometheus` over HTTP.
 
 | Endpoint | Who | Shows |
 |---|---|---|
@@ -176,6 +176,7 @@ Spring Boot Actuator exposes only `health`, `info`, and `metrics` over HTTP.
 | `/actuator/health` details (database, disk space) | admins | per-component status (dev only; prod's `show-details` is `never`) |
 | `/actuator/info` | admins | app version and build time (from the Maven `build-info` goal), Java version, process (pid, CPUs, memory) |
 | `/actuator/metrics`, `/actuator/metrics/{name}` | admins | JVM, HTTP, datasource and cache metrics |
+| `/actuator/prometheus` | admins, or the Prometheus scrape account when it's on | the same metrics in Prometheus format |
 
 How it's locked down:
 - **Admin-only by endpoint, not by path.** `ShopConfig` matches the actuator with
@@ -191,9 +192,69 @@ How it's locked down:
   apply there. Point the probes at that port.
 
 Tests: `ActuatorAccessTest`, `ActuatorLockdownTest`, `ActuatorBasePathTest`,
-`ActuatorManagementPortTest`.
+`ActuatorManagementPortTest`, `PrometheusScrapeTest`.
 Request metrics already cover the business flows — e.g. orders placed:
 `/actuator/metrics/http.server.requests?tag=uri:/api/v1/orders&tag=method:POST&tag=status:201`.
+
+### Prometheus
+
+Metrics are also served in Prometheus format at `/actuator/prometheus`. Every
+series carries an `application="spring_security_demo"` label, and HTTP requests
+have latency buckets, so you can query percentiles with `histogram_quantile`.
+
+Prometheus can't log in for a JWT, so it scrapes with HTTP Basic using a
+dedicated **scrape account** (`PrometheusScrapeSecurityConfig`):
+
+| Setting | Default | |
+|---|---|---|
+| `PROMETHEUS_SCRAPE_ENABLED` | `false` | Off: `/actuator/prometheus` is admin-only like the rest of the actuator |
+| `PROMETHEUS_SCRAPE_USERNAME` | `prometheus` | |
+| `PROMETHEUS_SCRAPE_PASSWORD` | — | Required when enabled, 16-72 characters (`openssl rand -base64 24`); startup fails otherwise |
+
+The account can read `/actuator/prometheus` and nothing else, and no other
+credentials work on that endpoint while it's on (an admin's JWT included). Its
+password is held only as a BCrypt hash.
+
+**Run Prometheus and Grafana locally** with the compose `monitoring` profile. In
+`.env`, set `PROMETHEUS_SCRAPE_ENABLED=true`, a `PROMETHEUS_SCRAPE_PASSWORD` and a
+`GRAFANA_ADMIN_PASSWORD`, then:
+
+```bash
+docker compose --profile monitoring up --build
+# Prometheus  http://localhost:9090  (PROMETHEUS_PORT)
+# Grafana     http://localhost:3000  (GRAFANA_PORT) — user "admin", GRAFANA_ADMIN_PASSWORD
+```
+
+Both UIs listen on localhost only. Passwords reach the containers as compose
+secret files (Prometheus' `basic_auth` takes a `password_file`, not an
+environment variable). Grafana reads its admin password only when it first
+creates its database; to change it later, use the UI or remove the
+`shopping-cart-grafana-data` volume. The scrape job is in
+`monitoring/prometheus.yml`; copy it into your own Prometheus config for a real
+deployment.
+
+Grafana comes provisioned with the Prometheus datasource and a **Shopping Cart
+API** dashboard (folder *Shopping Cart*), defined in
+`monitoring/grafana/dashboards/shopping-cart-api.json`:
+
+| Row | Panels |
+|---|---|
+| Overview | uptime, requests/s, share of 5xx responses, orders placed in the last hour |
+| Traffic | request rate and p95 latency per endpoint |
+| Outcomes | responses by status, logins by outcome (200 / 401 / 429 rate-limited) |
+| Resources | JVM heap, database pool (active / idle / waiting connections) |
+
+The dashboard is read-only in the UI; change the JSON file to change it.
+Example queries:
+
+```promql
+# Request rate per endpoint
+sum by (uri) (rate(http_server_requests_seconds_count{job="shopping-cart-api"}[5m]))
+# 95th-percentile latency per endpoint
+histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{job="shopping-cart-api"}[5m])))
+# Orders placed per minute
+sum(rate(http_server_requests_seconds_count{uri="/api/v1/orders", method="POST", status="201"}[5m])) * 60
+```
 
 ### Security model
 - **Stateless access JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`
