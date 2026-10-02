@@ -5,7 +5,7 @@ import { queryKeys } from '../../api/queryKeys'
 import { errMessage } from '../../lib/errors'
 import { formatDate, formatMoney } from '../../lib/format'
 import { Loader, ErrorNote, EmptyState } from '../../components/ui'
-import { StatusBadge } from '../../components/StatusBadge'
+import { StatusBadge } from '../../components/ui/StatusBadge'
 
 export function AdminOrdersPage() {
   const [page, setPage] = useState(0)

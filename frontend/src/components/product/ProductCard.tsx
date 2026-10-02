@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
-import { imageUrl } from '../api/client'
-import type { ProductDto } from '../api/types'
-import { formatMoney } from '../lib/format'
+import { imageUrl } from '../../api/client'
+import type { ProductDto } from '../../api/types'
+import { formatMoney } from '../../lib/format'
 
 export function ProductCard({ product, index = 0 }: { product: ProductDto; index?: number }) {
   const image = product.images?.[0]

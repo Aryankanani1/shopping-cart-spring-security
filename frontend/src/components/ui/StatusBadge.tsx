@@ -1,4 +1,4 @@
-import { cx } from '../lib/format'
+import { cx } from '../../lib/format'
 
 // Map each OrderStatus to a tone. PENDING/PROCESSING stay neutral.
 const VARIANT: Record<string, string> = {

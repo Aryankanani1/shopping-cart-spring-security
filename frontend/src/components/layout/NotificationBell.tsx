@@ -1,9 +1,9 @@
 import { NavLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { notificationsApi } from '../api/notifications'
-import { queryKeys } from '../api/queryKeys'
-import { useAuth } from '../context/AuthContext'
-import { cx } from '../lib/format'
+import { notificationsApi } from '../../api/notifications'
+import { queryKeys } from '../../api/queryKeys'
+import { useAuth } from '../../context/AuthContext'
+import { cx } from '../../lib/format'
 
 // Reminders and alerts are raised by a server-side job, so there's no event to
 // react to — poll the (cheap) unread count, and refresh it when the tab regains focus.

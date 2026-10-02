@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { useWishlist } from '../hooks/useWishlist'
-import { errMessage } from '../lib/errors'
-import { ErrorNote } from './ui'
-import { cx } from '../lib/format'
+import { useAuth } from '../../context/AuthContext'
+import { useWishlist } from '../../hooks/useWishlist'
+import { errMessage } from '../../lib/errors'
+import { ErrorNote } from '../ui'
+import { cx } from '../../lib/format'
 
 /** Save / unsave a product. Signed-out visitors are sent to log in first. */
 export function WishlistButton({ productId }: { productId: number }) {

@@ -5,7 +5,7 @@ import { queryKeys } from '../api/queryKeys'
 import { errMessage } from '../lib/errors'
 import { useAuth } from '../context/AuthContext'
 import { Loader, ErrorNote, EmptyState } from '../components/ui'
-import { StatusBadge } from '../components/StatusBadge'
+import { StatusBadge } from '../components/ui/StatusBadge'
 import { formatDate, formatMoney } from '../lib/format'
 
 const PAGE = 10

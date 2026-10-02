@@ -2,16 +2,16 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { AuthProvider } from '../context/AuthContext'
+import { AuthProvider } from '../../context/AuthContext'
 import { WishlistButton } from './WishlistButton'
-import { setSession } from '../api/tokenStore'
-import type { WishlistItemDto } from '../api/types'
+import { setSession } from '../../api/tokenStore'
+import type { WishlistItemDto } from '../../api/types'
 
-vi.mock('../api/wishlist', () => ({
+vi.mock('../../api/wishlist', () => ({
   wishlistApi: { list: vi.fn(), add: vi.fn(), remove: vi.fn() },
 }))
 
-import { wishlistApi } from '../api/wishlist'
+import { wishlistApi } from '../../api/wishlist'
 
 const SAVED: WishlistItemDto = {
   product: {
