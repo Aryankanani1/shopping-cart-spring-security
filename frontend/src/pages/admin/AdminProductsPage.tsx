@@ -59,7 +59,9 @@ export function AdminProductsPage() {
 
       {editing !== null && (
         <ProductForm
-          key={editing === 'new' ? 'new' : editing.id}
+          // Keys must differ from ProductImages' below: two siblings sharing a key
+          // confuse React, and the form stayed on screen after it was closed.
+          key={editing === 'new' ? 'new' : `form-${editing.id}`}
           initial={editing === 'new' ? null : editing}
           categories={categories.data ?? []}
           onSubmit={(input) => save.mutate(input)}
@@ -69,7 +71,9 @@ export function AdminProductsPage() {
         />
       )}
 
-      {editing !== null && editing !== 'new' && <ProductImages key={editing.id} productId={editing.id} />}
+      {editing !== null && editing !== 'new' && (
+        <ProductImages key={`images-${editing.id}`} productId={editing.id} />
+      )}
 
       {remove.isError && <ErrorNote message={errMessage(remove.error)} />}
 

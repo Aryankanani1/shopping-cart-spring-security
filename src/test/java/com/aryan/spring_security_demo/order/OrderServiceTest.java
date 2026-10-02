@@ -7,6 +7,7 @@ import com.aryan.spring_security_demo.catalog.InsufficientStockException;
 import com.aryan.spring_security_demo.catalog.Product;
 import com.aryan.spring_security_demo.catalog.ProductRepository;
 import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
+import com.aryan.spring_security_demo.common.web.SlicedResponse;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.security.AuthUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -36,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -249,5 +253,111 @@ class OrderServiceTest {
                 .isInstanceOf(InvalidOrderStateException.class);
 
         assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.DELIVERED);
+    }
+
+    // ---- order history (keyset paging) ------------------------------------
+
+    private static OrderKeysetRow row(long id, String createdAt) {
+        return new OrderKeysetRow() {
+            @Override public Long getId() { return id; }
+            @Override public Instant getCreatedAt() { return Instant.parse(createdAt); }
+        };
+    }
+
+    private static Order orderWithId(long id) {
+        Order o = new Order();
+        o.setId(id);
+        return o;
+    }
+
+    private void mapOrdersToDtosWithTheirIds() {
+        when(modelMapper.map(any(Order.class), eq(OrderDto.class))).thenAnswer(inv -> {
+            OrderDto dto = new OrderDto();
+            dto.setId(inv.<Order>getArgument(0).getId());
+            return dto;
+        });
+    }
+
+    @Test
+    void getUserOrders_fullPage_returnsCursorAtTheLastRow() {
+        // size 2: the repository is asked for 3 rows, and a 3rd one means there's more.
+        when(orderRepository.findUserOrderKeyset(eq(OWNER_ID), isNull(), isNull(), eq(PageRequest.of(0, 3))))
+                .thenReturn(List.of(row(30, "2026-03-03T00:00:00Z"), row(20, "2026-03-02T00:00:00Z"),
+                        row(10, "2026-03-01T00:00:00Z")));
+        // The IN query returns rows in any order; the slice keeps the keyset order.
+        when(orderRepository.findWithItemsByIdIn(List.of(30L, 20L)))
+                .thenReturn(List.of(orderWithId(20), orderWithId(30)));
+        mapOrdersToDtosWithTheirIds();
+
+        SlicedResponse<OrderDto> slice = orderService.getUserOrders(OWNER_ID, null, 2);
+
+        verify(authUtils).requireSelfOrAdmin(OWNER_ID);
+        assertThat(slice.content()).extracting(OrderDto::getId).containsExactly(30L, 20L);
+        assertThat(slice.hasNext()).isTrue();
+        assertThat(slice.numberOfElements()).isEqualTo(2);
+        assertThat(OrderCursor.decode(slice.nextCursor()))
+                .isEqualTo(new OrderCursor(Instant.parse("2026-03-02T00:00:00Z"), 20L));
+    }
+
+    @Test
+    void getUserOrders_lastPage_hasNoCursor() {
+        OrderCursor from = new OrderCursor(Instant.parse("2026-03-02T00:00:00Z"), 20L);
+        when(orderRepository.findUserOrderKeyset(OWNER_ID, from.createdAt(), from.id(), PageRequest.of(0, 3)))
+                .thenReturn(List.of(row(10, "2026-03-01T00:00:00Z")));
+        when(orderRepository.findWithItemsByIdIn(List.of(10L))).thenReturn(List.of(orderWithId(10)));
+        mapOrdersToDtosWithTheirIds();
+
+        SlicedResponse<OrderDto> slice = orderService.getUserOrders(OWNER_ID, from.encode(), 2);
+
+        assertThat(slice.content()).extracting(OrderDto::getId).containsExactly(10L);
+        assertThat(slice.hasNext()).isFalse();
+        assertThat(slice.nextCursor()).isNull();
+    }
+
+    @Test
+    void getUserOrders_noOrders_isAnEmptySliceWithoutLoadingItems() {
+        when(orderRepository.findUserOrderKeyset(eq(OWNER_ID), isNull(), isNull(), any())).thenReturn(List.of());
+
+        SlicedResponse<OrderDto> slice = orderService.getUserOrders(OWNER_ID, null, 20);
+
+        assertThat(slice.content()).isEmpty();
+        assertThat(slice.hasNext()).isFalse();
+        verify(orderRepository, never()).findWithItemsByIdIn(any());
+    }
+
+    @Test
+    void getUserOrders_someoneElsesHistory_isDeniedBeforeAnyQuery() {
+        doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(OWNER_ID);
+
+        assertThatThrownBy(() -> orderService.getUserOrders(OWNER_ID, null, 20))
+                .isInstanceOf(AccessDeniedException.class);
+        verify(orderRepository, never()).findUserOrderKeyset(any(), any(), any(), any());
+    }
+
+    @Test
+    void getUserOrders_tamperedCursor_isRejected() {
+        assertThatThrownBy(() -> orderService.getUserOrders(OWNER_ID, "garbage!", 20))
+                .isInstanceOf(InvalidCursorException.class);
+    }
+
+    // ---- single order -----------------------------------------------------
+
+    @Test
+    void getOrder_missing_is404NotAnOwnershipCheck() {
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.getOrder(ORDER_ID)).isInstanceOf(ResourceNotFoundException.class);
+        verify(authUtils, never()).requireSelfOrAdmin(any());
+    }
+
+    @Test
+    void getOrder_checksTheOwnerAfterLoading() {
+        OrderDto dto = new OrderDto();
+        dto.setUserId(OWNER_ID);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+        when(modelMapper.map(order, OrderDto.class)).thenReturn(dto);
+        doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(OWNER_ID);
+
+        assertThatThrownBy(() -> orderService.getOrder(ORDER_ID)).isInstanceOf(AccessDeniedException.class);
     }
 }
