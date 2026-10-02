@@ -101,10 +101,11 @@ class OrderServiceTest {
         Product p = new Product();
         p.setId(7L);
         p.setInventory(5);
+        p.setPrice(new BigDecimal("12.00"));
         CartItem ci = new CartItem();
         ci.setProduct(p);
         ci.setQuantity(2);
-        ci.setUnitPrice(BigDecimal.TEN);
+        ci.setUnitPrice(BigDecimal.TEN); // stored when added; the price has since gone up
         User owner = new User();
         owner.setId(OWNER_ID);
         Cart cart = new Cart();
@@ -140,6 +141,9 @@ class OrderServiceTest {
         assertThat(saved.getCountry()).isEqualTo("UK");
         assertThat(saved.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(saved.getOrderItems()).hasSize(1);
+        // Charged at the current price, not the one stored in the cart.
+        assertThat(saved.getOrderItems().iterator().next().getPrice()).isEqualByComparingTo("12.00");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("24.00");
         // And the cart is emptied after a successful order.
         verify(cartService).clearCart(99L);
     }

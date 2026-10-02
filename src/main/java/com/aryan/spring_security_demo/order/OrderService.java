@@ -178,11 +178,13 @@ public class OrderService implements OrderServiceInterface{
                     Product product = cartItem.getProduct();
                     product.setInventory(product.getInventory() - cartItem.getQuantity());
                     productRepository.save(product);
-                    // the order is wired in by Order.addOrderItem (owning side)
+                    // Charge the price as of now, not the one stored when the item
+                    // went into the cart. The order is wired in by
+                    // Order.addOrderItem (owning side).
                     return
                            new OrderItem(product,
                                  cartItem.getQuantity(),
-                                 cartItem.getUnitPrice());
+                                 product.getPrice());
 
                 }).toList();
     }

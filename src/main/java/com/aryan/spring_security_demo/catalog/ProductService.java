@@ -1,11 +1,13 @@
 package com.aryan.spring_security_demo.catalog;
 import com.aryan.spring_security_demo.common.exception.AlreadyExistsException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,6 +16,7 @@ import java.util.Optional;
 public class ProductService implements ProductServiceInterface{
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final ApplicationEventPublisher events;
     @Override
     @Transactional
     public Product addProduct(AddProductRequest request) {
@@ -76,6 +79,11 @@ public class ProductService implements ProductServiceInterface{
     }
 
     private Product updateExistingProduct(Product existingProduct, ProductUpdateRequest productUpdateRequest){
+                if (priceChanges(existingProduct.getPrice(), productUpdateRequest.getPrice())) {
+                    // Carts reprice their lines in this same transaction.
+                    events.publishEvent(new ProductPriceChangedEvent(
+                            existingProduct.getId(), productUpdateRequest.getPrice()));
+                }
                 existingProduct.setName(productUpdateRequest.getName());
                 existingProduct.setBrand(productUpdateRequest.getBrand());
                 existingProduct.setPrice(productUpdateRequest.getPrice());
@@ -87,6 +95,11 @@ public class ProductService implements ProductServiceInterface{
                 return existingProduct;
 
     }
+    // compareTo, not equals: 10.0 and 10.00 are the same price.
+    private static boolean priceChanges(BigDecimal current, BigDecimal next) {
+        return current == null || current.compareTo(next) != 0;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<Product> getAllProducts() {
