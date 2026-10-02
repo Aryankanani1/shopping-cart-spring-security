@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo.catalog;
 import com.aryan.spring_security_demo.common.exception.AlreadyExistsException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -63,12 +64,19 @@ public class ProductService implements ProductServiceInterface{
     @Override
     @Transactional
     public void deleteProductById(Long productId) {
-        productRepository.findById(productId)
-        .ifPresentOrElse(productRepository::delete,
-                () ->
-                {
-                  throw new ProductNotFoundException("product not found ");
-        });
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ProductNotFoundException("product not found "));
+        // Carts drop the product first, in this transaction (CartCatalogListener).
+        events.publishEvent(new ProductDeletingEvent(productId));
+        productRepository.delete(product);
+        try {
+            // Flush now so a foreign-key failure surfaces here, not at commit.
+            productRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            // Past order lines keep pointing at the product they sold.
+            throw new ProductInUseException("This product is part of existing orders, so it can't be deleted."
+                    + " Set its stock to 0 to stop selling it.");
+        }
     }
 
     @Override

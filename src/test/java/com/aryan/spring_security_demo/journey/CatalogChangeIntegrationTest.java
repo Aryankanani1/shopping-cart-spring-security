@@ -28,6 +28,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import java.math.BigDecimal;
 import java.util.Set;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -130,6 +132,46 @@ class CatalogChangeIntegrationTest {
         updateProduct(admin, "10.00", "Lighting")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.categoryName").value("Lighting"));
+    }
+
+    @Test
+    @DisplayName("deleting a product that's in a cart removes it from the cart")
+    void delete_productInCart_leavesTheCart() throws Exception {
+        addToCart(2);
+
+        mockMvc.perform(delete("/api/v1/products/{id}", productId).header("Authorization", admin))
+                .andExpect(status().isNoContent());
+
+        assertThat(productRepository.existsById(productId)).isFalse();
+        Long cartId = cartRepository.findByUserId(customerId).getId();
+        mockMvc.perform(get("/api/v1/carts/{id}", cartId).header("Authorization", customer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cartItems").isEmpty())
+                .andExpect(jsonPath("$.data.totalAmount").value(0));
+    }
+
+    @Test
+    @DisplayName("deleting a product that has been ordered is a 409 that says why")
+    void delete_orderedProduct_isConflict() throws Exception {
+        addToCart(1);
+        mockMvc.perform(post("/api/v1/orders").header("Authorization", customer)
+                        .param("userId", String.valueOf(customerId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ADDRESS_BODY))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(delete("/api/v1/products/{id}", productId).header("Authorization", admin))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.title").value("Product in use"));
+
+        assertThat(productRepository.existsById(productId)).isTrue();
+    }
+
+    @Test
+    @DisplayName("a customer can't delete a product")
+    void delete_byCustomer_isForbidden() throws Exception {
+        mockMvc.perform(delete("/api/v1/products/{id}", productId).header("Authorization", customer))
+                .andExpect(status().isForbidden());
     }
 
     // ---- helpers ----

@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.cart;
 
+import com.aryan.spring_security_demo.catalog.ProductDeletingEvent;
 import com.aryan.spring_security_demo.catalog.ProductPriceChangedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
@@ -29,6 +30,15 @@ public class CartCatalogListener {
             item.setUnitPrice(event.newPrice());
             item.setTotalPrice();
             item.getCart().updateTotalAmount();
+        }
+    }
+
+    /** A deleted product leaves every cart it was in (orphan removal deletes the line). */
+    @EventListener
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void onProductDeleting(ProductDeletingEvent event) {
+        for (CartItem item : cartItemRepository.findByProductIdWithCart(event.productId())) {
+            item.getCart().removeItem(item);
         }
     }
 }
