@@ -40,8 +40,9 @@ public class ImageController {
                 .body(byteArrayResource);
     }
 
+    /** Replace an image's file, sent as the multipart part {@code file}. */
     @PutMapping("/{imageId}")
-    public ResponseEntity<ApiResponse<?>> updateImage(@PathVariable Long imageId, @RequestBody MultipartFile file){
+    public ResponseEntity<ApiResponse<?>> updateImage(@PathVariable Long imageId, @RequestParam MultipartFile file){
         imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist
         imageServiceInterface.updateImage(file, imageId);
         return ResponseEntity.ok(new ApiResponse<>("update success!", null));
