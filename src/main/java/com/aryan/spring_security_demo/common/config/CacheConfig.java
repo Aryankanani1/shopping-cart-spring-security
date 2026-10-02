@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.common.config;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.cache.transaction.TransactionAwareCacheManagerProxy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -10,23 +11,25 @@ import org.springframework.context.annotation.Configuration;
  * Enables Spring's cache abstraction and registers an in-memory
  * {@link ConcurrentMapCacheManager}. This ships with spring-context, so it adds
  * no new dependency and is a sensible default for read-heavy reference data
- * (categories, product catalog) that changes rarely.
+ * (the category list) that changes rarely.
  * <p>
- * For a distributed/production setup, swap this bean for a Redis/Caffeine
- * cache manager — the {@code @Cacheable} annotations elsewhere stay unchanged.
+ * Wrapped in a {@link TransactionAwareCacheManagerProxy} so cache writes and
+ * evictions made inside a transaction apply only once it commits: otherwise a
+ * read racing a category change could re-cache the old list between the
+ * eviction and the commit, or a rolled-back change could still evict.
+ * <p>
+ * The cache is per instance. For a multi-instance setup, swap this bean for a
+ * shared (Redis) cache manager; the {@code @Cacheable} annotations stay unchanged.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableCaching
 public class CacheConfig {
 
-    /** Cache of the full category list, keyed by a constant. */
+    /** Cache of the full category list (as DTOs), keyed by a constant. */
     public static final String CATEGORIES_CACHE = "categories";
-
-    /** Cache of the converted product catalog (DTOs), keyed by a constant. */
-    public static final String PRODUCTS_CACHE = "products";
 
     @Bean
     public CacheManager cacheManager() {
-        return new ConcurrentMapCacheManager(CATEGORIES_CACHE, PRODUCTS_CACHE);
+        return new TransactionAwareCacheManagerProxy(new ConcurrentMapCacheManager(CATEGORIES_CACHE));
     }
 }

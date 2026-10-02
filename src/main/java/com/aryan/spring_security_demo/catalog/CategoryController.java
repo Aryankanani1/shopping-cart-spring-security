@@ -21,15 +21,13 @@ public class CategoryController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<?>> getAllCategories(){
-        List<CategoryDto> categories = categoryServiceInterface.getAllCategories().stream()
-                .map(categoryServiceInterface::convertToDto)
-                .toList();
+        List<CategoryDto> categories = categoryServiceInterface.getAllCategoryDtos();
         return ResponseEntity.ok(new ApiResponse<>("success!", categories));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<?>> addCategory(@Valid @RequestBody Category name){
-        Category category = categoryServiceInterface.addCategory(name);
+    public ResponseEntity<ApiResponse<?>> addCategory(@Valid @RequestBody CategoryRequest request){
+        Category category = categoryServiceInterface.addCategory(request);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(category.getId()).toUri();
         return ResponseEntity.created(location)
@@ -56,8 +54,8 @@ public class CategoryController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<?>> updateCategoryId(@PathVariable Long id, @Valid @RequestBody Category category){
-        Category updatedCategory = categoryServiceInterface.updateCategory(category, id);
+    public ResponseEntity<ApiResponse<?>> updateCategoryId(@PathVariable Long id, @Valid @RequestBody CategoryRequest request){
+        Category updatedCategory = categoryServiceInterface.updateCategory(request, id);
         return ResponseEntity.ok(new ApiResponse<>("Found!", categoryServiceInterface.convertToDto(updatedCategory)));
     }
 }

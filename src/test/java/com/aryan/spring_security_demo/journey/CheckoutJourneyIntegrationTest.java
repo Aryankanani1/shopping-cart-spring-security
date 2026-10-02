@@ -31,6 +31,7 @@ import java.math.BigDecimal;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -398,7 +399,7 @@ class CheckoutJourneyIntegrationTest {
     void getCategories_returnDto() throws Exception {
         mockMvc.perform(get("/api/v1/categories"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].name").value("Electronics"))
+                .andExpect(jsonPath("$.data[*].name", hasItem("Electronics")))
                 .andExpect(jsonPath("$.data[0].version").doesNotExist());
     }
 

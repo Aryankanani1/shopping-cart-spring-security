@@ -9,13 +9,13 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Last in the pipeline: pre-loads the read-heavy catalog caches so the very first
- * user request doesn't pay the cold-cache database round-trip. Runs after
+ * Last in the pipeline: pre-loads the category cache so the very first
+ * storefront request doesn't pay the cold-cache database round-trip. Runs after
  * {@code DefaultDataRunner} so freshly-seeded categories are included.
  *
- * <p>The actual population is a side effect of calling the {@code @Cacheable}
- * methods on {@link CatalogCacheService}; this runner just triggers them once and
- * reports how much was warmed.
+ * <p>The population is a side effect of calling the {@code @Cacheable}
+ * {@link CategoryServiceInterface#getAllCategoryDtos()}; this runner just
+ * triggers it once and reports how much was warmed.
  */
 @Component
 @Order(40)
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class CacheWarmupRunner implements ApplicationRunner {
 
-    private final CatalogCacheService catalogCacheService;
+    private final CategoryServiceInterface categoryService;
     private final StartupProperties startupProperties;
 
     @Override
@@ -34,11 +34,9 @@ public class CacheWarmupRunner implements ApplicationRunner {
         }
 
         long start = System.currentTimeMillis();
-        int categories = catalogCacheService.getAllCategories().size();
-        int products = catalogCacheService.getAllProducts().size();
+        int categories = categoryService.getAllCategoryDtos().size();
         long elapsed = System.currentTimeMillis() - start;
 
-        log.info("[cache] Warm-up complete — {} categories, {} products cached in {} ms",
-                categories, products, elapsed);
+        log.info("[cache] Warm-up complete — {} categories cached in {} ms", categories, elapsed);
     }
 }

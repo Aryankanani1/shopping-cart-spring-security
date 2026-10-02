@@ -68,11 +68,11 @@ public class StartupProperties {
         private long timeoutMs = 3000;
     }
 
-    /** {@code app.startup.cache.*} — catalog cache warm-up. */
+    /** {@code app.startup.cache.*} — category cache warm-up. */
     @Getter
     @Setter
     public static class Cache {
-        /** Whether CacheWarmupRunner preloads the catalog caches at boot. */
+        /** Whether CacheWarmupRunner preloads the category cache at boot. */
         private boolean warmupEnabled = true;
     }
 }

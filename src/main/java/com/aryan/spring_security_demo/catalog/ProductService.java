@@ -16,7 +16,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ProductService implements ProductServiceInterface{
     private final ProductRepository productRepository;
-    private final CategoryRepository categoryRepository;
+    private final CategoryServiceInterface categoryService;
     private final ApplicationEventPublisher events;
     @Override
     @Transactional
@@ -26,18 +26,10 @@ public class ProductService implements ProductServiceInterface{
         if(productExists(request.getName(),request.getBrand())){
             throw new AlreadyExistsException(request.getBrand() + " " + request.getName() + "already exists");
         }
-       Category category = findOrCreateCategory(request.getCategory().getName());
-
-       request.setCategory(category);
+       Category category = categoryService.findOrCreate(request.getCategory().getName());
        return  productRepository.save(createProduct(request,category));
     }
 
-
-    /** The category with this name, created if there isn't one yet (for add and update alike). */
-    private Category findOrCreateCategory(String name) {
-        return Optional.ofNullable(categoryRepository.findByName(name))
-                .orElseGet(() -> categoryRepository.save(new Category(name)));
-    }
 
     private boolean productExists(String name,String brand){
         return productRepository.existsByNameAndBrand(name,brand);
@@ -50,7 +42,7 @@ public class ProductService implements ProductServiceInterface{
                 productRequest.getDescription(),
                 productRequest.getBrand(),
                 productRequest.getInventory(),
-                productRequest.getCategory()
+                category
         );
     }
 
@@ -101,7 +93,8 @@ public class ProductService implements ProductServiceInterface{
 
                 // The category is optional on update: none sent leaves it unchanged.
                 if (productUpdateRequest.getCategory() != null) {
-                    existingProduct.setCategory(findOrCreateCategory(productUpdateRequest.getCategory().getName()));
+                    // An unknown name creates the category, as adding a product does.
+                    existingProduct.setCategory(categoryService.findOrCreate(productUpdateRequest.getCategory().getName()));
                 }
                 return existingProduct;
 

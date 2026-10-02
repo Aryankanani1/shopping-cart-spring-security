@@ -100,7 +100,7 @@ common/        Shared infrastructure: config (cache, scheduling, AOP, clock, Ope
                web/ (ApiResponse, paging envelopes), validation/, bootstrap/ (startup diagnostics)
 identity/      Users, roles, auth (login/refresh/logout/password), refresh tokens, role
                + dev-user seeding; security/ (filter chain, JWT, rate limiting, ownership checks)
-catalog/       Products, categories, images, catalog caching, catalog seeding + cache warm-up
+catalog/       Products, categories, images, the category cache, catalog seeding + cache warm-up
 cart/          Carts and cart items
 order/         Checkout, order lifecycle, keyset-paged history
 notification/  In-app inbox
@@ -287,7 +287,7 @@ are left intentionally so new runners can be inserted (e.g. `@Order(25)`).
 | 20    | `DefaultDataRunner`       | `ApplicationRunner` | Seed default catalog **categories** (idempotent)      |
 | 25    | `SampleProductRunner`     | `ApplicationRunner` | Seed demo **products**, each with a placeholder image (idempotent) |
 | 30    | `ConnectivityCheckRunner` | `ApplicationRunner` | Validate DB + configured external API endpoints       |
-| 40    | `CacheWarmupRunner`       | `ApplicationRunner` | Warm the `categories` / `products` caches             |
+| 40    | `CacheWarmupRunner`       | `ApplicationRunner` | Warm the `categories` cache                           |
 
 All runners execute **before** `ApplicationReadyEvent`, after which
 `DataInitializer` seeds the default roles and users (5 customers, 2 admins).
@@ -307,7 +307,7 @@ app.startup.seed.products-enabled=true
 app.startup.connectivity.endpoints=
 app.startup.connectivity.timeout-ms=3000
 
-# CacheWarmupRunner — preload read-heavy catalog caches
+# CacheWarmupRunner — preload the category cache
 app.startup.cache.warmup-enabled=true
 ```
 
@@ -323,10 +323,13 @@ environment** and only the externalized configuration changes.
 
 ### Caching
 `CacheConfig` enables Spring's cache abstraction with an in-memory
-`ConcurrentMapCacheManager` (no extra dependency). `CatalogCacheService` exposes
-`@Cacheable` reads where fetch **and** DTO conversion happen inside one read-only
-transaction — required because `spring.jpa.open-in-view=false`. Swap the cache
-manager for Redis/Caffeine in production; the annotations stay unchanged.
+`ConcurrentMapCacheManager`. `GET /categories` is served from the `categories`
+cache (`CategoryService.getAllCategoryDtos`, which caches DTOs, not entities), and
+every category create, rename or delete — including a product write that creates
+a category — clears it with `@CacheEvict`. The manager is wrapped in a
+`TransactionAwareCacheManagerProxy`, so a clear takes effect when its transaction
+commits, never before. The cache is per instance: with several instances, swap
+the manager for a shared one (Redis); the annotations stay unchanged.
 
 ### Cross-cutting logging (AOP)
 `LoggingAspect` (package `common.aop`) is a single `@Around` aspect over every
