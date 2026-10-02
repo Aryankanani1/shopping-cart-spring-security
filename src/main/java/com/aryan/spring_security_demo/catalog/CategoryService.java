@@ -72,11 +72,14 @@ public class CategoryService implements CategoryServiceInterface{
     @CacheEvict(cacheNames = CacheConfig.CATEGORIES_CACHE, allEntries = true)
     @Transactional
     public Category updateCategory(CategoryRequest request, Long id) {
-     return Optional.ofNullable(getCategoryById(id)).map(oldCategory -> {
-           oldCategory.setName(request.getName());
-           return categoryRepository.save(oldCategory);
-       })
-             .orElseThrow(() -> new CategoryNotFoundException("category not found exception"));
+        Category category = getCategoryById(id);
+        // Same rule as addCategory: names are unique (the database enforces it
+        // too), since lookups by name expect at most one match.
+        if (categoryRepository.existsByNameAndIdNot(request.getName(), id)) {
+            throw new AlreadyExistsException("Category already exists");
+        }
+        category.setName(request.getName());
+        return categoryRepository.save(category);
     }
 
 

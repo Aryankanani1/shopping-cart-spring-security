@@ -65,6 +65,27 @@ class CategoryServiceTest {
     }
 
     @Test
+    void updateCategory_toAnotherCategorysName_isRejected() {
+        when(categoryRepository.findById(3L)).thenReturn(Optional.of(new Category("Novels")));
+        when(categoryRepository.existsByNameAndIdNot("Books", 3L)).thenReturn(true);
+
+        assertThatThrownBy(() -> categoryService.updateCategory(new CategoryRequest("Books"), 3L))
+                .isInstanceOf(AlreadyExistsException.class);
+        verify(categoryRepository, never()).save(any());
+    }
+
+    @Test
+    void updateCategory_keepingItsOwnName_isAllowed() {
+        Category books = new Category("books");
+        when(categoryRepository.findById(3L)).thenReturn(Optional.of(books));
+        when(categoryRepository.save(books)).thenReturn(books);
+
+        // Only *other* categories count as taken, so a case fix on itself is fine.
+        assertThat(categoryService.updateCategory(new CategoryRequest("Books"), 3L).getName()).isEqualTo("Books");
+        verify(categoryRepository).existsByNameAndIdNot("Books", 3L);
+    }
+
+    @Test
     void deleteCategory_missing_is404() {
         when(categoryRepository.findById(3L)).thenReturn(Optional.empty());
 
