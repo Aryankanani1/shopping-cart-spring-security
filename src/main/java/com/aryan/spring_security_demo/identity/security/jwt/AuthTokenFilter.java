@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -42,11 +43,13 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(auth);
             }
 
-        } catch (JwtException e) {
-            // Malformed / expired / forged token: leave the context unauthenticated
-            // and let the request continue. Secured endpoints then hit the entry
-            // point (a clean 401); public ones still work. We deliberately never
-            // echo the parser's message back — it can leak library internals.
+        } catch (JwtException | UsernameNotFoundException e) {
+            // Malformed / expired / forged token, or a valid one whose account has
+            // since been deleted: leave the context unauthenticated and let the
+            // request continue. Secured endpoints then hit the entry point (a clean
+            // 401); public ones still work. An exception thrown out of a filter never
+            // reaches GlobalExceptionHandler and would surface as a 500. We
+            // deliberately never echo the message back — it can leak internals.
             logger.debug("Rejected JWT: " + e.getMessage());
             SecurityContextHolder.clearContext();
         }
