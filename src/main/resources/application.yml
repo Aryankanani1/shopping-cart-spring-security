@@ -75,9 +75,10 @@ spring:
         batch_versioned_data: true
 
 # --- Actuator: operational endpoints for health checks and metrics ---
-# Only health/info/metrics are exposed over HTTP (never the full set). Only
-# /actuator/health is public (see ShopConfig) so load balancers and Kubernetes
-# liveness/readiness probes can reach it; info and metrics are admin-only.
+# Only health/info/metrics/prometheus are exposed over HTTP (never the full set).
+# Only /actuator/health is public (see ShopConfig) so load balancers and Kubernetes
+# liveness/readiness probes can reach it; info and metrics are admin-only, and
+# prometheus is admin-only unless the scrape account below is switched on.
 management:
   endpoints:
     # Defense in depth: every endpoint is switched off unless enabled below, and
@@ -88,11 +89,13 @@ management:
       max-permitted: read-only
     web:
       exposure:
-        include: health, info, metrics
+        include: health, info, metrics, prometheus
   endpoint:
     info:
       access: read-only
     metrics:
+      access: read-only
+    prometheus:
       access: read-only
     health:
       access: read-only
@@ -109,6 +112,15 @@ management:
       enabled: true            # Java version and vendor
     process:
       enabled: true            # pid, CPUs, memory
+  metrics:
+    # Label every series with the app's name, so one Prometheus can tell apps apart.
+    tags:
+      application: ${spring.application.name}
+    # Latency buckets for HTTP requests, so Prometheus can compute percentiles
+    # (histogram_quantile) across instances.
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 # Base path prefix for all REST controllers (e.g. /api/v1/products).
 api:
@@ -143,6 +155,15 @@ app:
     # Scheduled sweep of buckets that have refilled to full (bounds memory), as a
     # fixed rate in ms. Non-critical/idempotent, so a plain rate is fine. Hourly.
     eviction-interval-ms: ${APP_RATELIMIT_EVICTION_INTERVAL_MS:3600000}
+  # Prometheus scrape account (see PrometheusScrapeSecurityConfig). Prometheus
+  # can't log in for a JWT, so when this is on it reads /actuator/prometheus with
+  # HTTP Basic, using this account, which can't access anything else. Off by
+  # default; turning it on requires PROMETHEUS_SCRAPE_PASSWORD (16-72 characters).
+  metrics:
+    prometheus:
+      scrape-enabled: ${PROMETHEUS_SCRAPE_ENABLED:false}
+      username: ${PROMETHEUS_SCRAPE_USERNAME:prometheus}
+      password: ${PROMETHEUS_SCRAPE_PASSWORD:}
   # Optional feature modules (see WishlistModule). Turning one off removes its
   # endpoints, services and scheduled jobs; every other module is always on.
   modules:

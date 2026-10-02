@@ -9,7 +9,9 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -36,6 +38,7 @@ class ActuatorAccessTest {
 
         mockMvc.perform(get("/actuator/info")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/actuator/metrics")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/prometheus")).andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -51,6 +54,7 @@ class ActuatorAccessTest {
         mockMvc.perform(get("/actuator/info")).andExpect(status().isForbidden());
         mockMvc.perform(get("/actuator/metrics")).andExpect(status().isForbidden());
         mockMvc.perform(get("/actuator/metrics/jvm.memory.used")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/actuator/prometheus")).andExpect(status().isForbidden());
     }
 
     @Test
@@ -71,6 +75,21 @@ class ActuatorAccessTest {
         mockMvc.perform(get("/actuator/metrics/jvm.memory.used"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.measurements[0].value").isNumber());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("admin: the Prometheus endpoint (scrape account off) serves labelled metrics")
+    void admin_prometheus() throws Exception {
+        mockMvc.perform(get("/api/v1/products")).andExpect(status().isOk());
+
+        mockMvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("jvm_memory_used_bytes")))
+                // Every series carries the application tag.
+                .andExpect(content().string(containsString("application=\"spring_security_demo\"")))
+                // HTTP latency buckets, for percentiles.
+                .andExpect(content().string(containsString("http_server_requests_seconds_bucket")));
     }
 
     @Test
