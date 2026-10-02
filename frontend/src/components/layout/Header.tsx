@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { useCart } from '../context/CartContext'
-import { cx } from '../lib/format'
+import { useAuth } from '../../context/AuthContext'
+import { useCart } from '../../context/CartContext'
+import { cx } from '../../lib/format'
 import { NotificationBell } from './NotificationBell'
 
 export function Header() {

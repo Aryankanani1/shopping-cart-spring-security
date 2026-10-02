@@ -104,8 +104,12 @@ src/
                - types.ts      TS mirrors of the backend DTOs / envelopes
                - tokenStore.ts localStorage-backed session, source of truth
   context/     AuthContext (session) + CartContext (cart + header badge)
-  components/  Layout, Header, Footer, ProductCard, RequireAuth, stepper, ui atoms,
-               WishlistButton, NotificationBell
+  components/  Grouped by role:
+               - layout/   Layout, Header, Footer, NotificationBell (the page frame)
+               - routing/  RequireAuth, RequireAdmin (route guards)
+               - product/  ProductCard, WishlistButton
+               - ui/       Spinner, Loader, ErrorNote, EmptyState (index.tsx),
+                           QuantityStepper, StatusBadge
   hooks/       useWishlist (shared wishlist cache + mutations)
   pages/       Home, Products, ProductDetail, Login, Register, Cart, Checkout, Orders,
                OrderDetail, Wishlist, Notifications, Account (+ ChangePasswordForm);

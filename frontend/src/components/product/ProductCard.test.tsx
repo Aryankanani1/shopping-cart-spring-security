@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ProductCard } from './ProductCard'
-import type { ProductDto } from '../api/types'
+import type { ProductDto } from '../../api/types'
 
 function make(overrides: Partial<ProductDto> = {}): ProductDto {
   return {
