@@ -51,8 +51,13 @@ public class RefreshTokenService {
      * Validate the presented refresh token and, if good, rotate it: revoke it and
      * issue a replacement. Throws {@link InvalidRefreshTokenException} (→ 401) for
      * an unknown, expired, or already-revoked token.
+     *
+     * <p>{@code noRollbackFor}: on a replayed token the family revocation must
+     * commit even though the method then throws — a plain {@code @Transactional}
+     * would roll it back and leave the thief's newer token working. No other
+     * path writes before throwing, so committing on this exception changes nothing else.
      */
-    @Transactional
+    @Transactional(noRollbackFor = InvalidRefreshTokenException.class)
     public RotatedToken rotate(String rawToken) {
         RefreshToken current = refreshTokenRepository.findByTokenHash(hash(rawToken))
                 .orElseThrow(() -> new InvalidRefreshTokenException("Unknown refresh token"));

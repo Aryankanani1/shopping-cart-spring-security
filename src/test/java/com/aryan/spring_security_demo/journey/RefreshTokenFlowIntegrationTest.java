@@ -100,6 +100,25 @@ class RefreshTokenFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("replaying a spent refresh token revokes the newer one too")
+    void refresh_replayRevokesWholeFamily() throws Exception {
+        String original = login().path("refreshToken").asText();
+        String current = refresh(original).path("refreshToken").asText();
+
+        // Someone replays the spent token: a sign it leaked.
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(original)))
+                .andExpect(status().isUnauthorized());
+
+        // So the newest token — possibly the thief's — no longer works either.
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(current)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("logout revokes the refresh token so it can no longer be exchanged")
     void logout_revokesRefreshToken() throws Exception {
         String refreshToken = login().path("refreshToken").asText();
