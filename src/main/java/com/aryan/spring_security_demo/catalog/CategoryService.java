@@ -1,6 +1,9 @@
 package com.aryan.spring_security_demo.catalog;
+import com.aryan.spring_security_demo.common.config.CacheConfig;
 import com.aryan.spring_security_demo.common.exception.AlreadyExistsException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,31 +29,51 @@ public class CategoryService implements CategoryServiceInterface{
         return categoryRepository.findByName(name);
     }
 
+    /**
+     * Cached, since the storefront reads the list on most pages and it rarely
+     * changes. Every method below that creates, renames or deletes a category
+     * clears the cache; the clear applies when its transaction commits (see
+     * CacheConfig). DTOs are cached, not entities, so nothing lazy or mutable
+     * outlives the transaction.
+     */
     @Override
+    @Cacheable(cacheNames = CacheConfig.CATEGORIES_CACHE, key = "'all'")
     @Transactional(readOnly = true)
-    public List<Category> getAllCategories() {
-        return categoryRepository.findAll();
+    public List<CategoryDto> getAllCategoryDtos() {
+        return categoryRepository.findAll().stream().map(this::convertToDto).toList();
+    }
+
+    // Clears the cache even when the category already exists: cheap, and only on
+    // admin product writes.
+    @Override
+    @CacheEvict(cacheNames = CacheConfig.CATEGORIES_CACHE, allEntries = true)
+    @Transactional
+    public Category findOrCreate(String name) {
+        return Optional.ofNullable(categoryRepository.findByName(name))
+                .orElseGet(() -> categoryRepository.save(new Category(name)));
     }
 
     @Override
+    @CacheEvict(cacheNames = CacheConfig.CATEGORIES_CACHE, allEntries = true)
     @Transactional
-    public Category addCategory(Category category) {
+    public Category addCategory(CategoryRequest request) {
         // check the category if it is existing or not if exist we can't
         // create those categories, and
         // if not exists we can create those categories
 
-        if(categoryRepository.existsByName(category.getName())){
+        if(categoryRepository.existsByName(request.getName())){
             throw new AlreadyExistsException("Category already exists");
         }
-        return categoryRepository.save(category);
+        return categoryRepository.save(new Category(request.getName()));
 
     }
 
     @Override
+    @CacheEvict(cacheNames = CacheConfig.CATEGORIES_CACHE, allEntries = true)
     @Transactional
-    public Category updateCategory(Category category,Long id) {
+    public Category updateCategory(CategoryRequest request, Long id) {
      return Optional.ofNullable(getCategoryById(id)).map(oldCategory -> {
-           oldCategory.setName(category.getName());
+           oldCategory.setName(request.getName());
            return categoryRepository.save(oldCategory);
        })
              .orElseThrow(() -> new CategoryNotFoundException("category not found exception"));
@@ -59,6 +82,7 @@ public class CategoryService implements CategoryServiceInterface{
 
 
     @Override
+    @CacheEvict(cacheNames = CacheConfig.CATEGORIES_CACHE, allEntries = true)
     @Transactional
     public void deleteCategoryById(Long id) {
 categoryRepository.findById(id).ifPresentOrElse(categoryRepository::delete,() -> {

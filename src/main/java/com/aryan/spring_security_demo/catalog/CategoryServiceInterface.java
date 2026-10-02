@@ -6,11 +6,15 @@ import java.util.List;
 public interface CategoryServiceInterface {
     Category getCategoryById(Long id);
     Category getCategoryByName(String name);
-    List<Category> getAllCategories();
+    /** Every category, served from the {@code categories} cache. */
+    List<CategoryDto> getAllCategoryDtos();
 
-    Category addCategory(Category category);
+    /** The category with this name, created if there isn't one yet. */
+    Category findOrCreate(String name);
 
-    Category updateCategory(Category category,Long id);
+    Category addCategory(CategoryRequest request);
+
+    Category updateCategory(CategoryRequest request, Long id);
     void deleteCategoryById(Long id);
 
     CategoryDto convertToDto(Category category);

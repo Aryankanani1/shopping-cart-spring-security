@@ -31,5 +31,5 @@ public class AddProductRequest {
     // Cascade validation into the nested category (@NotBlank/@NoProfanity on name).
     @NotNull(message = "Category is required")
     @Valid
-    private Category category;
+    private CategoryRequest category;
 }

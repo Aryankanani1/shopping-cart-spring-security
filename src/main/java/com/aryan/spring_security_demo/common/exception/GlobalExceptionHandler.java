@@ -5,6 +5,7 @@ import com.aryan.spring_security_demo.catalog.CategoryNotFoundException;
 import com.aryan.spring_security_demo.catalog.ImageNotFoundException;
 import com.aryan.spring_security_demo.catalog.InsufficientStockException;
 import com.aryan.spring_security_demo.catalog.InvalidImageException;
+import com.aryan.spring_security_demo.catalog.ProductInUseException;
 import com.aryan.spring_security_demo.catalog.ProductNotFoundException;
 import com.aryan.spring_security_demo.identity.InvalidPasswordException;
 import com.aryan.spring_security_demo.identity.InvalidRefreshTokenException;
@@ -97,6 +98,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleInsufficientStock(InsufficientStockException ex) {
         log.debug("409 Insufficient stock: {}", ex.getMessage());
         return problem(HttpStatus.CONFLICT, "Insufficient stock", ex.getMessage());
+    }
+
+    /** 409 — deleting a product that past orders still refer to. */
+    @ExceptionHandler(ProductInUseException.class)
+    public ProblemDetail handleProductInUse(ProductInUseException ex) {
+        log.debug("409 Product in use: {}", ex.getMessage());
+        return problem(HttpStatus.CONFLICT, "Product in use", ex.getMessage());
     }
 
     /** 409 — checkout attempted with nothing in the cart. */
@@ -227,15 +235,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // -----------------------------------------------------------------------
 
     /**
-     * 409 — a unique/constraint check lost a check-then-act race (two concurrent
-     * creates both passed the {@code existsBy...} guard, and the database
-     * constraint rejected the second). Returned as a conflict rather than being
-     * swallowed by the {@link #handleUnexpected(Exception) 500 catch-all}.
+     * 409 — a database constraint rejected the write: a unique check lost a
+     * check-then-act race (two concurrent creates both passed the
+     * {@code existsBy...} guard), or a delete hit a row that other rows still
+     * reference. Returned as a conflict rather than being swallowed by the
+     * {@link #handleUnexpected(Exception) 500 catch-all}. The title is generic
+     * because it covers both cases.
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
         log.warn("409 Data integrity violation", ex);
-        return problem(HttpStatus.CONFLICT, "Resource already exists",
+        return problem(HttpStatus.CONFLICT, "Data conflict",
                 "The request conflicts with existing data");
     }
 

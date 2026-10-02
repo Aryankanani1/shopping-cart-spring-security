@@ -28,9 +28,10 @@ public class AuthController {
     private final UserServiceInterface userService;
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<?>> login(@RequestBody LoginRequest request) {
-        // Bad credentials throw BadCredentialsException, which the global handler
-        // maps to 401 — no try/catch here, consistent with every other endpoint.
+    public ResponseEntity<ApiResponse<?>> login(@Valid @RequestBody LoginRequest request) {
+        // Bad credentials (wrong password or unknown email alike) throw
+        // BadCredentialsException, which the global handler maps to 401 — no
+        // try/catch here, consistent with every other endpoint.
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
 

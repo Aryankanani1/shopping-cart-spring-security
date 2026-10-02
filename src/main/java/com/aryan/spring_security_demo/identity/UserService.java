@@ -10,11 +10,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class UserService implements UserServiceInterface{
+    /** BCrypt hashes only this many bytes; the encoder throws on longer input. */
+    private static final int MAX_PASSWORD_BYTES = 72;
+
     private final UserRepository userRepository;
     private final ModelMapper modelMapper;
     private final PasswordEncoder passwordEncoder;
@@ -37,7 +41,7 @@ public class UserService implements UserServiceInterface{
                     user.setEmail(request.getEmail());
                     user.setFirstName(request.getFirstName());
                     user.setLastName(request.getLastName());
-                    user.setPassword(passwordEncoder.encode(request.getPassword()));
+                    user.setPassword(encodePassword("password", request.getPassword()));
                     return userRepository.save(user);
                 }).orElseThrow(() -> new AlreadyExistsException( request.getEmail()+ " already exists"));
     }
@@ -67,6 +71,18 @@ public class UserService implements UserServiceInterface{
         }, () -> {
             throw new UserNotFoundException("failed to find user");
         });
+    }
+
+    /**
+     * Hash a new password, rejecting one too long for BCrypt as a 400 on
+     * {@code field}. The request's 72-character limit isn't enough on its own: a
+     * character can take up to 4 bytes, and the encoder's limit is in bytes.
+     */
+    private String encodePassword(String field, String rawPassword) {
+        if (rawPassword.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            throw new InvalidPasswordException(field, "Password is too long");
+        }
+        return passwordEncoder.encode(rawPassword);
     }
 
     @Override
@@ -127,7 +143,7 @@ public class UserService implements UserServiceInterface{
         if (request.getNewPassword().equals(request.getCurrentPassword())) {
             throw new InvalidPasswordException("newPassword", "New password must be different from the current one");
         }
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setPassword(encodePassword("newPassword", request.getNewPassword()));
 
         // Same transaction as the password update, so the change can never commit
         // while a stolen refresh token stays usable.

@@ -40,11 +40,12 @@ public class CartItemService implements CartItemServiceInterface {
            cartItem.setCart(cart);
            cartItem.setProduct(product);
            cartItem.setQuantity(quantity);
-           cartItem.setUnitPrice(product.getPrice());
         }
         else {
             cartItem.setQuantity(cartItem.getQuantity() + quantity);
         }
+        // Always the current price, which also refreshes a line added before a price change.
+        cartItem.setUnitPrice(product.getPrice());
         cartItem.setTotalPrice();
         cart.addItem(cartItem);
         cartItemRepository.save(cartItem);

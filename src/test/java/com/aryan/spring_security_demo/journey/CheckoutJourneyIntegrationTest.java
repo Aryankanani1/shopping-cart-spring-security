@@ -31,6 +31,7 @@ import java.math.BigDecimal;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -355,6 +356,25 @@ class CheckoutJourneyIntegrationTest {
     }
 
     @Test
+    @DisplayName("registration: a password over BCrypt's 72 bytes is a 400, not a 500")
+    void register_passwordOver72Bytes_returns400() throws Exception {
+        String body = """
+                {
+                  "firstName": "Ada",
+                  "lastName": "Lovelace",
+                  "email": "long-password@example.com",
+                  "password": "%s"
+                }
+                """.formatted("é".repeat(40));  // 40 characters, 80 bytes
+
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.password").exists());
+    }
+
+    @Test
     @DisplayName("framework 4xx: malformed JSON body stays a 400, not a 500")
     void malformedJson_returnsProblemDetail400() throws Exception {
         mockMvc.perform(post("/api/v1/users")
@@ -379,7 +399,7 @@ class CheckoutJourneyIntegrationTest {
     void getCategories_returnDto() throws Exception {
         mockMvc.perform(get("/api/v1/categories"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].name").value("Electronics"))
+                .andExpect(jsonPath("$.data[*].name", hasItem("Electronics")))
                 .andExpect(jsonPath("$.data[0].version").doesNotExist());
     }
 

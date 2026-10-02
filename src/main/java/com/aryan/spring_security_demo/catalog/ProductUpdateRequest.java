@@ -31,5 +31,5 @@ public class ProductUpdateRequest {
 
     // Cascade validation into the nested category if one is supplied.
     @Valid
-    private Category category;
+    private CategoryRequest category;
 }

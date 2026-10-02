@@ -32,6 +32,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -97,6 +98,19 @@ class AccountDeletionIntegrationTest {
                         .content("""
                                 {"refreshToken": "%s"}
                                 """.formatted(session.path("refreshToken").asText())))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("the deleted account's unexpired access token is treated as signed out, not a 500")
+    void deletedAccountToken_isAnonymous() throws Exception {
+        String bearer = "Bearer " + login().path("token").asText();
+        mockMvc.perform(delete("/api/v1/users/" + userId).header("Authorization", bearer))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/products").header("Authorization", bearer))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/users/" + userId).header("Authorization", bearer))
                 .andExpect(status().isUnauthorized());
     }
 

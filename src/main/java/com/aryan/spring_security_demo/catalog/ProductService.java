@@ -1,11 +1,14 @@
 package com.aryan.spring_security_demo.catalog;
 import com.aryan.spring_security_demo.common.exception.AlreadyExistsException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -13,7 +16,8 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class ProductService implements ProductServiceInterface{
     private final ProductRepository productRepository;
-    private final CategoryRepository categoryRepository;
+    private final CategoryServiceInterface categoryService;
+    private final ApplicationEventPublisher events;
     @Override
     @Transactional
     public Product addProduct(AddProductRequest request) {
@@ -22,14 +26,7 @@ public class ProductService implements ProductServiceInterface{
         if(productExists(request.getName(),request.getBrand())){
             throw new AlreadyExistsException(request.getBrand() + " " + request.getName() + "already exists");
         }
-        // check if the category is in DB or not
-       Category category = Optional.ofNullable(categoryRepository.findByName(request.getCategory().getName()))
-                         .orElseGet(() -> {
-                   Category newCategory = new Category(request.getCategory().getName());
-                   return categoryRepository.save(newCategory);
-               });
-
-       request.setCategory(category);
+       Category category = categoryService.findOrCreate(request.getCategory().getName());
        return  productRepository.save(createProduct(request,category));
     }
 
@@ -45,7 +42,7 @@ public class ProductService implements ProductServiceInterface{
                 productRequest.getDescription(),
                 productRequest.getBrand(),
                 productRequest.getInventory(),
-                productRequest.getCategory()
+                category
         );
     }
 
@@ -59,12 +56,19 @@ public class ProductService implements ProductServiceInterface{
     @Override
     @Transactional
     public void deleteProductById(Long productId) {
-        productRepository.findById(productId)
-        .ifPresentOrElse(productRepository::delete,
-                () ->
-                {
-                  throw new ProductNotFoundException("product not found ");
-        });
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ProductNotFoundException("product not found "));
+        // Carts drop the product first, in this transaction (CartCatalogListener).
+        events.publishEvent(new ProductDeletingEvent(productId));
+        productRepository.delete(product);
+        try {
+            // Flush now so a foreign-key failure surfaces here, not at commit.
+            productRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            // Past order lines keep pointing at the product they sold.
+            throw new ProductInUseException("This product is part of existing orders, so it can't be deleted."
+                    + " Set its stock to 0 to stop selling it.");
+        }
     }
 
     @Override
@@ -76,17 +80,30 @@ public class ProductService implements ProductServiceInterface{
     }
 
     private Product updateExistingProduct(Product existingProduct, ProductUpdateRequest productUpdateRequest){
+                if (priceChanges(existingProduct.getPrice(), productUpdateRequest.getPrice())) {
+                    // Carts reprice their lines in this same transaction.
+                    events.publishEvent(new ProductPriceChangedEvent(
+                            existingProduct.getId(), productUpdateRequest.getPrice()));
+                }
                 existingProduct.setName(productUpdateRequest.getName());
                 existingProduct.setBrand(productUpdateRequest.getBrand());
                 existingProduct.setPrice(productUpdateRequest.getPrice());
                 existingProduct.setDescription(productUpdateRequest.getDescription());
                 existingProduct.setInventory(productUpdateRequest.getInventory());
 
-                Category category = categoryRepository.findByName(productUpdateRequest.getCategory().getName());
-                existingProduct.setCategory(category);
+                // The category is optional on update: none sent leaves it unchanged.
+                if (productUpdateRequest.getCategory() != null) {
+                    // An unknown name creates the category, as adding a product does.
+                    existingProduct.setCategory(categoryService.findOrCreate(productUpdateRequest.getCategory().getName()));
+                }
                 return existingProduct;
 
     }
+    // compareTo, not equals: 10.0 and 10.00 are the same price.
+    private static boolean priceChanges(BigDecimal current, BigDecimal next) {
+        return current == null || current.compareTo(next) != 0;
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<Product> getAllProducts() {

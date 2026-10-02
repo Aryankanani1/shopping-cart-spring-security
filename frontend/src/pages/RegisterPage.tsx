@@ -108,6 +108,7 @@ export function RegisterPage() {
               onChange={(e) => set('password', e.target.value)}
               required
               minLength={6}
+              maxLength={72}
             />
             {fieldErrors.password && <span className="field__err">{fieldErrors.password}</span>}
           </div>

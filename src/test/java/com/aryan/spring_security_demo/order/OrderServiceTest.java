@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
 
@@ -24,7 +25,10 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -55,6 +59,7 @@ class OrderServiceTest {
     @Mock private CartService cartService;
     @Mock private AuthUtils authUtils;
     @Mock private ModelMapper modelMapper;
+    @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-14T12:00:00Z"), ZoneOffset.UTC);
 
     @InjectMocks private OrderService orderService;
 
@@ -101,10 +106,11 @@ class OrderServiceTest {
         Product p = new Product();
         p.setId(7L);
         p.setInventory(5);
+        p.setPrice(new BigDecimal("12.00"));
         CartItem ci = new CartItem();
         ci.setProduct(p);
         ci.setQuantity(2);
-        ci.setUnitPrice(BigDecimal.TEN);
+        ci.setUnitPrice(BigDecimal.TEN); // stored when added; the price has since gone up
         User owner = new User();
         owner.setId(OWNER_ID);
         Cart cart = new Cart();
@@ -139,7 +145,11 @@ class OrderServiceTest {
         assertThat(saved.getPostalCode()).isEqualTo("EC1A");
         assertThat(saved.getCountry()).isEqualTo("UK");
         assertThat(saved.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(saved.getLocalDate()).isEqualTo(LocalDate.of(2026, 3, 14));  // from the clock
         assertThat(saved.getOrderItems()).hasSize(1);
+        // Charged at the current price, not the one stored in the cart.
+        assertThat(saved.getOrderItems().iterator().next().getPrice()).isEqualByComparingTo("12.00");
+        assertThat(saved.getTotalAmount()).isEqualByComparingTo("24.00");
         // And the cart is emptied after a successful order.
         verify(cartService).clearCart(99L);
     }

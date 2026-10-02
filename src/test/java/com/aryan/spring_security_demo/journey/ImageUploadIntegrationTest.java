@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpMethod;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
@@ -102,6 +103,31 @@ class ImageUploadIntegrationTest {
     }
 
     @Test
+    @DisplayName("PUT replaces an image's file, served back from the same URL")
+    void replace_servesNewFile() throws Exception {
+        long imageId = upload();
+        byte[] gif = {'G', 'I', 'F', '8', '9', 'a'};
+
+        mockMvc.perform(multipart(HttpMethod.PUT, "/api/v1/images/{id}", imageId)
+                        .file(new MockMultipartFile("file", "lamp.gif", "image/gif", gif)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/images/{id}", imageId))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/gif"))
+                .andExpect(content().bytes(gif));
+    }
+
+    @Test
+    @WithMockUser(roles = "CUSTOMER")
+    @DisplayName("a customer can't replace an image")
+    void replace_byCustomer_isForbidden() throws Exception {
+        mockMvc.perform(multipart(HttpMethod.PUT, "/api/v1/images/{id}", 1L)
+                        .file(new MockMultipartFile("file", "lamp.gif", "image/gif", new byte[]{1})))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("an empty file is a 400")
     void upload_emptyFile_isRejected() throws Exception {
         mockMvc.perform(multipart("/api/v1/images")
@@ -109,5 +135,15 @@ class ImageUploadIntegrationTest {
                         .param("productId", String.valueOf(productId)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("blank.png is empty"));
+    }
+
+    private long upload() throws Exception {
+        MvcResult result = mockMvc.perform(multipart("/api/v1/images")
+                        .file(new MockMultipartFile("files", "lamp.png", "image/png", PNG_BYTES))
+                        .param("productId", String.valueOf(productId)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString())
+                .path("data").get(0).path("imageId").asLong();
     }
 }
