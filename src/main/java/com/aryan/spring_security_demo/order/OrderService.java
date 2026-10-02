@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ public class OrderService implements OrderServiceInterface{
     private final ProductRepository  productRepository;
     private final CartService cartService;
     private final AuthUtils authUtils;
+    private final Clock clock;
 
     private final ModelMapper modelMapper;
     @Override
@@ -139,7 +141,7 @@ public class OrderService implements OrderServiceInterface{
         //set the user
         order.setUser(cart.getUser());
         order.setOrderStatus(OrderStatus.PENDING);
-        order.setLocalDate(LocalDate.now());
+        order.setLocalDate(LocalDate.now(clock));
         return order;
 
     }

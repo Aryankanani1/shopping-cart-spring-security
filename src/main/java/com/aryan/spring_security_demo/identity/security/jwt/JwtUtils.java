@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.identity.security.jwt;
 import com.aryan.spring_security_demo.identity.AuthTokenProperties;
 import com.aryan.spring_security_demo.identity.security.user.UserDetails;
 import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -12,6 +13,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.time.Clock;
 import java.util.Date;
 import java.util.List;
 
@@ -20,6 +22,7 @@ import java.util.List;
 public class JwtUtils {
 
     private final AuthTokenProperties authTokenProperties;
+    private final Clock clock;
 
     public String generateUserTokenFromUser(Authentication authentication){
         return generateTokenFromUserDetails((UserDetails) authentication.getPrincipal());
@@ -34,12 +37,13 @@ public class JwtUtils {
         List<String> roles = userPrinciple.getAuthorities()
                 .stream().map(GrantedAuthority::getAuthority).toList();
 
+        Date now = Date.from(clock.instant());
         return Jwts.builder()
                 .subject(userPrinciple.getEmail())
                 .claim("id",userPrinciple.getId())
                 .claim("roles",roles)
-                .issuedAt(new Date())
-                .expiration(new Date(new Date().getTime() + authTokenProperties.getExpirationInMils()))
+                .issuedAt(now)
+                .expiration(new Date(now.getTime() + authTokenProperties.getExpirationInMils()))
                 .signWith(key())
                 .compact();
     }
@@ -48,14 +52,18 @@ public class JwtUtils {
         return Keys.hmacShaKeyFor(Decoders.BASE64.decode(authTokenProperties.getJwtSecret()));
     }
 
+    // Expiry is checked against the injected clock, the same one tokens are minted with.
+    private JwtParser parser() {
+        return Jwts.parser().verifyWith(key()).clock(() -> Date.from(clock.instant())).build();
+    }
+
     String getUserNameFromToken(String token){
-        return Jwts.parser().verifyWith(key()).build()
-                .parseSignedClaims(token).getPayload().getSubject();
+        return parser().parseSignedClaims(token).getPayload().getSubject();
     }
 
     public boolean validateToken(String token) {
         try {
-            Jwts.parser().verifyWith(key()).build().parseSignedClaims(token);
+            parser().parseSignedClaims(token);
             return true;
         }catch (Exception e){
             throw new JwtException(e.getMessage());
