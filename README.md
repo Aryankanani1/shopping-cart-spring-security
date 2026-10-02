@@ -169,10 +169,31 @@ an earlier `ddl-auto: update`) instead of failing on a non-empty schema.
 ### Observability
 
 Spring Boot Actuator exposes only `health`, `info`, and `metrics` over HTTP.
-`/actuator/health` (and the `liveness` / `readiness` probe groups) is the only
-public actuator endpoint — for load balancers and Kubernetes probes — while the
-rest require authentication. In prod, health `show-details` is `never`, so the
-probe returns just `UP`/`DOWN` and never leaks internals.
+
+| Endpoint | Who | Shows |
+|---|---|---|
+| `/actuator/health`, `/health/liveness`, `/health/readiness` | everyone | `UP`/`DOWN` — for load balancers and Kubernetes probes |
+| `/actuator/health` details (database, disk space) | admins | per-component status (dev only; prod's `show-details` is `never`) |
+| `/actuator/info` | admins | app version and build time (from the Maven `build-info` goal), Java version, process (pid, CPUs, memory) |
+| `/actuator/metrics`, `/actuator/metrics/{name}` | admins | JVM, HTTP, datasource and cache metrics |
+
+How it's locked down:
+- **Admin-only by endpoint, not by path.** `ShopConfig` matches the actuator with
+  `EndpointRequest` (health public, every other endpoint `ROLE_ADMIN`), so the rules
+  still hold if the base path or the management port changes. Health details are
+  shown only to admins (`management.endpoint.health.roles`).
+- **Everything else is switched off.** `management.endpoints.access.default: none`
+  turns off every endpoint not explicitly enabled, and `max-permitted: read-only`
+  rules out write operations. Widening the exposure list (even to `*`) can't bring
+  up `env`, `heapdump`, `threaddump`, `loggers` or `shutdown`.
+- **Optional: a separate port.** Set `MANAGEMENT_SERVER_PORT` to serve the actuator
+  on its own port that you don't route publicly. The same rules (JWT included)
+  apply there. Point the probes at that port.
+
+Tests: `ActuatorAccessTest`, `ActuatorLockdownTest`, `ActuatorBasePathTest`,
+`ActuatorManagementPortTest`.
+Request metrics already cover the business flows — e.g. orders placed:
+`/actuator/metrics/http.server.requests?tag=uri:/api/v1/orders&tag=method:POST&tag=status:201`.
 
 ### Security model
 - **Stateless access JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`

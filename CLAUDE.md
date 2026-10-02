@@ -61,8 +61,10 @@ no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s one
 - Aspects select layers with the named pointcuts in `common/aop/Layers`, not with package-based `execution(...)` expressions.
 
 ### Tests
-- Every new or changed endpoint has an integration test (`@SpringBootTest` + MockMvc) covering the success path and at least one auth or ownership failure (401, 403 or 404).
-- Every bug fix comes with a test that fails without the fix.
+- Unit tests are the default: service and domain logic is tested with plain JUnit and Mockito (no Spring context), and request validation with a `@WebMvcTest` slice.
+- Integration tests (`@SpringBootTest` + MockMvc against H2) are only for security-sensitive and business-critical paths: authentication and sessions (login, tokens, passwords), access rules and ownership checks, money and stock (checkout, prices, inventory), and behavior a mock can't show (transactions, database constraints and cascades, cross-module events, security and actuator configuration).
+- A new or changed access rule or ownership check has an integration test of its failure case (401, 403 or 404).
+- Every bug fix comes with a test that fails without the fix: a unit test, unless the bug is in one of the integration-test areas above.
 - `@SpringBootTest` tests use `@ActiveProfiles("test")`.
 - Tests never `Thread.sleep` or depend on the wall clock; time-dependent code is tested with an explicit `Instant` or a fixed `Clock`.
 

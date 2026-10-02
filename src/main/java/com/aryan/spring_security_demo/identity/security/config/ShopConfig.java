@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -136,10 +137,19 @@ public class ShopConfig {
                                     "/api/v1/images/**").permitAll()
                             // API docs.
                             .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-                            // Health probe is public so load balancers / k8s liveness and
-                            // readiness checks can reach it; all other actuator endpoints
-                            // (metrics, info, …) fall through to authenticated below.
-                            .requestMatchers("/actuator/health/**").permitAll()
+                            // Actuator rules match the endpoints themselves, not
+                            // "/actuator/..." strings, so they keep working if the base
+                            // path or the management port changes.
+                            // The health probe (and its liveness/readiness groups) is
+                            // public so load balancers and k8s can reach it. Anonymous
+                            // callers and customers only get UP/DOWN; the details are for
+                            // admins (management.endpoint.health.roles).
+                            .requestMatchers(EndpointRequest.to("health")).permitAll()
+                            // Every other actuator endpoint (info, metrics, the index)
+                            // shows operational detail: JVM and request metrics, build
+                            // and process info. That's admin-only, not for any signed-in
+                            // customer. Must stay below the health rule.
+                            .requestMatchers(EndpointRequest.toAnyEndpoint()).hasAuthority("ROLE_ADMIN")
                             .requestMatchers("/error").permitAll()
                             // Catalog writes are admin-only. These rules live here at the
                             // edge (not as @PreAuthorize on the controllers) so the whole

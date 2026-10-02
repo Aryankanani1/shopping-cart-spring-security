@@ -60,8 +60,8 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
-		<!-- Health/readiness/liveness probes and metrics for ops. Endpoints are
-		     locked down in config: only /actuator/health is public. -->
+		<!-- Health/readiness/liveness probes, build info and metrics for ops. Only
+		     /actuator/health is public; the rest is admin-only (see ShopConfig). -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
@@ -210,6 +210,15 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<executions>
+					<!-- Writes META-INF/build-info.properties, which /actuator/info
+					     shows as the app's version and build time. -->
+					<execution>
+						<goals>
+							<goal>build-info</goal>
+						</goals>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>
