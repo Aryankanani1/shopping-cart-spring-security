@@ -1,8 +1,8 @@
 import type { ApiResponse, JwtResponse, ProblemDetail } from './types'
-import { getSession, setSession } from './tokenStore'
+import { getSession, setSession, syncFromStorage } from './tokenStore'
 
 // In dev, VITE_API_BASE_URL is empty and calls go to /api/v1 — the Vite proxy
-// forwards to :8080 (same origin, no CORS). In prod, set it to the API origin.
+// forwards to :8082 (same origin, no CORS). In prod, set it to the API origin.
 const API_ROOT = (import.meta.env.VITE_API_BASE_URL ?? '') + '/api/v1'
 
 export type QueryValue = string | number | boolean | null | undefined
@@ -82,35 +82,16 @@ async function parseBody<T>(res: Response): Promise<T> {
 // --- single-flight refresh -------------------------------------------------
 // Many requests can 401 at once when the access token expires; collapse their
 // refresh attempts into one network call so we rotate the refresh token once.
+// Other tabs share the stored session and expire at the same moment, so the
+// refresh also holds a cross-tab lock: a tab that waited for it finds the pair
+// the other tab already got and adopts it. Presenting the spent refresh token
+// instead would look like a stolen-token replay, and the server would end every
+// session.
 let refreshing: Promise<boolean> | null = null
 
-async function tryRefresh(): Promise<boolean> {
+async function tryRefresh(rejectedToken: string): Promise<boolean> {
   if (refreshing) return refreshing
-  refreshing = (async () => {
-    const current = getSession()
-    if (!current?.refreshToken) return false
-    try {
-      const res = await fetch(`${API_ROOT}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: current.refreshToken }),
-      })
-      if (!res.ok) {
-        setSession(null)
-        return false
-      }
-      const json = (await res.json()) as ApiResponse<JwtResponse>
-      setSession({
-        id: json.data.id,
-        token: json.data.token,
-        refreshToken: json.data.refreshToken,
-      })
-      return true
-    } catch {
-      setSession(null)
-      return false
-    }
-  })()
+  refreshing = withRefreshLock(() => refreshSession(rejectedToken))
   try {
     return await refreshing
   } finally {
@@ -118,12 +99,48 @@ async function tryRefresh(): Promise<boolean> {
   }
 }
 
+async function withRefreshLock(refresh: () => Promise<boolean>): Promise<boolean> {
+  // Web Locks are in every current browser; where they're missing (jsdom in
+  // tests, very old browsers) the refresh is still single-flight within the tab.
+  if (!navigator.locks) return refresh()
+  return navigator.locks.request('meridian.auth.refresh', refresh)
+}
+
+async function refreshSession(rejectedToken: string): Promise<boolean> {
+  // Another tab (or an earlier refresh in this one) may have rotated already.
+  const current = syncFromStorage()
+  if (!current?.refreshToken) return false
+  if (current.token !== rejectedToken) return true
+
+  try {
+    const res = await fetch(`${API_ROOT}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: current.refreshToken }),
+    })
+    if (!res.ok) {
+      setSession(null)
+      return false
+    }
+    const json = (await res.json()) as ApiResponse<JwtResponse>
+    setSession({
+      id: json.data.id,
+      token: json.data.token,
+      refreshToken: json.data.refreshToken,
+    })
+    return true
+  } catch {
+    setSession(null)
+    return false
+  }
+}
+
 async function doRequest<T>(path: string, opts: RequestOptions, allowRefresh: boolean): Promise<T> {
   const useAuth = opts.auth !== false
   const headers: Record<string, string> = {}
 
-  const session = getSession()
-  if (useAuth && session) headers.Authorization = `Bearer ${session.token}`
+  const sentToken = useAuth ? getSession()?.token : undefined
+  if (sentToken) headers.Authorization = `Bearer ${sentToken}`
 
   let body: BodyInit | undefined
   if (opts.body instanceof FormData) {
@@ -141,8 +158,8 @@ async function doRequest<T>(path: string, opts: RequestOptions, allowRefresh: bo
   })
 
   // Access token likely expired — rotate once and replay the original request.
-  if (res.status === 401 && allowRefresh && useAuth && getSession()?.refreshToken) {
-    if (await tryRefresh()) return doRequest<T>(path, opts, false)
+  if (res.status === 401 && allowRefresh && sentToken) {
+    if (await tryRefresh(sentToken)) return doRequest<T>(path, opts, false)
   }
 
   if (!res.ok) throw await toApiError(res)

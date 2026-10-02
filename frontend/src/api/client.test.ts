@@ -179,4 +179,48 @@ describe('401 -> refresh -> retry', () => {
     expect(err).toBeInstanceOf(ApiError)
     expect(getSession()).toBeNull()
   })
+
+  it('adopts the pair another tab already refreshed instead of replaying the spent refresh token', async () => {
+    setSession({ id: 7, token: 'stale', refreshToken: 'refresh-1' })
+    // Another tab refreshed first: refresh-1 is spent, and the new pair is in storage.
+    localStorage.setItem('meridian.auth', JSON.stringify({ id: 7, token: 'fresh', refreshToken: 'refresh-2' }))
+    fetchMock.mockImplementation((_url: string, init: RequestInit) =>
+      Promise.resolve(
+        (init.headers as Record<string, string>).Authorization === 'Bearer fresh'
+          ? resp(200, { message: 'ok', data: { id: 99 } })
+          : resp(401, { detail: 'expired' }),
+      ),
+    )
+
+    const data = await request<{ id: number }>('/orders/99')
+
+    expect(data).toEqual({ id: 99 })
+    const refreshCalls = fetchMock.mock.calls.filter((call) => String(call[0]).includes('/auth/refresh'))
+    expect(refreshCalls).toHaveLength(0)
+    expect(getSession()?.refreshToken).toBe('refresh-2')
+  })
+
+  it('refreshes under a cross-tab lock when the browser has Web Locks', async () => {
+    const lockRequest = vi.fn((_name: string, callback: () => Promise<boolean>) => callback())
+    Object.defineProperty(navigator, 'locks', { value: { request: lockRequest }, configurable: true })
+    try {
+      setSession({ id: 7, token: 'stale', refreshToken: 'refresh-1' })
+      fetchMock.mockImplementation((url: string) =>
+        Promise.resolve(
+          url.includes('/auth/refresh')
+            ? resp(200, { message: 'refreshed', data: { id: 7, token: 'fresh', refreshToken: 'refresh-2' } })
+            : getSession()?.token === 'fresh'
+              ? resp(200, { message: 'ok', data: true })
+              : resp(401, { detail: 'expired' }),
+        ),
+      )
+
+      await request('/orders/1')
+
+      expect(lockRequest).toHaveBeenCalledOnce()
+      expect(lockRequest.mock.calls[0][0]).toBe('meridian.auth.refresh')
+    } finally {
+      delete (navigator as { locks?: unknown }).locks
+    }
+  })
 })
