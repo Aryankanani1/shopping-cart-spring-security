@@ -69,6 +69,18 @@ describe('AdminCategoriesPage', () => {
     await waitFor(() => expect(categoriesApi.update).toHaveBeenCalledWith(1, 'Novels'))
   })
 
+  it('shows a rename to a taken name as an error', async () => {
+    vi.mocked(categoriesApi.update).mockRejectedValue(new ApiError(409, 'Category already exists'))
+    renderPage(<AdminCategoriesPage />)
+    await screen.findByText('Books')
+
+    fireEvent.click(within(rowFor('Books')).getByRole('button', { name: 'Rename' }))
+    fireEvent.change(screen.getByDisplayValue('Books'), { target: { value: 'Toys' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Category already exists')
+  })
+
   it('deletes only after confirming', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
     renderPage(<AdminCategoriesPage />)
