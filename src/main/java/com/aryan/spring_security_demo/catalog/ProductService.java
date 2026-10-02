@@ -25,17 +25,18 @@ public class ProductService implements ProductServiceInterface{
         if(productExists(request.getName(),request.getBrand())){
             throw new AlreadyExistsException(request.getBrand() + " " + request.getName() + "already exists");
         }
-        // check if the category is in DB or not
-       Category category = Optional.ofNullable(categoryRepository.findByName(request.getCategory().getName()))
-                         .orElseGet(() -> {
-                   Category newCategory = new Category(request.getCategory().getName());
-                   return categoryRepository.save(newCategory);
-               });
+       Category category = findOrCreateCategory(request.getCategory().getName());
 
        request.setCategory(category);
        return  productRepository.save(createProduct(request,category));
     }
 
+
+    /** The category with this name, created if there isn't one yet (for add and update alike). */
+    private Category findOrCreateCategory(String name) {
+        return Optional.ofNullable(categoryRepository.findByName(name))
+                .orElseGet(() -> categoryRepository.save(new Category(name)));
+    }
 
     private boolean productExists(String name,String brand){
         return productRepository.existsByNameAndBrand(name,brand);
@@ -90,8 +91,10 @@ public class ProductService implements ProductServiceInterface{
                 existingProduct.setDescription(productUpdateRequest.getDescription());
                 existingProduct.setInventory(productUpdateRequest.getInventory());
 
-                Category category = categoryRepository.findByName(productUpdateRequest.getCategory().getName());
-                existingProduct.setCategory(category);
+                // The category is optional on update: none sent leaves it unchanged.
+                if (productUpdateRequest.getCategory() != null) {
+                    existingProduct.setCategory(findOrCreateCategory(productUpdateRequest.getCategory().getName()));
+                }
                 return existingProduct;
 
     }

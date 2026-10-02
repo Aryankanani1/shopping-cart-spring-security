@@ -116,6 +116,22 @@ class CatalogChangeIntegrationTest {
         updateProduct(customer, "1.00", "Electronics").andExpect(status().isForbidden());
     }
 
+    @Test
+    @DisplayName("updating a product without a category keeps the one it has")
+    void update_withoutCategory_keepsCategory() throws Exception {
+        updateProduct(admin, "10.00", null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryName").value("Electronics"));
+    }
+
+    @Test
+    @DisplayName("updating a product to a new category name creates it, as adding does")
+    void update_withNewCategory_createsIt() throws Exception {
+        updateProduct(admin, "10.00", "Lighting")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryName").value("Lighting"));
+    }
+
     // ---- helpers ----
 
     private Long saveUser(String email, String roleName) {
