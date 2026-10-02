@@ -77,17 +77,38 @@ spring:
 # --- Actuator: operational endpoints for health checks and metrics ---
 # Only health/info/metrics are exposed over HTTP (never the full set). Only
 # /actuator/health is public (see ShopConfig) so load balancers and Kubernetes
-# liveness/readiness probes can reach it; everything else requires authentication.
+# liveness/readiness probes can reach it; info and metrics are admin-only.
 management:
   endpoints:
+    # Defense in depth: every endpoint is switched off unless enabled below, and
+    # none may offer write operations. So widening the exposure list (say, to "*")
+    # can never bring up env, heapdump, threaddump, loggers or shutdown.
+    access:
+      default: none
+      max-permitted: read-only
     web:
       exposure:
         include: health, info, metrics
   endpoint:
+    info:
+      access: read-only
+    metrics:
+      access: read-only
     health:
+      access: read-only
       probes:
         enabled: true          # exposes /actuator/health/{liveness,readiness}
       show-details: when-authorized
+      # Who counts as "authorized" for the details (database, disk space). Without
+      # this, any signed-in customer would see them.
+      roles: ROLE_ADMIN
+  # What /actuator/info shows, besides the build info (version, build time) that
+  # the spring-boot-maven-plugin build-info goal writes.
+  info:
+    java:
+      enabled: true            # Java version and vendor
+    process:
+      enabled: true            # pid, CPUs, memory
 
 # Base path prefix for all REST controllers (e.g. /api/v1/products).
 api:
