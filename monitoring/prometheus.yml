@@ -1,0 +1,16 @@
+# Prometheus config for local development: docker compose --profile monitoring up
+# (see docker-compose.yml). For a real deployment, copy the scrape job into your
+# Prometheus config and point the target at your API.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: shopping-cart-api
+    metrics_path: /actuator/prometheus
+    # The app's scrape account (PrometheusScrapeSecurityConfig). The username is
+    # PROMETHEUS_SCRAPE_USERNAME's default; the password is the compose secret.
+    basic_auth:
+      username: prometheus
+      password_file: /run/secrets/prometheus_scrape_password
+    static_configs:
+      - targets: ["app:8080"]

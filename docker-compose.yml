@@ -81,6 +81,10 @@ services:
       # this message. Put it in .env (see .env.example).
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env — see .env.example (openssl rand -base64 32)}
       JAVA_OPTS: ${JAVA_OPTS:-}
+      # Prometheus scrape account (HTTP Basic, /actuator/prometheus only). Off
+      # unless enabled in .env; the monitoring profile's Prometheus uses it.
+      PROMETHEUS_SCRAPE_ENABLED: ${PROMETHEUS_SCRAPE_ENABLED:-false}
+      PROMETHEUS_SCRAPE_PASSWORD: ${PROMETHEUS_SCRAPE_PASSWORD:-}
     ports:
       - "${APP_PORT:-8080}:8080"
     # No container healthcheck: the JRE-only runtime image ships no curl/wget to
@@ -90,8 +94,73 @@ services:
     # test that URL here.
     restart: unless-stopped
 
+  # Optional monitoring: Prometheus scrapes the app, Grafana shows it. Only
+  # started with the profile:
+  #   docker compose --profile monitoring up
+  # Needs PROMETHEUS_SCRAPE_ENABLED=true, PROMETHEUS_SCRAPE_PASSWORD and
+  # GRAFANA_ADMIN_PASSWORD in .env. Passwords reach the containers as compose
+  # secrets (files under /run/secrets), since Prometheus reads basic_auth
+  # passwords only from files. Both UIs listen on localhost only:
+  #   Prometheus  http://localhost:${PROMETHEUS_PORT:-9090}
+  #   Grafana     http://localhost:${GRAFANA_PORT:-3000}  (user admin)
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: shopping-cart-prometheus
+    profiles: ["monitoring"]
+    depends_on:
+      - app
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    secrets:
+      - prometheus_scrape_password
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    container_name: shopping-cart-grafana
+    profiles: ["monitoring"]
+    depends_on:
+      - prometheus
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      # Read once, when Grafana first creates its database (the grafana-data
+      # volume). To change it later, use the UI or recreate the volume.
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      # Prometheus datasource and the "Shopping Cart API" dashboard, provisioned
+      # from monitoring/grafana.
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    secrets:
+      - grafana_admin_password
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    restart: unless-stopped
+
+secrets:
+  prometheus_scrape_password:
+    environment: PROMETHEUS_SCRAPE_PASSWORD
+  grafana_admin_password:
+    environment: GRAFANA_ADMIN_PASSWORD
+
 volumes:
-  # Named, Docker-managed volume for the MySQL data directory — the only durable
+  # Named, Docker-managed volume for the MySQL data directory — the durable
   # state in the stack. Survives `docker compose down`; removed by `down -v`.
   mysql-data:
     name: shopping-cart-mysql-data
+  # Prometheus' time-series data (monitoring profile only; kept for 7 days).
+  prometheus-data:
+    name: shopping-cart-prometheus-data
+  # Grafana's database: users, preferences (monitoring profile only).
+  grafana-data:
+    name: shopping-cart-grafana-data

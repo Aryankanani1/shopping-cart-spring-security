@@ -67,6 +67,13 @@
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
+		<!-- Prometheus format for the metrics, served at /actuator/prometheus. Who may
+		     scrape it: see PrometheusScrapeSecurityConfig. Version from the Boot BOM. -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
+		</dependency>
+
 		<!-- Versioned, repeatable schema migrations own the DDL in prod (ddl-auto:
 		     validate). Boot 4 modularised the autoconfiguration: the starter pulls
 		     both flyway-core AND the spring-boot-flyway autoconfig module (raw
