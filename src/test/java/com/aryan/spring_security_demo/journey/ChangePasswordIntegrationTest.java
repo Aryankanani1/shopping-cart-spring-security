@@ -134,6 +134,17 @@ class ChangePasswordIntegrationTest {
     }
 
     @Test
+    @DisplayName("new password over BCrypt's 72 bytes, even within 72 characters: 400, not 500")
+    void changePassword_tooManyBytes_isRejected() throws Exception {
+        String token = login(OLD_PASSWORD).path("token").asText();
+
+        changePassword(token, OLD_PASSWORD, "é".repeat(40))  // 40 characters, 80 bytes
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.newPassword").exists());
+        login(OLD_PASSWORD);  // unchanged
+    }
+
+    @Test
     @DisplayName("no bearer token: 401 even though the path is under /auth")
     void changePassword_unauthenticated_isUnauthorized() throws Exception {
         mockMvc.perform(put("/api/v1/auth/password")

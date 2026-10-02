@@ -355,6 +355,25 @@ class CheckoutJourneyIntegrationTest {
     }
 
     @Test
+    @DisplayName("registration: a password over BCrypt's 72 bytes is a 400, not a 500")
+    void register_passwordOver72Bytes_returns400() throws Exception {
+        String body = """
+                {
+                  "firstName": "Ada",
+                  "lastName": "Lovelace",
+                  "email": "long-password@example.com",
+                  "password": "%s"
+                }
+                """.formatted("é".repeat(40));  // 40 characters, 80 bytes
+
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.password").exists());
+    }
+
+    @Test
     @DisplayName("framework 4xx: malformed JSON body stays a 400, not a 500")
     void malformedJson_returnsProblemDetail400() throws Exception {
         mockMvc.perform(post("/api/v1/users")

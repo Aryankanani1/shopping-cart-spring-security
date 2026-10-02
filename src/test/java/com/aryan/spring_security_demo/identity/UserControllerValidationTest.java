@@ -76,6 +76,24 @@ class UserControllerValidationTest {
                         .content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Validation failed"))
-                .andExpect(jsonPath("$.errors.password").value("Password must be at least 6 characters"));
+                .andExpect(jsonPath("$.errors.password").value("Password must be 6-72 characters"));
+    }
+
+    @Test
+    void createUser_withPasswordOver72Characters_returns400() throws Exception {
+        String body = """
+                {
+                  "firstName": "Ada",
+                  "lastName": "Lovelace",
+                  "email": "ada@example.com",
+                  "password": "%s"
+                }
+                """.formatted("a".repeat(73));
+
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.password").value("Password must be 6-72 characters"));
     }
 }
