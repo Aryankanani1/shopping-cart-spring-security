@@ -4,7 +4,7 @@ import { productsApi } from '../api/products'
 import { categoriesApi } from '../api/categories'
 import { queryKeys } from '../api/queryKeys'
 import { errMessage } from '../lib/errors'
-import { ProductCard } from '../components/ProductCard'
+import { ProductCard } from '../components/product/ProductCard'
 import { Loader, ErrorNote } from '../components/ui'
 
 const FEATURED = { size: 8, sort: 'id,desc' }

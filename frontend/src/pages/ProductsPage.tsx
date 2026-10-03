@@ -6,7 +6,7 @@ import { productsApi } from '../api/products'
 import { categoriesApi } from '../api/categories'
 import { queryKeys } from '../api/queryKeys'
 import { errMessage } from '../lib/errors'
-import { ProductCard } from '../components/ProductCard'
+import { ProductCard } from '../components/product/ProductCard'
 import { Loader, ErrorNote, EmptyState } from '../components/ui'
 
 // Sort values must use fields the API allowlists: id, name, price, brand.

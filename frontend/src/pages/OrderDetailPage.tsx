@@ -4,7 +4,7 @@ import { ordersApi } from '../api/orders'
 import { queryKeys } from '../api/queryKeys'
 import { errMessage } from '../lib/errors'
 import { Loader, ErrorNote } from '../components/ui'
-import { StatusBadge } from '../components/StatusBadge'
+import { StatusBadge } from '../components/ui/StatusBadge'
 import { formatDate, formatMoney } from '../lib/format'
 
 // Statuses from which the owner may still cancel — mirrors the server's rule

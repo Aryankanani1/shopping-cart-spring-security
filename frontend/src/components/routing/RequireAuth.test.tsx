@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { AuthProvider } from '../context/AuthContext'
+import { AuthProvider } from '../../context/AuthContext'
 import { RequireAuth } from './RequireAuth'
-import { setSession } from '../api/tokenStore'
+import { setSession } from '../../api/tokenStore'
 
 function renderAt(path: string) {
   return render(
