@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ordersApi } from '../api/orders'
+import { queryKeys } from '../api/queryKeys'
 import type { ShippingAddress } from '../api/types'
 import { useAuth } from '../context/AuthContext'
 import { useCart } from '../context/CartContext'
@@ -23,11 +24,17 @@ export function CheckoutPage() {
   const { userId } = useAuth()
   const { cart, loading, refresh } = useCart()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [address, setAddress] = useState<ShippingAddress>(EMPTY)
 
   const place = useMutation({
     mutationFn: () => ordersApi.place(userId as number, address),
     onSuccess: async (order) => {
+      // The order joins the history and takes stock, which the catalogue and the
+      // wishlist show.
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.wishlist(userId) })
       await refresh() // cart was cleared server-side
       navigate(`/orders/${order.id}`, { state: { justPlaced: true } })
     },

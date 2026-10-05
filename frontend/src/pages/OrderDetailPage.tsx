@@ -2,6 +2,7 @@ import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ordersApi } from '../api/orders'
 import { queryKeys } from '../api/queryKeys'
+import { useAuth } from '../context/AuthContext'
 import { errMessage } from '../lib/errors'
 import { Loader, ErrorNote } from '../components/ui'
 import { StatusBadge } from '../components/ui/StatusBadge'
@@ -17,6 +18,7 @@ export function OrderDetailPage() {
   const location = useLocation()
   const justPlaced = (location.state as { justPlaced?: boolean } | null)?.justPlaced ?? false
   const queryClient = useQueryClient()
+  const { userId } = useAuth()
 
   const {
     data: order,
@@ -35,6 +37,9 @@ export function OrderDetailPage() {
       // Push the returned order into the detail cache and refresh any history list.
       queryClient.setQueryData(queryKeys.orders.detail(orderId), updated)
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
+      // Cancelling puts the items back in stock.
+      queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
+      queryClient.invalidateQueries({ queryKey: queryKeys.wishlist(userId) })
     },
   })
 

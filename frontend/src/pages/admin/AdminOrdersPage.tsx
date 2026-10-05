@@ -19,9 +19,11 @@ export function AdminOrdersPage() {
 
   const setStatus = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) => ordersApi.updateStatus(id, status),
-    onSuccess: () => {
+    onSuccess: (_order, { status }) => {
       // Refresh every order view: this list, any detail page, and user histories.
       queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
+      // Cancelling puts the items back in stock.
+      if (status === 'CANCELLED') queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
     },
   })
 

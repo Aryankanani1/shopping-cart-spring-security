@@ -4,8 +4,11 @@ import { OrderDetailPage } from './OrderDetailPage'
 import { ApiError } from '../api/client'
 import { renderPage } from '../test/renderPage'
 import { order } from '../test/fixtures'
+import { queryKeys } from '../api/queryKeys'
 
+vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }))
 vi.mock('../api/orders', () => ({ ordersApi: { get: vi.fn(), cancel: vi.fn() } }))
+import { useAuth } from '../context/AuthContext'
 import { ordersApi } from '../api/orders'
 
 function open(state?: unknown) {
@@ -13,6 +16,7 @@ function open(state?: unknown) {
 }
 
 beforeEach(() => {
+  vi.mocked(useAuth).mockReturnValue({ userId: 7 } as unknown as ReturnType<typeof useAuth>)
   vi.mocked(ordersApi.get).mockReset().mockResolvedValue(order())
   vi.mocked(ordersApi.cancel).mockReset()
 })
@@ -53,6 +57,21 @@ describe('OrderDetailPage', () => {
     await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith(55))
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument())
     expect(screen.getByText(/cancelled/i)).toBeInTheDocument()
+  })
+
+  it('marks catalogue stock and the wishlist as stale after a cancel', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.mocked(ordersApi.cancel).mockResolvedValue(order({ status: 'CANCELLED' }))
+    const { queryClient } = open()
+    const cached = [queryKeys.products.detail(1), queryKeys.wishlist(7)]
+    cached.forEach((key) => queryClient.setQueryData(key, {}))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel order' }))
+
+    await waitFor(() => expect(ordersApi.cancel).toHaveBeenCalledWith(55))
+    for (const key of cached) {
+      await waitFor(() => expect(queryClient.getQueryState(key)?.isInvalidated, key.join('/')).toBe(true))
+    }
   })
 
   it('does nothing if the customer backs out', async () => {

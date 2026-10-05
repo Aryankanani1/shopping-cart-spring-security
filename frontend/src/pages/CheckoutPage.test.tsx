@@ -4,6 +4,7 @@ import { CheckoutPage } from './CheckoutPage'
 import { ApiError } from '../api/client'
 import { renderPage } from '../test/renderPage'
 import { cartWith, order } from '../test/fixtures'
+import { queryKeys } from '../api/queryKeys'
 import type { CartDto } from '../api/types'
 
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }))
@@ -83,6 +84,22 @@ describe('CheckoutPage', () => {
       country: 'UK',
     })
     expect(refresh).toHaveBeenCalled() // the server emptied the cart
+  })
+
+  it('marks the order history, catalogue stock and wishlist as stale', async () => {
+    vi.mocked(ordersApi.place).mockResolvedValue(order({ id: 55 }))
+    withCart(cartWith([[10, 1, 2, 24]]))
+    const { queryClient } = renderPage(<CheckoutPage />, { path: '/checkout' })
+    const cached = [queryKeys.orders.history(7), queryKeys.products.detail(1), queryKeys.wishlist(7)]
+    cached.forEach((key) => queryClient.setQueryData(key, {}))
+
+    fillAddress()
+    fireEvent.click(screen.getByRole('button', { name: 'Place order' }))
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/orders/55'))
+    for (const key of cached) {
+      expect(queryClient.getQueryState(key)?.isInvalidated, key.join('/')).toBe(true)
+    }
   })
 
   it('shows why an order failed and stays on checkout', async () => {
