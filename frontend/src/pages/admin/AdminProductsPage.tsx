@@ -24,9 +24,8 @@ export function AdminProductsPage() {
   })
   const categories = useQuery({ queryKey: queryKeys.categories, queryFn: () => categoriesApi.list() })
 
-  // A write touches both the admin list and the public catalogue.
+  // A write touches both the admin list and the public catalogue; both sit under products.all.
   function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ['admin', 'products'] })
     queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
   }
 

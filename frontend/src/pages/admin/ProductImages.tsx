@@ -22,10 +22,9 @@ export function ProductImages({ productId }: { productId: number }) {
     queryFn: () => productsApi.get(productId),
   })
 
-  // Images appear in the admin list, the catalogue and the product page.
+  // Images appear in the admin list, the catalogue and the product page, all under products.all.
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
-    queryClient.invalidateQueries({ queryKey: ['admin', 'products'] })
   }
 
   const upload = useMutation({
