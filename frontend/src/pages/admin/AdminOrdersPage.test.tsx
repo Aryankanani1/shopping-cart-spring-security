@@ -4,6 +4,7 @@ import { AdminOrdersPage } from './AdminOrdersPage'
 import { ApiError } from '../../api/client'
 import { renderPage } from '../../test/renderPage'
 import { orderSummary, paged } from '../../test/fixtures'
+import { queryKeys } from '../../api/queryKeys'
 
 // Keep the real NEXT_STATUSES map; only the network calls are mocked.
 vi.mock('../../api/orders', async (importOriginal) => ({
@@ -51,6 +52,18 @@ describe('AdminOrdersPage', () => {
 
     await waitFor(() => expect(ordersApi.updateStatus).toHaveBeenCalledWith(55, 'PROCESSING'))
     await waitFor(() => expect(ordersApi.adminList).toHaveBeenCalledTimes(2))
+  })
+
+  it('marks catalogue stock as stale when an order is cancelled', async () => {
+    vi.mocked(ordersApi.updateStatus).mockResolvedValue({} as never)
+    const { queryClient } = renderPage(<AdminOrdersPage />)
+    await screen.findByText('#55')
+    queryClient.setQueryData(queryKeys.products.detail(1), {})
+
+    fireEvent.change(within(rowFor(55)).getByRole('combobox'), { target: { value: 'CANCELLED' } })
+
+    await waitFor(() => expect(ordersApi.updateStatus).toHaveBeenCalledWith(55, 'CANCELLED'))
+    await waitFor(() => expect(queryClient.getQueryState(queryKeys.products.detail(1))?.isInvalidated).toBe(true))
   })
 
   it('shows a refused status change', async () => {
