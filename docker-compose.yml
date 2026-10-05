@@ -24,7 +24,7 @@
 #     Hibernate don't hit a DB that isn't accepting connections yet.
 #
 # Quick start:
-#   cp .env.example .env      # then edit if you like
+#   cp .env.example .env      # then set JWT_SECRET (openssl rand -base64 32)
 #   docker compose up --build # first build runs the full Maven package; be patient
 #   # API on http://localhost:8080 , MySQL on localhost:3306
 #
