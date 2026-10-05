@@ -17,10 +17,14 @@ import org.springframework.stereotype.Component;
  * fires when a service is called <em>through</em> its proxy from another bean,
  * not on self-invocation within the same class.
  * <p>
- * Timing is logged at DEBUG to keep normal INFO logs quiet; exceptions thrown
- * out of a service are logged at ERROR with the elapsed time before rethrowing
- * so the original behaviour (and the {@code GlobalExceptionHandler}) is
- * unchanged.
+ * Timing is logged at DEBUG to keep normal INFO logs quiet. Exceptions thrown
+ * out of a service or controller are logged at DEBUG too, with the elapsed
+ * time, and rethrown unchanged. Whatever handles the exception logs it at the
+ * level it deserves: {@code GlobalExceptionHandler} logs client mistakes (4xx)
+ * at DEBUG and unexpected errors at ERROR with the stack trace, and a failed
+ * scheduled job is logged by the job or by Spring's scheduler. Logging them
+ * here at ERROR as well reported every 404 or 409 as an application error,
+ * twice.
  */
 @Aspect
 @Component
@@ -53,7 +57,7 @@ public class LoggingAspect {
 
     @AfterThrowing(pointcut = "com.aryan.spring_security_demo.common.aop.Layers.requestHandlers()", throwing = "exception")
     public void logAfterThrowingControllerMethod(JoinPoint joinPoint, Exception exception){
-        log.error("⇡ [controller boundary] {}.{} propagated {}: {}",
+        log.debug("⇡ [controller boundary] {}.{} propagated {}: {}",
                 joinPoint.getSignature().getDeclaringType().getSimpleName(),
                 joinPoint.getSignature().getName(),
                 exception.getClass().getSimpleName(),
@@ -78,7 +82,7 @@ public class LoggingAspect {
             return result;
         } catch (Throwable ex) {
             long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
-            log.error("✗ {}.{} failed after {} ms: {}: {}",
+            log.debug("✗ {}.{} failed after {} ms: {}: {}",
                     target, method, elapsedMs,
                     ex.getClass().getSimpleName(), ex.getMessage());
             throw ex;
