@@ -63,16 +63,19 @@ public class RefreshTokenService {
                 .orElseThrow(() -> new InvalidRefreshTokenException("Unknown refresh token"));
 
         if (current.isRevoked()) {
-            // A revoked token being presented again means it was rotated away yet
-            // reused — treat as compromise and kill every token for this user.
-            refreshTokenRepository.revokeAllForUser(current.getUser().getId());
-            throw new InvalidRefreshTokenException("Refresh token has been revoked");
+            throw reuseDetected(current);
         }
         if (current.isExpired(clock.instant())) {
             throw new InvalidRefreshTokenException("Refresh token has expired");
         }
 
-        current.setRevoked(true);
+        // Claim the token in the database rather than by setting the flag on the
+        // entity read above: another request presenting the same token may have
+        // rotated it since that read. Losing that race means the token was used
+        // twice, so it is handled like any other reuse.
+        if (refreshTokenRepository.revokeIfActive(current.getId()) == 0) {
+            throw reuseDetected(current);
+        }
         User user = current.getUser();
         String newRaw = persistNewToken(user);
 
@@ -80,6 +83,15 @@ public class RefreshTokenService {
         // roles load while the session is open — the access-token minting that
         // follows in the controller needs the authorities.
         return new RotatedToken(UserDetails.buildUserDetails(user), newRaw);
+    }
+
+    /**
+     * A revoked token being presented again means it was rotated away yet reused
+     * — treat as compromise and kill every token for this user.
+     */
+    private InvalidRefreshTokenException reuseDetected(RefreshToken token) {
+        refreshTokenRepository.revokeAllForUser(token.getUser().getId());
+        return new InvalidRefreshTokenException("Refresh token has been revoked");
     }
 
     /** Revoke a refresh token (logout). Idempotent: an unknown/dead token is a no-op. */
