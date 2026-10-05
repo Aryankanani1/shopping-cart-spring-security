@@ -29,7 +29,7 @@ public class UserService implements UserServiceInterface{
     public User getUserById(Long userId) {
         // Accounts are private: only the owner (or an admin) may read one.
         authUtils.requireSelfOrAdmin(userId);
-        return userRepository.findByIdWithDetails(userId).orElseThrow(() -> new UserNotFoundException("failed to find user"));
+        return userRepository.findByIdWithCart(userId).orElseThrow(() -> new UserNotFoundException("failed to find user"));
     }
 
     @Override
@@ -91,9 +91,9 @@ public class UserService implements UserServiceInterface{
     }
 
     // ---- DTO-returning operations: load + map in ONE transaction --------------
-    // UserDto pulls in cart (-> cartItems) and orders (-> orderItems), all lazy.
-    // findByIdWithDetails can only JOIN FETCH orders + cart (two bags is the
-    // limit), so the nested cartItems/orderItems still lazy-load. Converting
+    // UserDto pulls in the cart (-> cartItems -> products), all lazy.
+    // findByIdWithCart fetches the cart, but its nested cartItems still
+    // lazy-load. Converting
     // inside the transaction lets those resolve while the session is open —
     // without this, ModelMapper walks a lazy collection after the tx closed and
     // (open-in-view=false) throws LazyInitializationException. Controllers call
