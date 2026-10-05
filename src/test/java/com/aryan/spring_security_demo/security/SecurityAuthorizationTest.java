@@ -9,7 +9,9 @@ import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
 import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.order.Order;
 import com.aryan.spring_security_demo.order.OrderRepository;
+import com.aryan.spring_security_demo.order.OrderStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -158,23 +162,37 @@ class SecurityAuthorizationTest {
                 .andExpect(jsonPath("$.title").value("Unauthorized"));
     }
 
-    // --- Object-level ownership (IDOR) on order history via ?userId= ----------
+    // --- Order history is always the caller's own: whose it is comes from the
+    // token, so there is no user id to tamper with (IDOR). ---------------------
 
     @Test
-    @DisplayName("orders: reading own order history → 200")
-    void getUserOrders_forSelf_isOk() throws Exception {
-        mockMvc.perform(get("/api/v1/orders").param("userId", String.valueOf(aliceId))
-                        .with(asCustomer(aliceId, "alice@example.com")))
-                .andExpect(status().isOk());
+    @DisplayName("orders: reading order history anonymously → 401")
+    void getMyOrders_anonymous_isUnauthorized() throws Exception {
+        mockMvc.perform(get("/api/v1/orders"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("orders: reading another user's order history → 403 (IDOR blocked)")
-    void getUserOrders_forAnotherUser_isForbidden() throws Exception {
+    @DisplayName("orders: reading own order history → 200 with own orders")
+    void getMyOrders_returnsOwnOrders() throws Exception {
+        Long bobsOrderId = persistOrderFor(bobId);
+
+        mockMvc.perform(get("/api/v1/orders").with(asCustomer(bobId, "bob@example.com")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].id").value(bobsOrderId));
+    }
+
+    // Regression: the history was chosen by a ?userId= parameter (checked, but still
+    // a client-sent id). Another user's id is now simply ignored.
+    @Test
+    @DisplayName("orders: another user's id in ?userId= is ignored → own history, not theirs")
+    void getMyOrders_withAnotherUsersId_returnsOnlyOwnOrders() throws Exception {
+        persistOrderFor(bobId);
+
         mockMvc.perform(get("/api/v1/orders").param("userId", String.valueOf(bobId))
                         .with(asCustomer(aliceId, "alice@example.com")))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.title").value("Access denied"));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content").isEmpty());
     }
 
     // --- helpers -----------------------------------------------------------
@@ -187,6 +205,15 @@ class SecurityAuthorizationTest {
         user.setPassword("irrelevant"); // no login here — we inject the principal directly
         user.setRoles(Set.of(role));
         return userRepository.save(user);
+    }
+
+    private Long persistOrderFor(Long userId) {
+        Order order = new Order();
+        order.setUser(userRepository.findById(userId).orElseThrow());
+        order.setOrderStatus(OrderStatus.PENDING);
+        order.setLocalDate(LocalDate.of(2026, 10, 1));
+        order.setTotalAmount(BigDecimal.TEN);
+        return orderRepository.save(order).getId();
     }
 
     private Long persistCartFor(User user) {

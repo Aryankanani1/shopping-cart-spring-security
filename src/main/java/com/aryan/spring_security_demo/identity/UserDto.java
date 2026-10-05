@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import lombok.Data;
 
 // No order history here: it grows without bound, so it is only served paginated
-// (GET /orders?userId=). The cart is bounded and the storefront reads it from here.
+// (GET /orders). The cart is bounded and the storefront reads it from here.
 @Data
 @JsonPropertyOrder({"id", "firstName", "lastName", "email", "cart"})
 public class UserDto {

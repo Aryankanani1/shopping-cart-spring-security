@@ -94,9 +94,8 @@ class QueryCountTest {
         user.setRoles(Set.of(customer));
         userId = userRepository.save(user).getId();
 
-        // getUserOrders now enforces self-or-admin (ownership check moved into the
-        // service). Authenticate as the seeded owner so this query-count test
-        // exercises the secured path exactly as a real request would.
+        // getMyOrders reads the signed-in user's history. Authenticate as the
+        // seeded owner so this query-count test runs the path a real request does.
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
                         new UserDetails(userId, user.getEmail(), null, List.of()), null, List.of()));
@@ -131,12 +130,12 @@ class QueryCountTest {
     }
 
     @Test
-    @DisplayName("getUserOrders (keyset) loads a slice + its items + products in a bounded number of queries")
-    void getUserOrders_isBounded() {
+    @DisplayName("getMyOrders (keyset) loads a slice + its items + products in a bounded number of queries")
+    void getMyOrders_isBounded() {
         Statistics stats = statistics();
         stats.clear();
 
-        SlicedResponse<OrderDto> slice = orderService.getUserOrders(userId, null, 20);
+        SlicedResponse<OrderDto> slice = orderService.getMyOrders(null, 20);
 
         long queries = stats.getPrepareStatementCount();
         assertThat(slice.content()).hasSize(1);
@@ -148,7 +147,7 @@ class QueryCountTest {
         // (2) one JOIN FETCH hydrating orders + items + products. Two queries, and
         // — the point — bounded: it does not grow with the number of orders or items.
         assertThat(queries)
-                .as("keyset getUserOrders must page ids then hydrate items/products in a bounded query count")
+                .as("keyset getMyOrders must page ids then hydrate items/products in a bounded query count")
                 .isEqualTo(2);
     }
 

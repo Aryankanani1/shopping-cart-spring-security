@@ -105,7 +105,6 @@ class CatalogChangeIntegrationTest {
                 .andExpect(jsonPath("$.data.totalAmount").value(30.00));
 
         mockMvc.perform(post("/api/v1/orders").header("Authorization", customer)
-                        .param("userId", String.valueOf(customerId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(ADDRESS_BODY))
                 .andExpect(status().isCreated())
@@ -155,7 +154,6 @@ class CatalogChangeIntegrationTest {
     void delete_orderedProduct_isConflict() throws Exception {
         addToCart(1);
         mockMvc.perform(post("/api/v1/orders").header("Authorization", customer)
-                        .param("userId", String.valueOf(customerId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(ADDRESS_BODY))
                 .andExpect(status().isCreated());

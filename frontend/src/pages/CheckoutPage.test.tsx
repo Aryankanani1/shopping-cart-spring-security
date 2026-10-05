@@ -74,7 +74,7 @@ describe('CheckoutPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Place order' }))
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/orders/55'))
-    expect(ordersApi.place).toHaveBeenCalledWith(7, {
+    expect(ordersApi.place).toHaveBeenCalledWith({
       recipientName: 'Ada Lovelace',
       addressLine1: '1 Analytical Way',
       addressLine2: '',

@@ -6,8 +6,8 @@ import org.springframework.data.domain.Pageable;
 
 public interface OrderServiceInterface {
 
-    /** Turn the user's cart into an order shipped to the given address. */
-    OrderDto placeOrder(Long userId, PlaceOrderRequest shippingAddress);
+    /** Turn the signed-in user's cart into an order shipped to the given address. */
+    OrderDto placeOrder(PlaceOrderRequest shippingAddress);
     OrderDto getOrder(Long orderId);
 
     /** A page of all orders (newest first) as summaries — admin order management. */
@@ -28,8 +28,9 @@ public interface OrderServiceInterface {
     OrderDto cancelOrder(Long orderId);
 
     /**
-     * One keyset (cursor) slice of a user's order history, newest first. {@code cursor}
-     * is {@code null}/blank for the first slice; {@code size} is the max rows to return.
+     * One keyset (cursor) slice of the signed-in user's order history, newest first.
+     * {@code cursor} is {@code null}/blank for the first slice; {@code size} is the
+     * max rows to return.
      */
-    SlicedResponse<OrderDto> getUserOrders(Long userId, String cursor, int size);
+    SlicedResponse<OrderDto> getMyOrders(String cursor, int size);
 }

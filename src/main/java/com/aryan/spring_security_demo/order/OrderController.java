@@ -21,10 +21,10 @@ public class OrderController {
 
     private final OrderServiceInterface orderServiceInterface;
 
+    /** Check out the signed-in user's cart. There is no user id to send: it comes from the token. */
     @PostMapping
-    public ResponseEntity<ApiResponse<?>> createOrder(@RequestParam Long userId,
-                                                      @Valid @RequestBody PlaceOrderRequest shippingAddress){
-        OrderDto order = orderServiceInterface.placeOrder(userId, shippingAddress);
+    public ResponseEntity<ApiResponse<?>> createOrder(@Valid @RequestBody PlaceOrderRequest shippingAddress){
+        OrderDto order = orderServiceInterface.placeOrder(shippingAddress);
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}").buildAndExpand(order.getId()).toUri();
         return ResponseEntity.created(location).body(new ApiResponse<>("Item Order Success!", order));
@@ -79,11 +79,12 @@ public class OrderController {
     private static final int DEFAULT_SIZE = 20;
 
     /**
-     * One keyset slice of a user's order history, newest first.
+     * One keyset slice of the signed-in user's order history, newest first. Whose
+     * history it is comes from the token; there is no user id parameter.
      *
      * <pre>
-     *   GET /orders?userId=42                 first slice
-     *   GET /orders?userId=42&cursor=eyJ...   next slice (echo back nextCursor)
+     *   GET /orders                  first slice
+     *   GET /orders?cursor=eyJ...    next slice (echo back nextCursor)
      * </pre>
      *
      * <p>Cursor-paginated rather than offset: order history is scrolled forward,
@@ -91,13 +92,12 @@ public class OrderController {
      * depth and stability under new orders. {@code size} is clamped to {@value
      * #MAX_SIZE} so a single request can never ask for an unbounded slice.
      */
-    @GetMapping(params = "userId")
-    public ResponseEntity<ApiResponse<SlicedResponse<OrderDto>>> getUserOrders(
-            @RequestParam Long userId,
+    @GetMapping
+    public ResponseEntity<ApiResponse<SlicedResponse<OrderDto>>> getMyOrders(
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "" + DEFAULT_SIZE) int size) {
         int limit = Math.min(Math.max(size, 1), MAX_SIZE);
-        SlicedResponse<OrderDto> orders = orderServiceInterface.getUserOrders(userId, cursor, limit);
+        SlicedResponse<OrderDto> orders = orderServiceInterface.getMyOrders(cursor, limit);
         return ResponseEntity.ok(new ApiResponse<>("Item Order Success!", orders));
     }
 }

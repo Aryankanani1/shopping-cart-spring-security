@@ -28,7 +28,7 @@ export function CheckoutPage() {
   const [address, setAddress] = useState<ShippingAddress>(EMPTY)
 
   const place = useMutation({
-    mutationFn: () => ordersApi.place(userId as number, address),
+    mutationFn: () => ordersApi.place(address),
     onSuccess: async (order) => {
       // The order joins the history and takes stock, which the catalogue and the
       // wishlist show.

@@ -31,7 +31,7 @@ class UserControllerTest {
 
     // Regression: the account embedded the user's whole order history, unpaginated,
     // and the storefront fetches it on every cart change. Order history is only
-    // served paginated, from GET /orders?userId=.
+    // served paginated, from GET /orders.
     @Test
     void getUser_returnsTheCartButNoOrderHistory() throws Exception {
         CartDto cart = new CartDto();
