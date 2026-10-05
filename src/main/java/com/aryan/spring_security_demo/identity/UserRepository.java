@@ -11,8 +11,8 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User,Long> {
     boolean existsByEmail(String email);
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.orders LEFT JOIN FETCH u.cart WHERE u.id = :id")
-    Optional<User> findByIdWithDetails(@Param("id") Long id);
+    @Query("SELECT u FROM User u LEFT JOIN FETCH u.cart WHERE u.id = :id")
+    Optional<User> findByIdWithCart(@Param("id") Long id);
 
     // Fetch the user together with roles so authentication/authorization code can
     // read authorities without a lazy load (works with open-in-view disabled).
