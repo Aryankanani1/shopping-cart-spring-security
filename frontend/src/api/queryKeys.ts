@@ -23,7 +23,10 @@ export const queryKeys = {
     adminList: (page: number) => ['orders', 'admin', page] as const,
   },
   admin: {
-    products: (page: number) => ['admin', 'products', page] as const,
+    // Under the products prefix: it's the same catalogue data, so anything that
+    // invalidates products.all (a product write, an order changing stock)
+    // refreshes the admin list too.
+    products: (page: number) => ['products', 'admin', page] as const,
     categories: ['admin', 'categories'] as const,
   },
   wishlist: (userId: number | null) => ['wishlist', userId] as const,

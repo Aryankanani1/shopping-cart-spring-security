@@ -4,6 +4,7 @@ import { AdminProductsPage } from './AdminProductsPage'
 import { ApiError } from '../../api/client'
 import { renderPage } from '../../test/renderPage'
 import { paged, product } from '../../test/fixtures'
+import { queryKeys } from '../../api/queryKeys'
 
 vi.mock('../../api/products', () => ({
   productsApi: { list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
@@ -45,6 +46,16 @@ describe('AdminProductsPage', () => {
     expect(within(rowFor('Desk Lamp')).getByText('$24.00')).toBeInTheDocument()
     expect(within(rowFor('Desk Lamp')).getByText('10')).toBeInTheDocument()
     expect(productsApi.list).toHaveBeenCalledWith({ page: 0, size: 20, sort: 'id' })
+  })
+
+  it('reloads when the catalogue is invalidated, e.g. after an order changes stock', async () => {
+    const { queryClient } = renderPage(<AdminProductsPage />)
+    await screen.findByRole('cell', { name: 'Desk Lamp' })
+    expect(productsApi.list).toHaveBeenCalledTimes(1)
+
+    await queryClient.invalidateQueries({ queryKey: queryKeys.products.all })
+
+    expect(productsApi.list).toHaveBeenCalledTimes(2)
   })
 
   it('creates a product, then keeps it open for images', async () => {
