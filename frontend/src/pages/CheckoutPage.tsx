@@ -26,7 +26,7 @@ export function CheckoutPage() {
   const [address, setAddress] = useState<ShippingAddress>(EMPTY)
 
   const place = useMutation({
-    mutationFn: () => ordersApi.place(userId as number, address),
+    mutationFn: () => ordersApi.place(address),
     onSuccess: async (order) => {
       await refresh() // cart was cleared server-side
       navigate(`/orders/${order.id}`, { state: { justPlaced: true } })

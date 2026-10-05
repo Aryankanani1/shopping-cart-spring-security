@@ -25,7 +25,7 @@ export function OrdersPage() {
     isFetchingNextPage: loadingMore,
   } = useInfiniteQuery({
     queryKey: queryKeys.orders.history(userId),
-    queryFn: ({ pageParam }) => ordersApi.history(userId as number, pageParam, PAGE),
+    queryFn: ({ pageParam }) => ordersApi.history(pageParam, PAGE),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasNext ? last.nextCursor : undefined),
     enabled: userId != null,

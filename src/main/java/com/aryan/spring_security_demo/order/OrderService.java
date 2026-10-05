@@ -38,9 +38,9 @@ public class OrderService implements OrderServiceInterface{
     private final ModelMapper modelMapper;
     @Override
     @Transactional
-    public OrderDto placeOrder(Long userId, PlaceOrderRequest shippingAddress) {
-        // A user may only place an order for themselves; an admin may act for anyone.
-        authUtils.requireSelfOrAdmin(userId);
+    public OrderDto placeOrder(PlaceOrderRequest shippingAddress) {
+        // Always the caller's own cart: the user comes from the token, never the request.
+        Long userId = authUtils.currentUserId();
         Cart cart = cartService.getCartByUserId(userId);
         // The cart is deleted after every order and recreated on the next
         // add-to-cart, so "no cart" and "empty cart" both mean nothing to buy.
@@ -199,9 +199,9 @@ public class OrderService implements OrderServiceInterface{
 
     @Override
     @Transactional(readOnly = true)
-    public SlicedResponse<OrderDto> getUserOrders(Long userId, String cursor, int size) {
-        // Order history is private: only the owner (or an admin) may page it.
-        authUtils.requireSelfOrAdmin(userId);
+    public SlicedResponse<OrderDto> getMyOrders(String cursor, int size) {
+        // Order history is private: always the caller's own, taken from the token.
+        Long userId = authUtils.currentUserId();
         OrderCursor from = OrderCursor.decode(cursor);
 
         // Phase 1: index-backed keyset scan for this page of ids. Fetch one extra

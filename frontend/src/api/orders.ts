@@ -24,16 +24,15 @@ export const NEXT_STATUSES: Record<string, string[]> = {
 }
 
 export const ordersApi = {
-  /** Turn the user's cart into an order shipped to `address` (clears the cart server-side). */
-  place: (userId: number, address: ShippingAddress) =>
-    request<OrderDto>('/orders', { method: 'POST', query: { userId }, body: address }),
+  /** Turn the signed-in user's cart into an order shipped to `address` (clears the cart server-side). */
+  place: (address: ShippingAddress) => request<OrderDto>('/orders', { method: 'POST', body: address }),
 
   get: (orderId: number) => request<OrderDto>(`/orders/${orderId}`),
 
-  /** One keyset slice of the user's order history, newest first. */
-  history: (userId: number, cursor?: string | null, size = 10) =>
+  /** One keyset slice of the signed-in user's order history, newest first. */
+  history: (cursor?: string | null, size = 10) =>
     request<SlicedResponse<OrderDto>>('/orders', {
-      query: { userId, cursor: cursor ?? undefined, size },
+      query: { cursor: cursor ?? undefined, size },
     }),
 
   /** Admin: a page of all orders (newest first). */

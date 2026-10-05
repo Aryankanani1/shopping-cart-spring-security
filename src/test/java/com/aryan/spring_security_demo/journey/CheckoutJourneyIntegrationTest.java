@@ -143,7 +143,6 @@ class CheckoutJourneyIntegrationTest {
         // 3) CHECKOUT — place the order for this user, with a shipping address.
         MvcResult orderResult = mockMvc.perform(post("/api/v1/orders")
                         .header("Authorization", "Bearer " + token)
-                        .param("userId", String.valueOf(userId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(ADDRESS_BODY))
                 .andExpect(status().isCreated())
@@ -426,7 +425,6 @@ class CheckoutJourneyIntegrationTest {
     private ResultActions placeOrder(String token) throws Exception {
         return mockMvc.perform(post("/api/v1/orders")
                 .header("Authorization", "Bearer " + token)
-                .param("userId", String.valueOf(userId))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ADDRESS_BODY));
     }

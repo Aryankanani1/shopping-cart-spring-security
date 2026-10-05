@@ -122,6 +122,7 @@ class OrderServiceTest {
         cart.setUser(owner);
         cart.getCartItems().add(ci);
 
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
         when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
         when(modelMapper.map(any(Order.class), eq(OrderDto.class))).thenReturn(new OrderDto());
@@ -135,7 +136,7 @@ class OrderServiceTest {
         addr.setPostalCode("EC1A");
         addr.setCountry("UK");
 
-        orderService.placeOrder(OWNER_ID, addr);
+        orderService.placeOrder(addr);
 
         // The saved order carries the address snapshot, starts PENDING, and has the item.
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
@@ -161,9 +162,10 @@ class OrderServiceTest {
     @Test
     void placeOrder_withNoCart_isRejectedAsEmpty() {
         // The cart is deleted after each order, so a repeat checkout finds none.
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
         when(cartService.getCartByUserId(OWNER_ID)).thenReturn(null);
 
-        assertThatThrownBy(() -> orderService.placeOrder(OWNER_ID, new PlaceOrderRequest()))
+        assertThatThrownBy(() -> orderService.placeOrder(new PlaceOrderRequest()))
                 .isInstanceOf(EmptyCartException.class);
 
         verify(orderRepository, never()).save(any());
@@ -173,9 +175,10 @@ class OrderServiceTest {
     void placeOrder_withEmptyCart_isRejected() {
         Cart cart = new Cart();
         cart.setId(99L);
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
         when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
 
-        assertThatThrownBy(() -> orderService.placeOrder(OWNER_ID, new PlaceOrderRequest()))
+        assertThatThrownBy(() -> orderService.placeOrder(new PlaceOrderRequest()))
                 .isInstanceOf(EmptyCartException.class);
 
         verify(orderRepository, never()).save(any());
@@ -192,9 +195,10 @@ class OrderServiceTest {
         Cart cart = new Cart();
         cart.setId(99L);
         cart.getCartItems().add(ci);
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
         when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
 
-        assertThatThrownBy(() -> orderService.placeOrder(OWNER_ID, new PlaceOrderRequest()))
+        assertThatThrownBy(() -> orderService.placeOrder(new PlaceOrderRequest()))
                 .isInstanceOf(InsufficientStockException.class);
 
         assertThat(product.getInventory()).isEqualTo(5);
@@ -279,7 +283,8 @@ class OrderServiceTest {
     }
 
     @Test
-    void getUserOrders_fullPage_returnsCursorAtTheLastRow() {
+    void getMyOrders_fullPage_returnsCursorAtTheLastRow() {
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
         // size 2: the repository is asked for 3 rows, and a 3rd one means there's more.
         when(orderRepository.findUserOrderKeyset(eq(OWNER_ID), isNull(), isNull(), eq(PageRequest.of(0, 3))))
                 .thenReturn(List.of(row(30, "2026-03-03T00:00:00Z"), row(20, "2026-03-02T00:00:00Z"),
@@ -289,9 +294,8 @@ class OrderServiceTest {
                 .thenReturn(List.of(orderWithId(20), orderWithId(30)));
         mapOrdersToDtosWithTheirIds();
 
-        SlicedResponse<OrderDto> slice = orderService.getUserOrders(OWNER_ID, null, 2);
+        SlicedResponse<OrderDto> slice = orderService.getMyOrders(null, 2);
 
-        verify(authUtils).requireSelfOrAdmin(OWNER_ID);
         assertThat(slice.content()).extracting(OrderDto::getId).containsExactly(30L, 20L);
         assertThat(slice.hasNext()).isTrue();
         assertThat(slice.numberOfElements()).isEqualTo(2);
@@ -300,14 +304,15 @@ class OrderServiceTest {
     }
 
     @Test
-    void getUserOrders_lastPage_hasNoCursor() {
+    void getMyOrders_lastPage_hasNoCursor() {
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
         OrderCursor from = new OrderCursor(Instant.parse("2026-03-02T00:00:00Z"), 20L);
         when(orderRepository.findUserOrderKeyset(OWNER_ID, from.createdAt(), from.id(), PageRequest.of(0, 3)))
                 .thenReturn(List.of(row(10, "2026-03-01T00:00:00Z")));
         when(orderRepository.findWithItemsByIdIn(List.of(10L))).thenReturn(List.of(orderWithId(10)));
         mapOrdersToDtosWithTheirIds();
 
-        SlicedResponse<OrderDto> slice = orderService.getUserOrders(OWNER_ID, from.encode(), 2);
+        SlicedResponse<OrderDto> slice = orderService.getMyOrders(from.encode(), 2);
 
         assertThat(slice.content()).extracting(OrderDto::getId).containsExactly(10L);
         assertThat(slice.hasNext()).isFalse();
@@ -315,10 +320,11 @@ class OrderServiceTest {
     }
 
     @Test
-    void getUserOrders_noOrders_isAnEmptySliceWithoutLoadingItems() {
+    void getMyOrders_noOrders_isAnEmptySliceWithoutLoadingItems() {
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
         when(orderRepository.findUserOrderKeyset(eq(OWNER_ID), isNull(), isNull(), any())).thenReturn(List.of());
 
-        SlicedResponse<OrderDto> slice = orderService.getUserOrders(OWNER_ID, null, 20);
+        SlicedResponse<OrderDto> slice = orderService.getMyOrders(null, 20);
 
         assertThat(slice.content()).isEmpty();
         assertThat(slice.hasNext()).isFalse();
@@ -326,17 +332,8 @@ class OrderServiceTest {
     }
 
     @Test
-    void getUserOrders_someoneElsesHistory_isDeniedBeforeAnyQuery() {
-        doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(OWNER_ID);
-
-        assertThatThrownBy(() -> orderService.getUserOrders(OWNER_ID, null, 20))
-                .isInstanceOf(AccessDeniedException.class);
-        verify(orderRepository, never()).findUserOrderKeyset(any(), any(), any(), any());
-    }
-
-    @Test
-    void getUserOrders_tamperedCursor_isRejected() {
-        assertThatThrownBy(() -> orderService.getUserOrders(OWNER_ID, "garbage!", 20))
+    void getMyOrders_tamperedCursor_isRejected() {
+        assertThatThrownBy(() -> orderService.getMyOrders("garbage!", 20))
                 .isInstanceOf(InvalidCursorException.class);
     }
 
