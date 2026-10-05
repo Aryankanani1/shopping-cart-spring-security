@@ -4,12 +4,14 @@ import com.aryan.spring_security_demo.common.web.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -35,8 +37,12 @@ public class ImageController {
                 .getBytes(1, (int) image.getImage().length()));
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.getFileType()))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment;  filename=\"" + image
-                        .getFileName() + "\"")
+                // The uploaded name goes through the builder: it escapes quotes and
+                // backslashes, and adds a filename* (RFC 6266) carrying the name in
+                // UTF-8. Pasted in raw, a quote ended the filename early.
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(image.getFileName(), StandardCharsets.UTF_8)
+                        .build().toString())
                 .body(byteArrayResource);
     }
 
