@@ -1,6 +1,8 @@
 package com.aryan.spring_security_demo.journey;
 
+import com.aryan.spring_security_demo.identity.InvalidRefreshTokenException;
 import com.aryan.spring_security_demo.identity.RefreshTokenRepository;
+import com.aryan.spring_security_demo.identity.RefreshTokenService;
 import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
@@ -18,10 +20,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -47,6 +54,8 @@ class RefreshTokenFlowIntegrationTest {
     @Autowired private RoleRepository roleRepository;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private RefreshTokenService refreshTokenService;
+    @Autowired private PlatformTransactionManager transactionManager;
 
     @BeforeEach
     void setUp() {
@@ -115,6 +124,36 @@ class RefreshTokenFlowIntegrationTest {
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(refreshBody(current)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("two refreshes racing with one token: only one rotates, and the race counts as reuse")
+    void refresh_racingWithTheSameToken_onlyOneRotates() throws Exception {
+        String original = login().path("refreshToken").asText();
+        TransactionTemplate requestB = new TransactionTemplate(transactionManager);
+        TransactionTemplate requestA = new TransactionTemplate(transactionManager);
+        requestA.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+
+        // Two requests present the same token at once: B reads it while it is
+        // still active, A rotates it and commits, then B carries on from its read.
+        // B's persistence context keeps the token as B first read it, which
+        // replays that interleaving on one thread.
+        AtomicReference<String> tokenGivenToA = new AtomicReference<>();
+        Throwable outcomeForB = requestB.execute(status -> {
+            refreshTokenRepository.findAll();  // B reads the token
+            tokenGivenToA.set(requestA.execute(s -> refreshTokenService.rotate(original)).rawRefreshToken());
+            return catchThrowable(() -> refreshTokenService.rotate(original));
+        });
+
+        // B gets no second session out of the same token...
+        assertThat(outcomeForB).isInstanceOf(InvalidRefreshTokenException.class);
+        assertThat(refreshTokenRepository.count()).as("original + A's token only").isEqualTo(2);
+
+        // ...and since the token was used twice, A's token is revoked too.
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(refreshBody(tokenGivenToA.get())))
                 .andExpect(status().isUnauthorized());
     }
 

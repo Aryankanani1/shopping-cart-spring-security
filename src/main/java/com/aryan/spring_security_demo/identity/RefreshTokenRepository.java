@@ -19,6 +19,16 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     Optional<RefreshToken> findByTokenHash(@Param("hash") String tokenHash);
 
     /**
+     * Revoke one token, but only if it isn't revoked already. Returns 1 if this
+     * call revoked it, 0 if another transaction got there first. Rotation claims
+     * a token through this rather than by setting the flag on the loaded entity,
+     * so of two requests presenting the same token at once only one can rotate it.
+     */
+    @Modifying
+    @Query("update RefreshToken t set t.revoked = true where t.id = :id and t.revoked = false")
+    int revokeIfActive(@Param("id") Long id);
+
+    /**
      * Revoke every still-active token for a user in one statement — used both on
      * "log out everywhere" and, defensively, when a revoked token is replayed
      * (a signal the token may have been stolen).
