@@ -3,18 +3,14 @@ package com.aryan.spring_security_demo.catalog;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
-import java.util.List;
-
 public interface ProductServiceInterface {
     Product addProduct(AddProductRequest product);
     Product getProductById(Long id);
     void deleteProductById(Long productId);
     Product updateProductById(ProductUpdateRequest product, Long productId);
-    List<Product> getAllProducts();
     Long countProductsByBrandAndName(String brand,String name);
 
     ProductDto convertToDto(Product product);
-    List<ProductDto> getConvertedProducts(List<Product> products);
 
     // DTO-returning read/write operations. Each loads AND maps inside one
     // transaction, so lazy associations (category, images) resolve while the

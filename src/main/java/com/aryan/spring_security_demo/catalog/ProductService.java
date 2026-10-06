@@ -106,12 +106,6 @@ public class ProductService implements ProductServiceInterface{
 
     @Override
     @Transactional(readOnly = true)
-    public List<Product> getAllProducts() {
-        return productRepository.findAll();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public Long countProductsByBrandAndName(String brand, String name) {
         return productRepository.countByBrandAndName(brand,name);
     }
@@ -151,11 +145,6 @@ public class ProductService implements ProductServiceInterface{
                     return imageDto;
                 })
                 .toList();
-    }
-
-    @Override
-    public List<ProductDto> getConvertedProducts(List<Product> products) {
-        return products.stream().map(this::convertToDto).toList();
     }
 
 

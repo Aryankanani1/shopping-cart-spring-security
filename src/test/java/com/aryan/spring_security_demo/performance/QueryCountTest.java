@@ -29,11 +29,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -61,7 +60,6 @@ class QueryCountTest {
     private static final BigDecimal PRICE = new BigDecimal("9.99");
 
     @Autowired private EntityManagerFactory entityManagerFactory;
-    @Autowired private PlatformTransactionManager txManager;
 
     @Autowired private ProductServiceInterface productService;
     @Autowired private OrderServiceInterface orderService;
@@ -152,24 +150,23 @@ class QueryCountTest {
     }
 
     @Test
-    @DisplayName("listing all products loads categories without an N+1")
-    void getAllProducts_isBounded() {
+    @DisplayName("the product listing loads categories without an N+1")
+    void findProducts_isBounded() {
         Statistics stats = statistics();
         stats.clear();
 
-        // getConvertedProducts touches lazy imageList, so run the whole
-        // load-and-map inside one transaction (mirrors the request scope).
-        List<ProductDto> dtos = new TransactionTemplate(txManager).execute(status ->
-                productService.getConvertedProducts(productService.getAllProducts()));
+        // The GET /products path: load a page and map it in one transaction.
+        List<ProductDto> dtos = productService.findProducts(null, null, null, PageRequest.of(0, 20)).getContent();
 
         long queries = stats.getPrepareStatementCount();
         assertThat(dtos).hasSize(PRODUCT_COUNT);
         // Sanity: both traversed associations are actually populated.
         assertThat(dtos.get(0).getCategoryName()).isNotBlank();
         assertThat(dtos.get(0).getImages()).isNotEmpty();
-        // Entity graph fetches categories WITH the product list (1 query); images
-        // come in 1 batched query. Dropping the graph adds a 3rd (batched category)
-        // query. A truly classic N+1 (no batching) would be far higher.
+        // Entity graph fetches categories WITH the product page (1 query); images
+        // come in 1 batched query. The page isn't full, so no count query runs.
+        // Dropping the graph adds a 3rd (batched category) query. A truly classic
+        // N+1 (no batching) would be far higher.
         assertThat(queries)
                 .as("listing products must fetch categories with the list, not separately")
                 .isEqualTo(2);
