@@ -289,6 +289,13 @@ sum(rate(http_server_requests_seconds_count{uri="/api/v1/orders", method="POST",
   because only the auth endpoints are guarded. Single-instance by design (like the
   in-memory cache); behind a load balancer, back it with a shared store — the call
   site doesn't change.
+  Behind a reverse proxy or load balancer, set `SERVER_FORWARD_HEADERS_STRATEGY=native`,
+  or the limiter sees only the proxy's address and every client shares one bucket.
+  Tomcat then takes the client address from `X-Forwarded-For`, but only when the
+  request comes from a private-network address; if the proxy is elsewhere, list it
+  in `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` (a regex). It is off by default
+  because, with no proxy in front, a client on a private network could send its
+  own `X-Forwarded-For` and get a fresh bucket on every request.
 - Roles: `ROLE_ADMIN`, `ROLE_CUSTOMER`.
 
 ## API

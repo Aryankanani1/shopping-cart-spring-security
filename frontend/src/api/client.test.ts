@@ -180,6 +180,25 @@ describe('401 -> refresh -> retry', () => {
     expect(getSession()).toBeNull()
   })
 
+  // Regression: any failed refresh signed the user out, a 429 included.
+  it('keeps the session and reports the 429 when the refresh is rate-limited', async () => {
+    setSession({ id: 7, token: 'stale', refreshToken: 'refresh-1' })
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        url.includes('/auth/refresh')
+          ? resp(429, { title: 'Too many requests', detail: 'Too many requests. Please retry in 12 second(s).' })
+          : resp(401, { detail: 'expired' }),
+      ),
+    )
+
+    const err = (await request('/orders/1').catch((e) => e)) as ApiError
+
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.status).toBe(429)
+    expect(err.message).toBe('Too many requests. Please retry in 12 second(s).')
+    expect(getSession()).toEqual({ id: 7, token: 'stale', refreshToken: 'refresh-1' })
+  })
+
   it('adopts the pair another tab already refreshed instead of replaying the spent refresh token', async () => {
     setSession({ id: 7, token: 'stale', refreshToken: 'refresh-1' })
     // Another tab refreshed first: refresh-1 is spent, and the new pair is in storage.
