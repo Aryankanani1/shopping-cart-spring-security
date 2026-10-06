@@ -34,6 +34,20 @@ public class ImageService implements ImageServiceInterface {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ImageFile getImageFile(Long id) {
+        // Read the BLOB while the transaction (and its connection) is still open:
+        // a driver may stream it lazily, and then it can't be read afterwards.
+        Image image = getImageById(id);
+        try {
+            Blob blob = image.getImage();
+            return new ImageFile(image.getFileName(), image.getFileType(), blob.getBytes(1, (int) blob.length()));
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to read image " + id, e);
+        }
+    }
+
+    @Override
     @Transactional
     public void deleteImageById(Long id) {
         // find the image by id, then delete it

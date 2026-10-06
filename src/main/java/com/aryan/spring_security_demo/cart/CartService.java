@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.cart;
 
 import com.aryan.spring_security_demo.identity.User;
+import com.aryan.spring_security_demo.identity.UserRepository;
 import com.aryan.spring_security_demo.identity.security.AuthUtils;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
@@ -17,6 +18,7 @@ public class CartService implements CartServiceInterface{
     private final CartItemRepository cartItemRepository;
     private final ModelMapper modelMapper;
     private final AuthUtils authUtils;
+    private final UserRepository userRepository;
 
     /**
      * Sole entry point for loading a cart by id, so the ownership check lives in
@@ -65,6 +67,9 @@ public class CartService implements CartServiceInterface{
     @Override
     @Transactional
     public Cart initializeNewCart(User user){
+        // Two first add-to-carts at once must not both create a cart (the second
+        // would fail the unique user_id): the second waits here, then finds it.
+        userRepository.lockById(user.getId());
         return Optional.ofNullable(getCartByUserId(user.getId()))
                 .orElseGet(() -> {
                     Cart cart = new Cart();

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -13,7 +14,9 @@ import java.math.BigDecimal;
 public class ProductUpdateRequest {
     private Long id;
 
+    // The 255-character limits match the varchar(255) columns.
     @NotBlank(message = "Product name is required")
+    @Size(max = 255, message = "Product name must be at most 255 characters")
     @NoProfanity(message = "Product name contains disallowed words")
     private String name;
 
@@ -21,9 +24,11 @@ public class ProductUpdateRequest {
     @Positive(message = "Price must be greater than zero")
     private BigDecimal price;
 
+    @Size(max = 255, message = "Description must be at most 255 characters")
     private String description;
 
     @NotBlank(message = "Brand is required")
+    @Size(max = 255, message = "Brand must be at most 255 characters")
     private String brand;
 
     @PositiveOrZero(message = "Inventory cannot be negative")

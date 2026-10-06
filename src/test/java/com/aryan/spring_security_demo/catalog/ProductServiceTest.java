@@ -56,8 +56,10 @@ class ProductServiceTest {
     void addProduct_duplicateNameAndBrand_isRejected() {
         when(productRepository.existsByNameAndBrand("Desk Lamp", "Acme")).thenReturn(true);
 
+        // Regression: the message read "Acme Desk Lampalready exists".
         assertThatThrownBy(() -> productService.addProduct(addRequest("Lighting")))
-                .isInstanceOf(AlreadyExistsException.class);
+                .isInstanceOf(AlreadyExistsException.class)
+                .hasMessage("Acme Desk Lamp already exists");
         verify(productRepository, never()).save(any());
         verify(categoryService, never()).findOrCreate(any());
     }

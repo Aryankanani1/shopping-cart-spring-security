@@ -8,14 +8,19 @@ import lombok.Data;
 @Data
 public class CreateUserRequest {
 
+    // The 255-character limits match the varchar(255) columns.
     @NotBlank(message = "First name is required")
+    @Size(max = 255, message = "First name must be at most 255 characters")
     private String firstName;
 
     @NotBlank(message = "Last name is required")
+    @Size(max = 255, message = "Last name must be at most 255 characters")
     private String lastName;
 
+    // @Email alone allows up to 320 characters.
     @NotBlank(message = "Email is required")
     @Email(message = "Email must be a valid address")
+    @Size(max = 255, message = "Email must be at most 255 characters")
     private String email;
 
     // The maximum is BCrypt's: it only hashes the first 72 bytes, and Spring's

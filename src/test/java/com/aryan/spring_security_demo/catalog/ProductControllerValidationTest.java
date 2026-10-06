@@ -9,6 +9,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -80,5 +81,51 @@ class ProductControllerValidationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Validation failed"))
                 .andExpect(jsonPath("$.errors.price").value("Price must be greater than zero"));
+    }
+
+    // Regression: the columns are varchar(255), so a longer value got past
+    // validation and came back from the database as a 409 "Data conflict".
+    @Test
+    void addProduct_withTextLongerThanItsColumn_returns400() throws Exception {
+        String body = """
+                {
+                  "name": "%1$s",
+                  "price": 10.00,
+                  "brand": "%1$s",
+                  "description": "%1$s",
+                  "inventory": 5,
+                  "category": { "name": "%1$s" }
+                }
+                """.formatted("a".repeat(256));
+
+        mockMvc.perform(post("/api/v1/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.name").value("Product name must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors.brand").value("Brand must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors.description").value("Description must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors['category.name']").value("Category name must be at most 255 characters"));
+    }
+
+    @Test
+    void updateProduct_withTextLongerThanItsColumn_returns400() throws Exception {
+        String body = """
+                {
+                  "name": "%1$s",
+                  "price": 10.00,
+                  "brand": "%1$s",
+                  "description": "%1$s",
+                  "inventory": 5
+                }
+                """.formatted("a".repeat(256));
+
+        mockMvc.perform(put("/api/v1/products/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.name").value("Product name must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors.brand").value("Brand must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors.description").value("Description must be at most 255 characters"));
     }
 }

@@ -94,7 +94,7 @@ class OrderServiceTest {
     void getAllOrders_returnsRepositorySummaryPage() {
         Pageable pageable = PageRequest.of(0, 20);
         OrderSummaryDto summary = new OrderSummaryDto(
-                ORDER_ID, OWNER_ID, "a@b.com", LocalDate.now(), BigDecimal.TEN, OrderStatus.PENDING);
+                ORDER_ID, OWNER_ID, "a@b.com", LocalDate.of(2026, 3, 14), BigDecimal.TEN, OrderStatus.PENDING);
         Page<OrderSummaryDto> page = new PageImpl<>(List.of(summary), pageable, 1);
         when(orderRepository.findAllSummaries(pageable)).thenReturn(page);
 

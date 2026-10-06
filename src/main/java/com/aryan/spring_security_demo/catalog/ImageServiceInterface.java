@@ -6,6 +6,8 @@ import java.util.List;
 
 public interface ImageServiceInterface {
     Image getImageById(Long id);
+    /** The image's stored file (name, type and bytes), for download. */
+    ImageFile getImageFile(Long id);
     void deleteImageById(Long id);
     List<ImageDto> saveImages(List<MultipartFile> files, Long productId);
     void updateImage(MultipartFile file, Long imageId);

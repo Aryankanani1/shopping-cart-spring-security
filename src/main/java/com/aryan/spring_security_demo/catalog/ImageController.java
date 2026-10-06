@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
 import java.util.List;
 
 import static org.springframework.http.HttpStatus.CREATED;
@@ -31,19 +30,17 @@ public class ImageController {
     }
 
     @GetMapping("/{imageId}")
-    public ResponseEntity<Resource> downloadImage(@PathVariable Long imageId) throws SQLException {
-        Image image = imageServiceInterface.getImageById(imageId);
-        ByteArrayResource byteArrayResource = new ByteArrayResource(image.getImage()
-                .getBytes(1, (int) image.getImage().length()));
+    public ResponseEntity<Resource> downloadImage(@PathVariable Long imageId) {
+        ImageFile image = imageServiceInterface.getImageFile(imageId);
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(image.getFileType()))
+                .contentType(MediaType.parseMediaType(image.contentType()))
                 // The uploaded name goes through the builder: it escapes quotes and
                 // backslashes, and adds a filename* (RFC 6266) carrying the name in
                 // UTF-8. Pasted in raw, a quote ended the filename early.
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
-                        .filename(image.getFileName(), StandardCharsets.UTF_8)
+                        .filename(image.fileName(), StandardCharsets.UTF_8)
                         .build().toString())
-                .body(byteArrayResource);
+                .body(new ByteArrayResource(image.content()));
     }
 
     /** Replace an image's file, sent as the multipart part {@code file}. */

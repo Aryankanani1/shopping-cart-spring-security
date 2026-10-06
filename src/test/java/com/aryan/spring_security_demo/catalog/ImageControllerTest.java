@@ -11,7 +11,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import javax.sql.rowset.serial.SerialBlob;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -57,11 +56,7 @@ class ImageControllerTest {
     }
 
     private String downloadHeader(String fileName) throws Exception {
-        Image image = new Image();
-        image.setFileName(fileName);
-        image.setFileType("image/png");
-        image.setImage(new SerialBlob(PNG));
-        when(imageService.getImageById(5L)).thenReturn(image);
+        when(imageService.getImageFile(5L)).thenReturn(new ImageFile(fileName, "image/png", PNG));
 
         return mockMvc.perform(get("/api/v1/images/5"))
                 .andExpect(status().isOk())

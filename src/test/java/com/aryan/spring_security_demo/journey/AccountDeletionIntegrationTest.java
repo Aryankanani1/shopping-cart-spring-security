@@ -133,8 +133,9 @@ class AccountDeletionIntegrationTest {
         Product product = productRepository.save(new Product(
                 "Desk Lamp", new BigDecimal("40.00"), "", "Acme", 3, electronics()));
         User user = userRepository.findById(userId).orElseThrow();
-        WishlistItem item = wishlistItemRepository.save(new WishlistItem(user, product, Instant.now()));
-        notificationRepository.save(Notification.reminder(item, Instant.now()));
+        Instant now = Instant.parse("2026-09-14T12:00:00Z");
+        WishlistItem item = wishlistItemRepository.save(new WishlistItem(user, product, now));
+        notificationRepository.save(Notification.reminder(item, now));
 
         mockMvc.perform(delete("/api/v1/users/" + userId)
                         .header("Authorization", "Bearer " + login().path("token").asText()))

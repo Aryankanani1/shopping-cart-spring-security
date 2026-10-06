@@ -1,6 +1,8 @@
 package com.aryan.spring_security_demo.identity;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -10,6 +12,20 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<User,Long> {
     boolean existsByEmail(String email);
+
+    /**
+     * Lock the user's row (SELECT ... FOR UPDATE) until the transaction ends. A
+     * find-or-create for one user (their cart, a wishlist item) takes it first, so
+     * a concurrent request for the same user waits, then finds what the first one
+     * created instead of inserting a duplicate and failing a unique constraint.
+     *
+     * <p>It has to come before the "does it exist yet?" read: under MySQL's
+     * REPEATABLE READ that read fixes the transaction's snapshot, and a row
+     * committed after it would stay invisible.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.id = :id")
+    Optional<User> lockById(@Param("id") Long id);
 
     @Query("SELECT u FROM User u LEFT JOIN FETCH u.cart WHERE u.id = :id")
     Optional<User> findByIdWithCart(@Param("id") Long id);

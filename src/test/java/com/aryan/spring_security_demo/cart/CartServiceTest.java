@@ -1,10 +1,12 @@
 package com.aryan.spring_security_demo.cart;
 
 import com.aryan.spring_security_demo.identity.User;
+import com.aryan.spring_security_demo.identity.UserRepository;
 import com.aryan.spring_security_demo.identity.security.AuthUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
@@ -16,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,6 +34,7 @@ class CartServiceTest {
     @Mock private CartItemRepository cartItemRepository;
     @Mock private ModelMapper modelMapper;
     @Mock private AuthUtils authUtils;
+    @Mock private UserRepository userRepository;
 
     @InjectMocks private CartService cartService;
 
@@ -98,6 +102,21 @@ class CartServiceTest {
         when(cartRepository.save(any(Cart.class))).thenAnswer(inv -> inv.getArgument(0));
 
         assertThat(cartService.initializeNewCart(user).getUser()).isSameAs(user);
+    }
+
+    // Regression: two first add-to-carts at once both found no cart and both
+    // inserted one; the second failed the unique user_id and answered 409.
+    @Test
+    void initializeNewCart_locksTheUserBeforeLookingForTheCart() {
+        User user = new User();
+        user.setId(OWNER_ID);
+        when(cartRepository.findByUserId(OWNER_ID)).thenReturn(cartOwnedBy(OWNER_ID));
+
+        cartService.initializeNewCart(user);
+
+        InOrder order = inOrder(userRepository, cartRepository);
+        order.verify(userRepository).lockById(OWNER_ID);
+        order.verify(cartRepository).findByUserId(OWNER_ID);
     }
 
     private static Cart cartOwnedBy(Long ownerId) {

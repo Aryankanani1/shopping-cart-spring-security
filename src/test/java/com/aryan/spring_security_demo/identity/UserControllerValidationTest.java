@@ -9,6 +9,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -95,5 +96,46 @@ class UserControllerValidationTest {
                         .content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.password").value("Password must be 6-72 characters"));
+    }
+
+    // Regression: the columns are varchar(255), so a longer value got past
+    // validation and came back from the database as a 409 "Data conflict".
+    @Test
+    void createUser_withTextLongerThanItsColumn_returns400() throws Exception {
+        // A well-formed address of 260 characters (local part 64, domain 195).
+        String longEmail = "a".repeat(64) + "@" + ("b".repeat(63) + ".").repeat(3) + "com";
+        String body = """
+                {
+                  "firstName": "%1$s",
+                  "lastName": "%1$s",
+                  "email": "%2$s",
+                  "password": "123456"
+                }
+                """.formatted("a".repeat(256), longEmail);
+
+        mockMvc.perform(post("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.firstName").value("First name must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors.lastName").value("Last name must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors.email").value("Email must be at most 255 characters"));
+    }
+
+    @Test
+    void updateUser_withNamesLongerThanTheirColumns_returns400() throws Exception {
+        String body = """
+                {
+                  "firstName": "%1$s",
+                  "lastName": "%1$s"
+                }
+                """.formatted("a".repeat(256));
+
+        mockMvc.perform(put("/api/v1/users/7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.firstName").value("First name must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors.lastName").value("Last name must be at most 255 characters"));
     }
 }

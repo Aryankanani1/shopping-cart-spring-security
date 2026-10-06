@@ -29,7 +29,6 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -147,19 +146,21 @@ class WishlistIntegrationTest {
     @DisplayName("reminder: a future time is stored, a past one is a 400, and it can be cleared")
     void reminder_setValidateAndClear() throws Exception {
         add(aliceToken);
-        Instant inAWeek = Instant.now().plus(7, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
+        // @Future checks against the system clock, so use times that are always
+        // in the future and always in the past rather than ones relative to now.
+        Instant future = Instant.parse("2100-01-01T09:00:00Z");
 
         mockMvc.perform(put(itemUrl(productId) + "/reminder")
                         .header("Authorization", bearer(aliceToken))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(reminderBody(inAWeek)))
+                        .content(reminderBody(future)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.remindAt").value(inAWeek.toString()));
+                .andExpect(jsonPath("$.data.remindAt").value(future.toString()));
 
         mockMvc.perform(put(itemUrl(productId) + "/reminder")
                         .header("Authorization", bearer(aliceToken))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(reminderBody(Instant.now().minus(1, ChronoUnit.HOURS))))
+                        .content(reminderBody(Instant.parse("2020-01-01T09:00:00Z"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.remindAt").value("Reminder time must be in the future"));
 
@@ -199,7 +200,7 @@ class WishlistIntegrationTest {
 
         setAlerts(aliceToken, true);
 
-        assertThat(alertService.announcePriceDrops(Instant.now())).isZero();
+        assertThat(alertService.announcePriceDrops(Instant.parse("2026-03-14T12:00:00Z"))).isZero();
         assertThat(notificationRepository.count()).isZero();
     }
 

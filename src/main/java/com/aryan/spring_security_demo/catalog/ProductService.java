@@ -24,7 +24,7 @@ public class ProductService implements ProductServiceInterface{
 
 
         if(productExists(request.getName(),request.getBrand())){
-            throw new AlreadyExistsException(request.getBrand() + " " + request.getName() + "already exists");
+            throw new AlreadyExistsException(request.getBrand() + " " + request.getName() + " already exists");
         }
        Category category = categoryService.findOrCreate(request.getCategory().getName());
        return  productRepository.save(createProduct(request,category));
@@ -106,12 +106,6 @@ public class ProductService implements ProductServiceInterface{
 
     @Override
     @Transactional(readOnly = true)
-    public List<Product> getAllProducts() {
-        return productRepository.findAll();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public Long countProductsByBrandAndName(String brand, String name) {
         return productRepository.countByBrandAndName(brand,name);
     }
@@ -151,11 +145,6 @@ public class ProductService implements ProductServiceInterface{
                     return imageDto;
                 })
                 .toList();
-    }
-
-    @Override
-    public List<ProductDto> getConvertedProducts(List<Product> products) {
-        return products.stream().map(this::convertToDto).toList();
     }
 
 
