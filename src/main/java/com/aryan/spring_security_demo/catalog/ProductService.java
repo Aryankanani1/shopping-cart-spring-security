@@ -24,7 +24,7 @@ public class ProductService implements ProductServiceInterface{
 
 
         if(productExists(request.getName(),request.getBrand())){
-            throw new AlreadyExistsException(request.getBrand() + " " + request.getName() + "already exists");
+            throw new AlreadyExistsException(request.getBrand() + " " + request.getName() + " already exists");
         }
        Category category = categoryService.findOrCreate(request.getCategory().getName());
        return  productRepository.save(createProduct(request,category));
