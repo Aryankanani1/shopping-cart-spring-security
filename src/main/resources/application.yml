@@ -8,9 +8,11 @@ spring:
   application:
     name: spring_security_demo
 
-  # Dev by default for local runs. Activate prod with:  SPRING_PROFILES_ACTIVE=prod
+  # Prod unless another profile is chosen. Dev seeds admin accounts with a
+  # password published in the README, so a deploy that forgets to pick a profile
+  # must not fall back to it. Local runs opt in:  SPRING_PROFILES_ACTIVE=dev
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev}
+    active: ${SPRING_PROFILES_ACTIVE:prod}
 
   # --- DataSource: connection details come from the environment ---
   datasource:

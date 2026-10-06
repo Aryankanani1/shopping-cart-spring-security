@@ -18,8 +18,11 @@ import java.util.Optional;
 public class UserService implements UserServiceInterface{
     /** BCrypt hashes only this many bytes; the encoder throws on longer input. */
     private static final int MAX_PASSWORD_BYTES = 72;
+    /** Self-registration only ever creates customers. */
+    private static final String CUSTOMER_ROLE = "ROLE_CUSTOMER";
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final ModelMapper modelMapper;
     private final PasswordEncoder passwordEncoder;
     private final AuthUtils authUtils;
@@ -42,6 +45,7 @@ public class UserService implements UserServiceInterface{
                     user.setFirstName(request.getFirstName());
                     user.setLastName(request.getLastName());
                     user.setPassword(encodePassword("password", request.getPassword()));
+                    user.getRoles().add(customerRole());
                     return userRepository.save(user);
                 }).orElseThrow(() -> new AlreadyExistsException( request.getEmail()+ " already exists"));
     }
@@ -71,6 +75,12 @@ public class UserService implements UserServiceInterface{
         }, () -> {
             throw new UserNotFoundException("failed to find user");
         });
+    }
+
+    /** DataInitializer creates the role at startup, so it is always there. */
+    private Role customerRole() {
+        return roleRepository.findByName(CUSTOMER_ROLE)
+                .orElseThrow(() -> new IllegalStateException(CUSTOMER_ROLE + " is missing"));
     }
 
     /**

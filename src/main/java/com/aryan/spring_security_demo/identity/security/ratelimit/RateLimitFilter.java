@@ -71,9 +71,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        // Keyed on the socket peer address. Note: behind a reverse proxy this is the
-        // proxy's IP unless a trusted-proxy ForwardedHeaderFilter is configured;
-        // X-Forwarded-For is client-spoofable and is intentionally not trusted here.
+        // Keyed on the socket peer address. Behind a reverse proxy this is the
+        // proxy's IP unless server.forward-headers-strategy is set (see the README);
+        // X-Forwarded-For is client-spoofable, so it is not read here directly.
         String clientKey = request.getRemoteAddr();
         RateLimitService.Decision decision = rateLimitService.tryConsume(clientKey);
 

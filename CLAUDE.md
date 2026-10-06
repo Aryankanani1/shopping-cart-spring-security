@@ -15,8 +15,9 @@ cd frontend && npm test              # Vitest
 cd frontend && npm run build         # type-check + production build
 ```
 
-Running locally: the Vite dev server proxies `/api` to **port 8082**, so start
-the API with `--server.port=8082` (see README for the database settings).
+Running locally: start the API with `SPRING_PROFILES_ACTIVE=dev` (the default is
+`prod`), and with `--server.port=8082`, because the Vite dev server proxies `/api`
+to **port 8082** (see README for the database settings).
 
 ## Layout
 

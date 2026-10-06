@@ -87,9 +87,17 @@ async function parseBody<T>(res: Response): Promise<T> {
 // the other tab already got and adopts it. Presenting the spent refresh token
 // instead would look like a stolen-token replay, and the server would end every
 // session.
-let refreshing: Promise<boolean> | null = null
 
-async function tryRefresh(rejectedToken: string): Promise<boolean> {
+/**
+ * What a refresh means for the request that triggered it: true to replay it with
+ * the new token, false when the session is over, or the error to report when the
+ * session is still good but could not be refreshed just now.
+ */
+type RefreshOutcome = boolean | ApiError
+
+let refreshing: Promise<RefreshOutcome> | null = null
+
+async function tryRefresh(rejectedToken: string): Promise<RefreshOutcome> {
   if (refreshing) return refreshing
   refreshing = withRefreshLock(() => refreshSession(rejectedToken))
   try {
@@ -99,14 +107,14 @@ async function tryRefresh(rejectedToken: string): Promise<boolean> {
   }
 }
 
-async function withRefreshLock(refresh: () => Promise<boolean>): Promise<boolean> {
+async function withRefreshLock(refresh: () => Promise<RefreshOutcome>): Promise<RefreshOutcome> {
   // Web Locks are in every current browser; where they're missing (jsdom in
   // tests, very old browsers) the refresh is still single-flight within the tab.
   if (!navigator.locks) return refresh()
   return navigator.locks.request('meridian.auth.refresh', refresh)
 }
 
-async function refreshSession(rejectedToken: string): Promise<boolean> {
+async function refreshSession(rejectedToken: string): Promise<RefreshOutcome> {
   // Another tab (or an earlier refresh in this one) may have rotated already.
   const current = syncFromStorage()
   if (!current?.refreshToken) return false
@@ -118,6 +126,10 @@ async function refreshSession(rejectedToken: string): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: current.refreshToken }),
     })
+    // The rate limiter turns a request away before the refresh token is looked
+    // at, so after a 429 the token is unspent and the session still good. Keep
+    // it, and report the 429 (it says when to retry) instead of signing out.
+    if (res.status === 429) return await toApiError(res)
     if (!res.ok) {
       setSession(null)
       return false
@@ -159,7 +171,9 @@ async function doRequest<T>(path: string, opts: RequestOptions, allowRefresh: bo
 
   // Access token likely expired — rotate once and replay the original request.
   if (res.status === 401 && allowRefresh && sentToken) {
-    if (await tryRefresh(sentToken)) return doRequest<T>(path, opts, false)
+    const refreshed = await tryRefresh(sentToken)
+    if (refreshed instanceof ApiError) throw refreshed
+    if (refreshed) return doRequest<T>(path, opts, false)
   }
 
   if (!res.ok) throw await toApiError(res)
