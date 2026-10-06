@@ -48,7 +48,7 @@ class RefreshTokenRepositoryTest {
     @Test
     @DisplayName("deleteAllExpiredBefore removes expired tokens (revoked or not) and keeps unexpired ones")
     void deleteAllExpiredBefore_purgesOnlyExpired() {
-        Instant now = Instant.now();
+        Instant now = Instant.parse("2026-03-14T12:00:00Z");
         persistToken("expired-active", now.minus(1, ChronoUnit.DAYS), false);
         persistToken("expired-revoked", now.minus(1, ChronoUnit.DAYS), true);
         persistToken("live-active", now.plus(1, ChronoUnit.DAYS), false);
@@ -69,7 +69,7 @@ class RefreshTokenRepositoryTest {
     @Test
     @DisplayName("deleteAllExpiredBefore is a no-op (returns 0) when nothing has expired")
     void deleteAllExpiredBefore_noExpiredTokens_returnsZero() {
-        Instant now = Instant.now();
+        Instant now = Instant.parse("2026-03-14T12:00:00Z");
         persistToken("live", now.plus(1, ChronoUnit.DAYS), false);
         em.flush();
 

@@ -101,7 +101,7 @@ class QueryCountTest {
         Order order = new Order();
         order.setUser(user);
         order.setOrderStatus(OrderStatus.PENDING);
-        order.setLocalDate(LocalDate.now());
+        order.setLocalDate(LocalDate.of(2026, 3, 14));
 
         for (int i = 0; i < PRODUCT_COUNT; i++) {
             Category category = categoryRepository.save(new Category("Category-" + i));
