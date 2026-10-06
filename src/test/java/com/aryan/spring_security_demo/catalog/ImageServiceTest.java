@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.sql.rowset.serial.SerialBlob;
 import java.util.List;
 import java.util.Optional;
 
@@ -79,6 +80,28 @@ class ImageServiceTest {
         assertThatThrownBy(() -> imageService.updateImage(file("x.html", "text/html"), 3L))
                 .isInstanceOf(InvalidImageException.class);
         verify(imagePersistenceService, never()).replaceContent(any(), any(), any(), any());
+    }
+
+    @Test
+    void getImageFile_readsTheStoredBytesNameAndType() throws Exception {
+        Image image = new Image();
+        image.setFileName("lamp.png");
+        image.setFileType("image/png");
+        image.setImage(new SerialBlob(BYTES));
+        when(imageRepository.findById(3L)).thenReturn(Optional.of(image));
+
+        ImageFile file = imageService.getImageFile(3L);
+
+        assertThat(file.fileName()).isEqualTo("lamp.png");
+        assertThat(file.contentType()).isEqualTo("image/png");
+        assertThat(file.content()).isEqualTo(BYTES);
+    }
+
+    @Test
+    void getImageFile_missing_is404() {
+        when(imageRepository.findById(3L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> imageService.getImageFile(3L)).isInstanceOf(ImageNotFoundException.class);
     }
 
     @Test
