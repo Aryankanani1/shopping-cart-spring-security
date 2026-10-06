@@ -43,6 +43,9 @@ public class WishlistService implements WishlistServiceInterface {
     @Transactional
     public AddResult add(Long productId) {
         Long userId = authUtils.currentUserId();
+        // Two adds of the same product at once (a double click) must not both see
+        // "not saved yet": the second waits here, then finds the first one's item.
+        userRepository.lockById(userId);
         Optional<WishlistItem> existing = wishlistItemRepository.findByUserIdAndProductId(userId, productId);
         if (existing.isPresent()) {
             return new AddResult(convertToDto(existing.get()), false);
