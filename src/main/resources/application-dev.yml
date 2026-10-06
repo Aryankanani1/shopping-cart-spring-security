@@ -22,11 +22,12 @@ spring:
         format_sql: true
         use_sql_comments: true
 
-# Set the BasicBinder logger to TRACE to also see bound parameter values.
+# To also see bound parameter values while debugging, set
+# org.hibernate.orm.jdbc.bind to TRACE. It is off by default because the values
+# include password hashes and refresh-token hashes.
 logging:
   level:
     org.hibernate.SQL: DEBUG
-    org.hibernate.orm.jdbc.bind: TRACE
     org.hibernate.orm.query: WARN
     # Service-layer LoggingAspect entry/exit/timing lines — DEV ONLY.
     com.aryan.spring_security_demo.common.aop: DEBUG
