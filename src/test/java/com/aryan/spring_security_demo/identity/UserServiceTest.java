@@ -10,6 +10,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -39,6 +40,7 @@ class UserServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuthUtils authUtils;
     @Mock private RefreshTokenService refreshTokenService;
+    @Mock private ApplicationEventPublisher events;
 
     @InjectMocks private UserService userService;
 
@@ -166,6 +168,20 @@ class UserServiceTest {
         // The refresh-token rows reference the user, so they must go first.
         InOrder order = inOrder(refreshTokenService, userRepository);
         order.verify(refreshTokenService).endAllSessions(USER_ID);
+        order.verify(userRepository).delete(user);
+    }
+
+    // Regression: the account's orders were deleted with it, and the stock of the
+    // open ones never came back. Other modules now settle their rows first.
+    @Test
+    void deleteUser_announcesTheDeletionBeforeDeleting() {
+        User user = new User();
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+
+        userService.deleteUser(USER_ID);
+
+        InOrder order = inOrder(events, userRepository);
+        order.verify(events).publishEvent(new UserDeletingEvent(USER_ID));
         order.verify(userRepository).delete(user);
     }
 

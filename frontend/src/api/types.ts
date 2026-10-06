@@ -98,8 +98,9 @@ export interface OrderDto {
 /** Lightweight order row for the admin order list (no item breakdown). */
 export interface OrderSummaryDto {
   id: number
-  userId: number
-  userEmail: string
+  /** Null once the customer deleted their account; the order itself is kept. */
+  userId: number | null
+  userEmail: string | null
   /** ISO date, e.g. "2026-09-14". */
   orderDate: string
   totalAmount: number

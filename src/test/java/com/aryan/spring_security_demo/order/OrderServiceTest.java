@@ -238,6 +238,31 @@ class OrderServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
+    // Once its account is deleted an order has no user. Cancelling it must reach
+    // the ownership check (which refuses an ownerless order) instead of a 500.
+    @Test
+    void cancelOrder_ofADeletedAccount_isCheckedAsHavingNoOwner() {
+        order.setUser(null);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        orderService.cancelOrder(ORDER_ID);
+
+        verify(authUtils).requireSelfOrAdmin(null);
+    }
+
+    @Test
+    void prepareForAccountDeletion_cancelsAndUnlinksTheOpenOrders() {
+        when(orderRepository.findWithItemsByUserIdAndStatusIn(
+                OWNER_ID, List.of(OrderStatus.PENDING, OrderStatus.PROCESSING)))
+                .thenReturn(List.of(order));
+
+        orderService.prepareForAccountDeletion(OWNER_ID);
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(product.getInventory()).isEqualTo(7); // 5 + the 2 cancelled units
+        assertThat(order.getUser()).isNull();
+    }
+
     @Test
     void updateStatus_forwardTransition_advancesWithoutRestocking() {
         when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));

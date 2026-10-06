@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -36,6 +37,12 @@ public class OrderService implements OrderServiceInterface{
     private final Clock clock;
 
     private final ModelMapper modelMapper;
+
+    /** Every state an order can still be cancelled from, per the state machine. */
+    private static final List<OrderStatus> CANCELLABLE = Arrays.stream(OrderStatus.values())
+            .filter(status -> status.canTransitionTo(OrderStatus.CANCELLED))
+            .toList();
+
     @Override
     @Transactional
     public OrderDto placeOrder(PlaceOrderRequest shippingAddress) {
@@ -97,10 +104,25 @@ public class OrderService implements OrderServiceInterface{
     public OrderDto cancelOrder(Long orderId) {
         Order order = loadOrderWithItems(orderId);
         // Owner or admin only. Checked after the fetch so a missing order stays a
-        // 404 rather than a 403 that would confirm the id exists (IDOR).
-        authUtils.requireSelfOrAdmin(order.getUser().getId());
+        // 404 rather than a 403 that would confirm the id exists (IDOR). An order
+        // whose account was deleted has no owner, which AuthUtils refuses to all.
+        authUtils.requireSelfOrAdmin(order.getUser() == null ? null : order.getUser().getId());
         applyTransition(order, OrderStatus.CANCELLED);
         return convertToDto(order);
+    }
+
+    @Override
+    @Transactional
+    public void prepareForAccountDeletion(Long userId) {
+        // No ownership check: the caller is deleting the account, which
+        // UserService has already authorized.
+        orderRepository.findWithItemsByUserIdAndStatusIn(userId, CANCELLABLE).forEach(order -> {
+            applyTransition(order, OrderStatus.CANCELLED);
+            // The account is deleted later in this transaction, and Hibernate won't
+            // flush a loaded order that still points at it. The database unlinks
+            // the orders that were never loaded (V8, on delete set null).
+            order.setUser(null);
+        });
     }
 
     /**

@@ -57,7 +57,9 @@ export function AdminOrdersPage() {
                 <tr key={order.id}>
                   <td>#{order.id}</td>
                   <td className="faint">{formatDate(order.orderDate)}</td>
-                  <td>{order.userEmail}</td>
+                  <td>
+                    {order.userEmail ?? <span className="faint">Deleted account</span>}
+                  </td>
                   <td className="admin-table__num price">{formatMoney(order.totalAmount)}</td>
                   <td>
                     <StatusBadge status={order.status} />

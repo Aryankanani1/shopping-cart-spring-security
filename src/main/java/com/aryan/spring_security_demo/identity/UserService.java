@@ -4,6 +4,7 @@ import com.aryan.spring_security_demo.identity.security.AuthUtils;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +28,7 @@ public class UserService implements UserServiceInterface{
     private final PasswordEncoder passwordEncoder;
     private final AuthUtils authUtils;
     private final RefreshTokenService refreshTokenService;
+    private final ApplicationEventPublisher events;
     @Override
     @Transactional(readOnly = true)
     public User getUserById(Long userId) {
@@ -71,6 +73,9 @@ public class UserService implements UserServiceInterface{
             // cascade), and any signed-in user has at least one token row — clear
             // them first or the delete fails on the constraint (surfacing as 409).
             refreshTokenService.endAllSessions(userId);
+            // Orders still open are cancelled and restocked first (OrderIdentityListener).
+            // The rest are kept for the shop's records: the database unlinks them.
+            events.publishEvent(new UserDeletingEvent(userId));
             userRepository.delete(user);
         }, () -> {
             throw new UserNotFoundException("failed to find user");
