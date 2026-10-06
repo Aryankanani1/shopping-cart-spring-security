@@ -66,8 +66,24 @@ class CartServiceTest {
     }
 
     @Test
+    void getCartForUpdate_checksTheCartsOwner() {
+        when(cartRepository.findByIdForUpdate(CART_ID)).thenReturn(Optional.of(cartOwnedBy(OWNER_ID)));
+        doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(OWNER_ID);
+
+        assertThatThrownBy(() -> cartService.getCartForUpdate(CART_ID)).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void getCartForUpdate_missing_is404BeforeAnyOwnershipCheck() {
+        when(cartRepository.findByIdForUpdate(CART_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> cartService.getCartForUpdate(CART_ID)).isInstanceOf(CartNotFoundException.class);
+        verify(authUtils, never()).requireSelfOrAdmin(any());
+    }
+
+    @Test
     void clearCart_someoneElses_deletesNothing() {
-        when(cartRepository.findById(CART_ID)).thenReturn(Optional.of(cartOwnedBy(OWNER_ID)));
+        when(cartRepository.findByIdForUpdate(CART_ID)).thenReturn(Optional.of(cartOwnedBy(OWNER_ID)));
         doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(OWNER_ID);
 
         assertThatThrownBy(() -> cartService.clearCart(CART_ID)).isInstanceOf(AccessDeniedException.class);
@@ -77,7 +93,8 @@ class CartServiceTest {
 
     @Test
     void clearCart_deletesItemsThenTheCart() {
-        when(cartRepository.findById(CART_ID)).thenReturn(Optional.of(cartOwnedBy(OWNER_ID)));
+        // Locked like every other change to a cart.
+        when(cartRepository.findByIdForUpdate(CART_ID)).thenReturn(Optional.of(cartOwnedBy(OWNER_ID)));
 
         cartService.clearCart(CART_ID);
 

@@ -28,7 +28,14 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
@@ -239,6 +246,44 @@ class CheckoutJourneyIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.cartItems[0].quantity").value(3))
                 .andExpect(jsonPath("$.data.totalAmount").value(59.97));
+    }
+
+    // Regression: simultaneous adds to one cart raced on the cart row. On MySQL
+    // they deadlocked (500) or failed the cart's version check (409).
+    @Test
+    @DisplayName("simultaneous adds to one cart all succeed, and every unit lands")
+    void addToCart_simultaneously_everyAddLands() throws Exception {
+        String token = login("shopper@example.com", PASSWORD);
+        addToCart(token, 1).andExpect(status().isCreated());  // the cart now exists
+        Long cartId = cartRepository.findByUserId(userId).getId();
+
+        int requests = 8;
+        ExecutorService threads = Executors.newFixedThreadPool(requests);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Integer>> responses = new ArrayList<>();
+        List<Integer> statuses = new ArrayList<>();
+        try {
+            for (int i = 0; i < requests; i++) {
+                responses.add(threads.submit(() -> {
+                    start.await();  // release every request at once
+                    return addToCart(token, 1).andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            for (Future<Integer> response : responses) {
+                statuses.add(response.get(30, TimeUnit.SECONDS));
+            }
+        } finally {
+            threads.shutdownNow();
+        }
+
+        assertThat(statuses).as("status of each simultaneous add").containsOnly(201);
+        mockMvc.perform(get("/api/v1/carts/{cartId}", cartId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.cartItems.length()").value(1))
+                .andExpect(jsonPath("$.data.cartItems[0].quantity").value(requests + 1))
+                .andExpect(jsonPath("$.data.totalAmount").value(179.91));  // 9 x 19.99
     }
 
     @Test

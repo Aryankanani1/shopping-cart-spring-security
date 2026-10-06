@@ -7,6 +7,7 @@ import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -16,6 +17,7 @@ import java.math.BigDecimal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -56,6 +58,7 @@ class CartItemServiceTest {
         cart.setId(CART_ID);
 
         lenient().when(cartService.getCart(CART_ID)).thenReturn(cart);
+        lenient().when(cartService.getCartForUpdate(CART_ID)).thenReturn(cart);
         lenient().when(productService.getProductById(PRODUCT_ID)).thenReturn(product);
     }
 
@@ -89,6 +92,37 @@ class CartItemServiceTest {
 
         assertThat(line.getQuantity()).isEqualTo(1);
         verify(cartRepository, never()).save(any());
+    }
+
+    // Regression: simultaneous adds to one cart raced on the cart row. Every
+    // change now locks the cart before it reads anything else.
+    @Test
+    void addItemToCart_locksTheCartBeforeReadingTheProduct() {
+        cartItemService.addItemToCart(CART_ID, PRODUCT_ID, 1);
+
+        InOrder order = inOrder(cartService, productService);
+        order.verify(cartService).getCartForUpdate(CART_ID);
+        order.verify(productService).getProductById(PRODUCT_ID);
+        verify(cartService, never()).getCart(any());
+    }
+
+    @Test
+    void updateItemQuantity_locksTheCart() {
+        addLine(1);
+
+        cartItemService.updateItemQuantity(CART_ID, ITEM_ID, 2);
+
+        verify(cartService).getCartForUpdate(CART_ID);
+    }
+
+    @Test
+    void removeItemFromCart_locksTheCartAndDropsTheLine() {
+        addLine(1);
+
+        cartItemService.removeItemFromCart(CART_ID, PRODUCT_ID);
+
+        verify(cartService).getCartForUpdate(CART_ID);
+        assertThat(cart.getCartItems()).isEmpty();
     }
 
     @Test
