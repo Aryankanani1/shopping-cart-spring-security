@@ -29,7 +29,7 @@ endpoints under `/api/v1` — no backend changes required for local development.
 - The **API running on `http://localhost:8080`** with some seeded data. From the
   repo root:
   ```bash
-  JWT_SECRET=$(openssl rand -base64 32) ./mvnw spring-boot:run
+  SPRING_PROFILES_ACTIVE=dev JWT_SECRET=$(openssl rand -base64 32) ./mvnw spring-boot:run
   ```
   The `dev` profile seeds demo accounts (e.g. `user1@gmail.com` / `123456`) and
   catalogue categories. Add a few products/images as an admin to see the grid

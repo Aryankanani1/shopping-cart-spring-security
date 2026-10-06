@@ -54,7 +54,10 @@ Configuration follows a **commit-safe-defaults, override-per-environment** model
 - **Secrets are never committed** — they are read from environment variables and
   override the committed defaults via Spring's property precedence.
 
-The active profile defaults to `dev`; select prod with `SPRING_PROFILES_ACTIVE=prod`.
+The active profile defaults to `prod`; select dev for local runs with
+`SPRING_PROFILES_ACTIVE=dev`. Prod is the fallback on purpose: dev seeds admin
+accounts with a known password, so a deploy that forgets to choose a profile must
+not end up there.
 
 Environment variables:
 
@@ -64,7 +67,7 @@ Environment variables:
 | `DB_URL`          | prod (dev: localhost)| JDBC URL, e.g. `jdbc:mysql://localhost:3306/shop`  |
 | `DB_USERNAME`     | prod (dev: `root`)   | Database user                                      |
 | `DB_PASSWORD`     | prod (dev: empty)    | Database password                                  |
-| `SPRING_PROFILES_ACTIVE` | optional      | Active profile, default `dev`                      |
+| `SPRING_PROFILES_ACTIVE` | optional      | Active profile, default `prod` (`dev` locally)     |
 | `JWT_EXPIRATION_MS` | optional           | Access-token lifetime, default `900000` (15m)      |
 | `JWT_REFRESH_EXPIRATION_MS` | optional   | Refresh-token lifetime, default `604800000` (7d)   |
 | `APP_RATELIMIT_EVICTION_CRON` | optional | Sweep of replenished rate-limit buckets, default hourly |
@@ -78,11 +81,11 @@ overridden by exporting the matching env var.
 ### Run
 
 ```bash
-# dev (default profile)
-JWT_SECRET=$(openssl rand -base64 32) ./mvnw spring-boot:run
+# dev
+SPRING_PROFILES_ACTIVE=dev JWT_SECRET=$(openssl rand -base64 32) ./mvnw spring-boot:run
 
-# prod
-SPRING_PROFILES_ACTIVE=prod DB_URL=... DB_USERNAME=... DB_PASSWORD=... \
+# prod (the default profile)
+DB_URL=... DB_USERNAME=... DB_PASSWORD=... \
   JWT_SECRET=... ./mvnw spring-boot:run
 ```
 
