@@ -296,7 +296,8 @@ sum(rate(http_server_requests_seconds_count{uri="/api/v1/orders", method="POST",
   in `SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` (a regex). It is off by default
   because, with no proxy in front, a client on a private network could send its
   own `X-Forwarded-For` and get a fresh bucket on every request.
-- Roles: `ROLE_ADMIN`, `ROLE_CUSTOMER`.
+- Roles: `ROLE_ADMIN`, `ROLE_CUSTOMER`. Every account created through `POST /users`
+  is a customer.
 
 ## API
 

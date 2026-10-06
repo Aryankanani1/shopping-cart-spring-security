@@ -34,6 +34,7 @@ class UserServiceTest {
     private static final Long USER_ID = 7L;
 
     @Mock private UserRepository userRepository;
+    @Mock private RoleRepository roleRepository;
     @Mock private ModelMapper modelMapper;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuthUtils authUtils;
@@ -47,12 +48,27 @@ class UserServiceTest {
     void createUser_storesTheHashNotThePassword() {
         when(userRepository.existsByEmail("ada@example.com")).thenReturn(false);
         when(passwordEncoder.encode("secret123")).thenReturn("hashed");
+        when(roleRepository.findByName("ROLE_CUSTOMER")).thenReturn(Optional.of(new Role("ROLE_CUSTOMER")));
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
         User created = userService.createUser(registration("secret123"));
 
         assertThat(created.getPassword()).isEqualTo("hashed");
         assertThat(created.getEmail()).isEqualTo("ada@example.com");
+    }
+
+    // Regression: accounts were created with no role at all.
+    @Test
+    void createUser_makesTheAccountACustomer() {
+        Role customer = new Role("ROLE_CUSTOMER");
+        when(userRepository.existsByEmail("ada@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("secret123")).thenReturn("hashed");
+        when(roleRepository.findByName("ROLE_CUSTOMER")).thenReturn(Optional.of(customer));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        User created = userService.createUser(registration("secret123"));
+
+        assertThat(created.getRoles()).containsExactly(customer);
     }
 
     @Test
