@@ -9,8 +9,13 @@ import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
+import com.aryan.spring_security_demo.identity.security.user.UserDetails;
 import com.aryan.spring_security_demo.notification.Notification;
 import com.aryan.spring_security_demo.notification.NotificationRepository;
+import com.aryan.spring_security_demo.order.Order;
+import com.aryan.spring_security_demo.order.OrderItem;
+import com.aryan.spring_security_demo.order.OrderRepository;
+import com.aryan.spring_security_demo.order.OrderStatus;
 import com.aryan.spring_security_demo.wishlist.WishlistItem;
 import com.aryan.spring_security_demo.wishlist.WishlistItemRepository;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,15 +27,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.StreamSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -60,6 +72,7 @@ class AccountDeletionIntegrationTest {
     @Autowired private ProductRepository productRepository;
     @Autowired private WishlistItemRepository wishlistItemRepository;
     @Autowired private NotificationRepository notificationRepository;
+    @Autowired private OrderRepository orderRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
     private Long userId;
@@ -117,11 +130,8 @@ class AccountDeletionIntegrationTest {
     @Test
     @DisplayName("an account with a wishlist and notifications can be deleted; they go with it")
     void deleteOwnAccount_withWishlistAndNotifications() throws Exception {
-        Category category = categoryRepository.existsByName("Electronics")
-                ? categoryRepository.findByName("Electronics")
-                : categoryRepository.save(new Category("Electronics"));
         Product product = productRepository.save(new Product(
-                "Desk Lamp", new BigDecimal("40.00"), "", "Acme", 3, category));
+                "Desk Lamp", new BigDecimal("40.00"), "", "Acme", 3, electronics()));
         User user = userRepository.findById(userId).orElseThrow();
         WishlistItem item = wishlistItemRepository.save(new WishlistItem(user, product, Instant.now()));
         notificationRepository.save(Notification.reminder(item, Instant.now()));
@@ -134,6 +144,75 @@ class AccountDeletionIntegrationTest {
         assertThat(notificationRepository.count()).isZero();
         assertThat(productRepository.existsById(product.getId())).as("the product itself stays").isTrue();
         productRepository.delete(product);
+    }
+
+    // Regression: the account's orders were deleted with it (a JPA cascade), and
+    // the units of the open ones never went back into stock.
+    @Test
+    @DisplayName("an account with orders can be deleted; the orders stay, and the open ones are cancelled and restocked")
+    void deleteOwnAccount_withOrders() throws Exception {
+        // 3 left in stock after these two orders took 2 and 1.
+        Product product = productRepository.save(new Product(
+                "Kettle", new BigDecimal("25.00"), "", "Acme", 3, electronics()));
+        User user = userRepository.findById(userId).orElseThrow();
+        Long open = orderRepository.save(order(user, product, 2, OrderStatus.PENDING)).getId();
+        Long delivered = orderRepository.save(order(user, product, 1, OrderStatus.DELIVERED)).getId();
+
+        mockMvc.perform(delete("/api/v1/users/" + userId)
+                        .header("Authorization", "Bearer " + login().path("token").asText()))
+                .andExpect(status().isNoContent());
+
+        Order cancelled = orderRepository.findByIdWithItems(open).orElseThrow();
+        assertThat(cancelled.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(cancelled.getUser()).isNull();
+        assertThat(cancelled.getOrderItems()).hasSize(1);
+        Order kept = orderRepository.findByIdWithItems(delivered).orElseThrow();
+        assertThat(kept.getOrderStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(kept.getUser()).isNull();
+        assertThat(productRepository.findById(product.getId()).orElseThrow().getInventory())
+                .as("the open order's 2 units are back in stock").isEqualTo(5);
+
+        // Admins still see both orders, with no customer.
+        JsonNode rows = objectMapper.readTree(mockMvc.perform(get("/api/v1/orders/admin")
+                        .param("size", "100").with(admin()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).path("data").path("content");
+        for (Long id : List.of(open, delivered)) {
+            JsonNode row = StreamSupport.stream(rows.spliterator(), false)
+                    .filter(r -> r.path("id").asLong() == id)
+                    .findFirst().orElseThrow(() -> new AssertionError("order " + id + " missing from the admin list"));
+            assertThat(row.path("userId").isNull()).isTrue();
+            assertThat(row.path("userEmail").isNull()).isTrue();
+        }
+        // An ownerless order fails the ownership check for everyone, admins included:
+        // a 403, not the NullPointerException (500) it used to be.
+        mockMvc.perform(post("/api/v1/orders/" + delivered + "/cancel").with(admin()))
+                .andExpect(status().isForbidden());
+
+        orderRepository.deleteAllById(List.of(open, delivered));
+        productRepository.deleteById(product.getId());  // by id: the restock bumped its version
+    }
+
+    private Category electronics() {
+        return categoryRepository.existsByName("Electronics")
+                ? categoryRepository.findByName("Electronics")
+                : categoryRepository.save(new Category("Electronics"));
+    }
+
+    private static Order order(User user, Product product, int quantity, OrderStatus status) {
+        Order order = new Order();
+        order.setUser(user);
+        order.setOrderStatus(status);
+        order.setLocalDate(LocalDate.of(2026, 9, 14));
+        order.addOrderItem(new OrderItem(product, quantity, product.getPrice()));
+        order.setTotalAmount(product.getPrice().multiply(BigDecimal.valueOf(quantity)));
+        return order;
+    }
+
+    private static RequestPostProcessor admin() {
+        UserDetails admin = new UserDetails(-1L, "admin@example.com", null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+        return authentication(new UsernamePasswordAuthenticationToken(admin, null, admin.getAuthorities()));
     }
 
     private JsonNode login() throws Exception {

@@ -33,6 +33,15 @@ describe('AdminOrdersPage', () => {
     expect(within(rowFor(56)).getByText('delivered')).toBeInTheDocument()
   })
 
+  it('lists the order of a deleted account without a customer', async () => {
+    const orphaned = orderSummary({ id: 57, status: 'DELIVERED', userId: null, userEmail: null })
+    vi.mocked(ordersApi.adminList).mockResolvedValue(paged([orphaned]))
+    renderPage(<AdminOrdersPage />)
+
+    await screen.findByText('#57')
+    expect(within(rowFor(57)).getByText('Deleted account')).toBeInTheDocument()
+  })
+
   it('offers only the legal next statuses', async () => {
     renderPage(<AdminOrdersPage />)
     await screen.findByText('#55')

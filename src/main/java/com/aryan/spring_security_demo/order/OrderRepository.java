@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,18 +58,26 @@ public interface OrderRepository extends JpaRepository<Order,Long> {
             "WHERE o.Id = :orderId")
     Optional<Order> findByIdWithItems(@Param("orderId") Long orderId);
 
+    /** A user's orders in the given states, with their items and products (a restock needs both). */
+    @Query("SELECT DISTINCT o FROM Order o " +
+            "LEFT JOIN FETCH o.orderItems oi LEFT JOIN FETCH oi.product " +
+            "WHERE o.user.id = :userId AND o.orderStatus IN :statuses")
+    List<Order> findWithItemsByUserIdAndStatusIn(@Param("userId") Long userId,
+                                                 @Param("statuses") Collection<OrderStatus> statuses);
+
     /**
      * Admin order list: a page of every order, newest first, as lightweight
      * summaries. A constructor expression selects scalar columns only (plus the
      * customer id/email via the {@code user} join), so no order-item collection is
      * touched — the table view has no need for it, and this keeps the query a
      * single flat, index-friendly scan. Ordering matches the user-facing history
-     * (createdAt DESC, id DESC) for a stable, total order across pages.
+     * (createdAt DESC, id DESC) for a stable, total order across pages. The join
+     * is a left join so orders of deleted accounts (no user) are listed too.
      */
     @Query("""
             SELECT new com.aryan.spring_security_demo.order.OrderSummaryDto(
-                o.id, o.user.id, o.user.email, o.localDate, o.totalAmount, o.orderStatus)
-            FROM Order o
+                o.id, u.id, u.email, o.localDate, o.totalAmount, o.orderStatus)
+            FROM Order o LEFT JOIN o.user u
             ORDER BY o.createdAt DESC, o.id DESC
             """)
     Page<OrderSummaryDto> findAllSummaries(Pageable pageable);

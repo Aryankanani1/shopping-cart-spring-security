@@ -280,6 +280,11 @@ sum(rate(http_server_requests_seconds_count{uri="/api/v1/orders", method="POST",
   stays signed in. The old tokens are *deleted* rather than revoked: replaying a
   revoked token trips reuse detection, which would also kill the caller's new token.
   Other devices' access tokens still lapse within their 15-minute lifetime.
+- **Account deletion keeps the orders**: `DELETE /api/v1/users/{id}` (the owner or an
+  admin) ends every session and removes the cart, wishlist and notifications. Orders
+  still open are cancelled and their stock returned; every order is then kept for the
+  shop's records with no customer (`user_id` set to null), and the admin order list
+  shows it as a deleted account. The shipping snapshot (name, address) stays on it.
 - **Rate-limited auth endpoints**: `RateLimitFilter` sits ahead of authentication in
   the chain and throttles `/auth/**` (login, refresh, logout, password change) per client IP with an
   in-memory token bucket (`RateLimitService`) — `capacity` requests may burst, then

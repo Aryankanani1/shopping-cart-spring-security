@@ -1,7 +1,6 @@
 package com.aryan.spring_security_demo.identity;
 
 import com.aryan.spring_security_demo.cart.Cart;
-import com.aryan.spring_security_demo.order.Order;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -12,7 +11,6 @@ import org.hibernate.annotations.NaturalId;
 
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.List;
 
 @Getter
 @Setter
@@ -38,10 +36,6 @@ public class User {
 
     @OneToOne(mappedBy = "user" ,cascade = CascadeType.ALL,orphanRemoval = true, fetch = FetchType.LAZY)
     private Cart cart;
-
-    @BatchSize(size = 20)
-    @OneToMany(mappedBy = "user",cascade = CascadeType.ALL,orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<Order> orders;
 
     @BatchSize(size = 20)
     @ManyToMany(fetch = FetchType.LAZY,cascade = {CascadeType.MERGE,

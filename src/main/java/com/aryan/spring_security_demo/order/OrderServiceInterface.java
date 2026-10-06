@@ -28,6 +28,12 @@ public interface OrderServiceInterface {
     OrderDto cancelOrder(Long orderId);
 
     /**
+     * Ready {@code userId}'s orders for the account being deleted: cancel and
+     * restock the ones that can still be cancelled. Every order is kept.
+     */
+    void prepareForAccountDeletion(Long userId);
+
+    /**
      * One keyset (cursor) slice of the signed-in user's order history, newest first.
      * {@code cursor} is {@code null}/blank for the first slice; {@code size} is the
      * max rows to return.
