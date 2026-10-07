@@ -140,7 +140,7 @@ class AccountDeletionIntegrationTest {
         User user = userRepository.findById(userId).orElseThrow();
         Instant now = Instant.parse("2026-09-14T12:00:00Z");
         WishlistItem item = wishlistItemRepository.save(new WishlistItem(user, product, now));
-        notificationRepository.save(Notification.reminder(item, now));
+        notificationRepository.save(Notification.reminder(user, product, now));
 
         mockMvc.perform(delete("/api/v1/users/" + userId)
                         .header("Authorization", "Bearer " + login().path("token").asText()))

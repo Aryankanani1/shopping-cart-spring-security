@@ -36,7 +36,7 @@ public class WishlistAlertService {
     public int fireDueReminders(Instant now) {
         List<WishlistItem> due = wishlistItemRepository.findDueReminders(now);
         for (WishlistItem item : due) {
-            notificationRepository.save(Notification.reminder(item, now));
+            notificationRepository.save(Notification.reminder(item.getUser(), item.getProduct(), now));
             item.setRemindAt(null);
         }
         return due.size();
@@ -53,7 +53,7 @@ public class WishlistAlertService {
         List<WishlistItem> dropped = wishlistItemRepository.findPriceDrops();
         for (WishlistItem item : dropped) {
             BigDecimal price = item.getProduct().getPrice();
-            notificationRepository.save(Notification.priceDrop(item, item.getAlertPrice(), price, now));
+            notificationRepository.save(Notification.priceDrop(item.getUser(), item.getProduct(), item.getAlertPrice(), price, now));
             item.setAlertPrice(price);
         }
         return dropped.size();
@@ -69,7 +69,7 @@ public class WishlistAlertService {
         wishlistItemRepository.findNewlySoldOut().forEach(item -> item.setWasInStock(false));
         List<WishlistItem> restocked = wishlistItemRepository.findRestocked();
         for (WishlistItem item : restocked) {
-            notificationRepository.save(Notification.backInStock(item, now));
+            notificationRepository.save(Notification.backInStock(item.getUser(), item.getProduct(), now));
             item.setWasInStock(true);
         }
         return restocked.size();

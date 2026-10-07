@@ -114,8 +114,10 @@ wishlist/      Wishlist, dated reminders, price/stock alert job   (optional modu
 resources/     application*.yml + db/migration/ (Flyway migrations: V1__baseline.sql, …)
 ```
 
-Dependencies point one way: `catalog` ← `cart` ← `order`; `identity` and
-`catalog` ← `wishlist` → `notification`; everything may use `common`.
+Dependencies point one way, with no cycles: every module may use `common`;
+`identity` and `catalog` ← `cart` ← `order`; `identity` and `catalog` ←
+`notification` ← `wishlist`. `common` uses no module, and `identity` and
+`catalog` use only `common`.
 
 ### Modular component scanning
 
