@@ -73,6 +73,8 @@ Environment variables:
 | `APP_RATELIMIT_EVICTION_CRON` | optional | Sweep of replenished rate-limit buckets, default hourly |
 | `APP_WISHLIST_ALERT_CRON` | optional       | Wishlist reminder/alert scan, default every minute (`-` disables) |
 | `APP_MODULES_WISHLIST_ENABLED` | optional  | `false` switches the whole wishlist module off (default `true`) |
+| `ADMIN_EMAIL`     | first deploy         | Creates this account as an admin at startup, or gives an existing one the admin role (`AdminBootstrap`) |
+| `ADMIN_PASSWORD`  | with `ADMIN_EMAIL`   | 12-72 characters; only used to create the account, so remove it once the admin exists |
 | `APP_CORS_ALLOWED_ORIGINS` | if the frontend is on another origin | Comma-separated exact origins allowed to call the API, e.g. `https://shop.example.com` (default: none, same-origin only) |
 
 In **dev** the datasource falls back to a local MySQL (`localhost:3306`,
@@ -474,6 +476,8 @@ accounts are never created in production.
 
 > Development conveniences only. Roles (`ROLE_ADMIN`, `ROLE_CUSTOMER`) are seeded
 > in every environment by `DataInitializer`; the test accounts above are not.
+> Outside dev, set `ADMIN_EMAIL` and `ADMIN_PASSWORD` for the first start, and
+> `AdminBootstrap` creates that account as the shop's admin.
 
 ## Build & test
 
