@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- False positives in the OWASP Dependency-Check scan (the plugin in pom.xml).
+
+     A suppression is only for a CVE that does not apply to the artifact it was
+     matched to: one filed against another product with a similar name, or against
+     code the application never loads. A real vulnerability is fixed by upgrading
+     (CLAUDE.md, "Dependencies and vulnerabilities"), never suppressed. Each
+     <suppress> matches one artifact (packageUrl) and one CVE, and its <notes> name
+     the CVE, why it does not apply, and when to look at it again. -->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+</suppressions>

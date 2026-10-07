@@ -12,8 +12,10 @@ a PR adds or changes; older code may predate some of them.
 ./mvnw test                          # every module's tests (H2, `test` profile — no MySQL needed)
 ./mvnw test -pl shop-cart -am        # one module, with the modules it depends on
 ./mvnw test -pl shop-app -am -Dtest=WishlistIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -DskipTests package dependency-check:aggregate   # OWASP CVE scan; report in target/ (set NVD_API_KEY to speed up the download)
 cd frontend && npm test              # Vitest
 cd frontend && npm run build         # type-check + production build
+cd frontend && npm audit --omit=dev --audit-level=high   # CVE scan of the packages that ship
 ```
 
 Running locally: the Vite dev server proxies `/api` to **port 8082**, and the
@@ -76,6 +78,18 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 - Versions live only in the parent pom (a property applied through `<dependencyManagement>`, or a BOM); a module pom never declares a `<version>`.
 - Do not add `@SpringBootApplication`, `@ComponentScan`, `@EnableJpaRepositories` or `@EntityScan` anywhere.
 - Aspects select layers with the named pointcuts in `common/aop/Layers`, not with package-based `execution(...)` expressions.
+
+### Dependencies and vulnerabilities (CVEs)
+- CI's "Dependency scan" job runs on every push and pull request, and daily on `master`: OWASP Dependency-Check (configured in the parent pom) for the backend and `npm audit --omit=dev --audit-level=high` for the frontend, both failing on a HIGH or CRITICAL finding (CVSS 7 or above). Dependabot alerts also report new CVEs in the frontend's packages (GitHub's dependency graph doesn't see the backend's resolved versions), and Dependabot (`.github/dependabot.yml`) opens weekly update pull requests. A finding is fixed by moving to a fixed version, never by raising the threshold, skipping the scan or dismissing the alert; Critical and High CVEs in what ships (the backend's runtime dependencies, the frontend's `dependencies`, the base images) are fixed before the next deploy.
+- Keep the BOMs current: Spring Boot's patch releases carry the security fixes for most of the stack (Spring, Tomcat, Jackson, Netty, Logback, MySQL Connector/J, H2, ...), so `spring-boot-starter-parent` moves to each new patch release of its line, and the other BOMs and version properties in the parent pom (ShedLock, springdoc, JJWT, ModelMapper) are kept current the same way.
+- A CVE in a library the Boot BOM manages: upgrade Boot to the release with the fix. If Boot has none yet, override Boot's version property in the parent pom's `<properties>` (the names are in `spring-boot-dependencies`: `tomcat.version`, `jackson-bom.version` for Jackson 3, `jackson-2-bom.version` for Jackson 2, ...).
+- A CVE in a library Boot doesn't manage: raise its version property in the parent pom; in a transitive dependency: pin the fixed version in the parent's `<dependencyManagement>`. Never fix it in a module pom (no `<version>`, no `<exclusions>` that swap in another artifact).
+- Every forced override is documented with its CVE: a Boot version property, a `<dependencyManagement>` pin, an npm `overrides` entry and a Dependency-Check suppression each name the CVE ids, the dependency that brings in the vulnerable version, and when to remove the override (the release that will include the fix). That is an XML comment beside it in the poms, a line in the `"//"` array beside `overrides` in `package.json`, and the suppression's `<notes>` in `dependency-check-suppressions.xml`. Suppressions are only for false positives (the CVE is for another product, or for code the app never loads).
+- Show that the fix took effect: `./mvnw -pl shop-app -am dependency:tree -Dincludes=<groupId>:<artifactId>` lists only the fixed version, and `./mvnw dependency:list` before and after shows only the intended artifacts moved (a BOM can move others; see the JJWT note in `pom.xml`).
+- Frontend: upgrade the package (`npm install <package>@<fixed version>`) and commit the updated `package-lock.json`. Use `overrides` only for a transitive package whose parent has no fixed release. Never run `npm audit fix --force`, which makes major upgrades unasked.
+- Base images (`eclipse-temurin:17-jre-jammy`, `caddy:2-alpine`, and the build stages' `eclipse-temurin:17-jdk-jammy`, `node:22-alpine`) get OS package fixes when the images are rebuilt: re-run the latest "Publish images" run, then pull and restart on the server (`deploy/README.md`, Updating). When a tag line reaches end of life, move the `Dockerfile` to a supported one.
+- A CVE fix PR names the CVE ids, the package and the old and fixed versions, and passes the full suites (`./mvnw test`, `npm test`, `npm run build`). An upgrade across a major version is a PR of its own, unless the fix exists only in the new major.
+- The repository is public. A vulnerability in this project's own code (as opposed to a published CVE in a dependency) is never described in a public issue, pull request, commit message or code comment before the fix is deployed: it is handled in a private GitHub security advisory, and the fix's PR and commits describe the change, not how to exploit the old behavior.
 
 ### Tests
 - Unit tests are the default: service and domain logic is tested with plain JUnit and Mockito (no Spring context), and request validation with a `@WebMvcTest` slice.
