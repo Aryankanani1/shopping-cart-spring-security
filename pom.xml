@@ -59,6 +59,9 @@
 		     after 13.0.0). Dependabot skips 13.0.0 and will offer the next 13.x. -->
 		<dependency-check.version>12.2.2</dependency-check.version>
 		<jacoco.version>0.8.15</jacoco.version>
+		<!-- Not used, but part of Maven's default lifecycles, so pinned like every
+		     other plugin (the Enforcer's requirePluginVersions). -->
+		<maven-site-plugin.version>3.22.0</maven-site-plugin.version>
 
 		<!-- Overrides of versions the Spring Boot BOM manages, each for CVEs its
 		     version still has. Remove each one once Spring Boot's own version is at
@@ -192,6 +195,40 @@
 
 	<build>
 		<plugins>
+			<!-- Rules every build has to meet, checked first (validate phase). -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>enforce-build-rules</id>
+						<goals>
+							<goal>enforce</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<requireMavenVersion>
+									<version>[3.9,)</version>
+								</requireMavenVersion>
+								<requireJavaVersion>
+									<version>[17,)</version>
+								</requireJavaVersion>
+								<!-- A reproducible build: every plugin at a fixed version (most
+								     come from the Spring Boot parent), and only released
+								     dependencies, apart from this project's own modules. -->
+								<requirePluginVersions/>
+								<requireReleaseDeps>
+									<excludes>
+										<exclude>com.aryan:*</exclude>
+									</excludes>
+								</requireReleaseDeps>
+								<banDuplicatePomDependencyVersions/>
+								<dependencyConvergence/>
+							</rules>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 			<!-- Code coverage: every module's tests run with the JaCoCo agent, which
 			     writes target/jacoco.exec (CI writes jacoco-unit.exec and jacoco-it.exec
 			     instead, one per test stage). shop-app merges them into one report for
@@ -210,10 +247,31 @@
 		</plugins>
 		<pluginManagement>
 			<plugins>
+				<!-- Every javac lint check, and a warning fails the build (main and test
+				     code). Two are off: `serial`, as nothing here is Java-serialized
+				     (exceptions and UserDetails are Serializable only through their
+				     supertypes); and `processing`, which lists every annotation the
+				     Lombok and configuration-metadata processors don't handle. -->
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<configuration>
+						<showWarnings>true</showWarnings>
+						<failOnWarning>true</failOnWarning>
+						<compilerArgs>
+							<arg>-Xlint:all,-serial,-processing</arg>
+						</compilerArgs>
+					</configuration>
+				</plugin>
 				<plugin>
 					<groupId>org.jacoco</groupId>
 					<artifactId>jacoco-maven-plugin</artifactId>
 					<version>${jacoco.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-site-plugin</artifactId>
+					<version>${maven-site-plugin.version}</version>
 				</plugin>
 				<!-- OWASP Dependency-Check compares the dependencies of every module with
 				     the NVD's list of CVEs: `./mvnw -DskipTests package dependency-check:aggregate`

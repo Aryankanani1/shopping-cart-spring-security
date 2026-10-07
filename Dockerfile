@@ -6,19 +6,21 @@
 #     defaults (application*.yml); DB_URL, DB_USERNAME, DB_PASSWORD, JWT_SECRET,
 #     SPRING_PROFILES_ACTIVE, etc. are injected at RUNTIME via env vars / a
 #     secrets manager. The same image runs unchanged in every environment.
-#   * Pinned base images (never :latest) for reproducible, patchable builds.
+#   * Base images pinned to digests (never :latest) for reproducible builds;
+#     Dependabot proposes each new digest, so OS patches arrive as reviewed PRs.
 #   * Runtime is a JRE only (no JDK, no Maven, no source) — smaller attack
 #     surface and image size.
 #   * Runs as an unprivileged user, never root.
 # ===========================================================================
 
 # --- Stage 1: build the jar with a full JDK -------------------------------
-# Pinned to the 17 (jammy) line to match <java.version>17</java.version>. For
-# fully reproducible builds, pin to a digest (eclipse-temurin:17-jdk-jammy@sha256:…).
+# The 17 (jammy) line, to match <java.version>17</java.version>. Every base image
+# here is pinned to a digest, so a rebuild uses exactly the same image; when the tag
+# moves (security fixes in the OS packages), Dependabot proposes the new digest.
 # Runs on the building machine's own platform even when the image is built for
 # another (amd64 and arm64 in CI): the jar is the same on every platform, so it is
 # built once, natively, instead of under emulation for each target.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk-jammy AS build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk-jammy@sha256:43f4431cc895d37ceb115e2e1f160545ec45caee9c1cb4246fc6bb879d58aeda AS build
 WORKDIR /workspace
 
 # Copy only what's needed to resolve dependencies first, so this layer is cached
@@ -50,7 +52,7 @@ COPY shop-app/src/ shop-app/src/
 RUN ./mvnw -B -pl shop-app -am clean package -DskipTests
 
 # --- Stage 2: minimal runtime --------------------------------------------
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:17-jre-jammy@sha256:8993f1aed8b25fcea7a7047a7949c1866fa558fc6830d938c22c4f13b26be9d7
 WORKDIR /app
 
 # Create an unprivileged user and group; the container must not run as root.

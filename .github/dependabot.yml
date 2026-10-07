@@ -7,10 +7,10 @@
 # Minor and patch updates come grouped, one pull request per ecosystem. A major
 # version comes in a pull request of its own, since it can break things.
 #
-# The Docker base images are not listed: their tags (17-jre-jammy, 2-alpine, ...)
-# already follow the patch releases, so every rebuild picks up the fixes, and
-# the only updates Dependabot could propose are new major versions of Java and
-# Node.
+#   * Docker: the base images in the Dockerfiles, which are pinned to digests.
+#     When a tag moves (17-jre-jammy, 2-alpine, ... get OS security fixes),
+#     Dependabot proposes the new digest. New major versions of Java and Node
+#     are ignored: those are deliberate upgrades, not updates.
 #
 # Separately, Dependabot alerts (a repository setting) report a CVE in a
 # dependency as soon as it is published.
@@ -49,3 +49,16 @@ updates:
         update-types: [minor, patch]
     commit-message:
       prefix: ci(deps)
+
+  - package-ecosystem: docker
+    directories: [/, /frontend]
+    schedule:
+      interval: weekly
+    groups:
+      base-images:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+    commit-message:
+      prefix: build(deps)
