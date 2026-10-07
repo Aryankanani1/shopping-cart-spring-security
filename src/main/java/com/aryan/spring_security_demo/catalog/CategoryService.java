@@ -26,7 +26,8 @@ public class CategoryService implements CategoryServiceInterface{
     @Override
     @Transactional(readOnly = true)
     public Category getCategoryByName(String name) {
-        return categoryRepository.findByName(name);
+        return Optional.ofNullable(categoryRepository.findByName(name))
+                .orElseThrow(() -> new CategoryNotFoundException("category not found"));
     }
 
     /**

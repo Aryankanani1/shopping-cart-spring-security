@@ -26,6 +26,23 @@ class CategoryServiceTest {
 
     @InjectMocks private CategoryService categoryService;
 
+    // Regression: an unknown name came back as 200 with "data": null.
+    @Test
+    void getCategoryByName_unknownName_is404() {
+        when(categoryRepository.findByName("Garden")).thenReturn(null);
+
+        assertThatThrownBy(() -> categoryService.getCategoryByName("Garden"))
+                .isInstanceOf(CategoryNotFoundException.class);
+    }
+
+    @Test
+    void getCategoryByName_findsTheCategory() {
+        Category books = new Category("Books");
+        when(categoryRepository.findByName("Books")).thenReturn(books);
+
+        assertThat(categoryService.getCategoryByName("Books")).isSameAs(books);
+    }
+
     @Test
     void addCategory_existingName_isRejected() {
         when(categoryRepository.existsByName("Books")).thenReturn(true);

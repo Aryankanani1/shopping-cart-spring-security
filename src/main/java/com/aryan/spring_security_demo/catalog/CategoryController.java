@@ -43,8 +43,7 @@ public class CategoryController {
     @GetMapping(params = "name")
     public ResponseEntity<ApiResponse<?>> getCategoryByName(@RequestParam String name){
         Category category = categoryServiceInterface.getCategoryByName(name);
-        CategoryDto dto = category == null ? null : categoryServiceInterface.convertToDto(category);
-        return ResponseEntity.ok(new ApiResponse<>("Success!", dto));
+        return ResponseEntity.ok(new ApiResponse<>("Success!", categoryServiceInterface.convertToDto(category)));
     }
 
     @DeleteMapping("/{id}")

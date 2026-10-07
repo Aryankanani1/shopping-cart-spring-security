@@ -5,6 +5,7 @@ import java.util.List;
 
 public interface CategoryServiceInterface {
     Category getCategoryById(Long id);
+    /** The category with this name; 404 ({@link CategoryNotFoundException}) if there is none. */
     Category getCategoryByName(String name);
     /** Every category, served from the {@code categories} cache. */
     List<CategoryDto> getAllCategoryDtos();
