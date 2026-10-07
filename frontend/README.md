@@ -62,7 +62,8 @@ Copy `.env.example` to `.env` if you need to override the API origin:
 
 ```env
 # Empty in dev — the Vite proxy forwards /api to :8080 (same origin).
-# In prod, point at the real API origin, e.g. https://api.example.com
+# In prod, leave empty when served from the API's host, or point at the API
+# origin, e.g. https://api.example.com (see Production below).
 VITE_API_BASE_URL=
 ```
 
@@ -150,6 +151,21 @@ src/
 
 ## Production
 
-`npm run build` emits static assets to `dist/`. Serve them behind the same origin
-as the API (so `/api` resolves), or set `VITE_API_BASE_URL` to the API origin and
-enable CORS there — the backend does not currently send CORS headers.
+`npm run build` emits static assets to `dist/`. Two ways to host them:
+
+- **Same origin (simplest):** serve `dist/` and the API from one host, with a
+  reverse proxy sending `/api` to the API. Leave `VITE_API_BASE_URL` empty; no
+  CORS is involved.
+- **Separate origin:** build with `VITE_API_BASE_URL=https://api.example.com`, and
+  start the API with `APP_CORS_ALLOWED_ORIGINS=https://shop.example.com` (this
+  site's exact origin). The API sends CORS headers only to the origins listed there.
+
+Either way, the app uses client-side routing (`BrowserRouter`), so the host must
+answer any path that isn't a file with `index.html`; otherwise reloading
+`/orders/42` is a 404. With nginx:
+
+```nginx
+location / {
+    try_files $uri /index.html;
+}
+```

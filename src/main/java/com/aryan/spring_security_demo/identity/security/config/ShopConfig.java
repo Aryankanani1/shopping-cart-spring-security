@@ -28,6 +28,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -115,6 +116,15 @@ public class ShopConfig {
             RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimitService, rateLimitProperties, apiPrefix);
 
             http.csrf(AbstractHttpConfigurer::disable)
+                    // CORS for the frontend origins in app.cors.allowed-origins, on the
+                    // API paths only (CorsConfig); none are allowed by default. A
+                    // preflight from a listed origin is answered here, before the
+                    // authorization rules, because browsers send it without the token.
+                    // It reveals nothing and changes nothing; the real request that
+                    // follows still has to pass every rule below. (Spring Security
+                    // would apply CorsConfig's bean on its own; it is spelled out so
+                    // the whole access map stays readable in this one place.)
+                    .cors(Customizer.withDefaults())
                     .exceptionHandling(exception -> exception
                             .authenticationEntryPoint(jwtEntryPoint)          // 401 — unauthenticated
                             .accessDeniedHandler(apiAccessDeniedHandler))     // 403 — authenticated, wrong authority

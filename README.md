@@ -73,6 +73,7 @@ Environment variables:
 | `APP_RATELIMIT_EVICTION_CRON` | optional | Sweep of replenished rate-limit buckets, default hourly |
 | `APP_WISHLIST_ALERT_CRON` | optional       | Wishlist reminder/alert scan, default every minute (`-` disables) |
 | `APP_MODULES_WISHLIST_ENABLED` | optional  | `false` switches the whole wishlist module off (default `true`) |
+| `APP_CORS_ALLOWED_ORIGINS` | if the frontend is on another origin | Comma-separated exact origins allowed to call the API, e.g. `https://shop.example.com` (default: none, same-origin only) |
 
 In **dev** the datasource falls back to a local MySQL (`localhost:3306`,
 `root`, empty password) so the app boots out of the box; any value can still be
