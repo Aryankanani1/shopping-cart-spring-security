@@ -18,8 +18,7 @@ import java.math.BigDecimal;
 public class CartItem {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "cart_item_seq")
-    @SequenceGenerator(name = "cart_item_seq", sequenceName = "cart_item_seq", allocationSize = 50)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
      private Long id;
 
      @Version
