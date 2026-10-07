@@ -1,6 +1,5 @@
 package com.aryan.spring_security_demo.identity;
 
-import com.aryan.spring_security_demo.cart.CartDto;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -30,22 +29,19 @@ class UserControllerTest {
     private UserServiceInterface userService;
 
     // Regression: the account embedded the user's whole order history, unpaginated,
-    // and the storefront fetches it on every cart change. Order history is only
-    // served paginated, from GET /orders.
+    // and the storefront fetched it on every cart change. Order history is only
+    // served paginated, from GET /orders, and the cart from GET /carts/mine.
     @Test
-    void getUser_returnsTheCartButNoOrderHistory() throws Exception {
-        CartDto cart = new CartDto();
-        cart.setCartId(3L);
+    void getUser_returnsTheAccountOnly() throws Exception {
         UserDto user = new UserDto();
         user.setId(7L);
         user.setEmail("ada@example.com");
-        user.setCart(cart);
         when(userService.getUserDtoById(7L)).thenReturn(user);
 
         mockMvc.perform(get("/api/v1/users/7"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.email").value("ada@example.com"))
-                .andExpect(jsonPath("$.data.cart.cartId").value(3))
-                .andExpect(jsonPath("$.data", not(hasKey("orders"))));
+                .andExpect(jsonPath("$.data", not(hasKey("orders"))))
+                .andExpect(jsonPath("$.data", not(hasKey("cart"))));
     }
 }

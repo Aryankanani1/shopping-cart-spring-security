@@ -27,8 +27,6 @@ public interface UserRepository extends JpaRepository<User,Long> {
     @Query("SELECT u FROM User u WHERE u.id = :id")
     Optional<User> lockById(@Param("id") Long id);
 
-    @Query("SELECT u FROM User u LEFT JOIN FETCH u.cart WHERE u.id = :id")
-    Optional<User> findByIdWithCart(@Param("id") Long id);
 
     // Fetch the user together with roles so authentication/authorization code can
     // read authorities without a lazy load (works with open-in-view disabled).

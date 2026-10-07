@@ -19,7 +19,7 @@ vi.mock('../api/auth', () => ({
 import { usersApi } from '../api/users'
 import { authApi } from '../api/auth'
 
-const USER: UserDto = { id: 7, firstName: 'Ada', lastName: 'Lovelace', email: 'ada@b.com', cart: null }
+const USER: UserDto = { id: 7, firstName: 'Ada', lastName: 'Lovelace', email: 'ada@b.com' }
 
 function renderPage() {
   const queryClient = new QueryClient({

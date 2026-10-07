@@ -18,12 +18,14 @@ vi.mock('../api/wishlist', () => ({
     setAlerts: vi.fn(),
   },
 }))
-vi.mock('../api/users', () => ({
-  usersApi: { get: vi.fn() },
+// The page sits inside the CartProvider, which loads the caller's cart.
+vi.mock('../api/cart', () => ({
+  cartApi: { mine: vi.fn(), addItem: vi.fn(), updateQuantity: vi.fn(), removeItem: vi.fn(), clear: vi.fn() },
 }))
 
 import { wishlistApi } from '../api/wishlist'
-import { usersApi } from '../api/users'
+import { cartApi } from '../api/cart'
+import { ApiError } from '../api/client'
 
 function product(overrides: Partial<ProductDto> = {}): ProductDto {
   return {
@@ -70,13 +72,7 @@ function renderPage() {
 beforeEach(() => {
   localStorage.clear()
   setSession({ id: 7, token: 't', refreshToken: 'r' })
-  vi.mocked(usersApi.get).mockReset().mockResolvedValue({
-    id: 7,
-    firstName: 'Ada',
-    lastName: 'Lovelace',
-    email: 'ada@b.com',
-    cart: null,
-  })
+  vi.mocked(cartApi.mine).mockReset().mockRejectedValue(new ApiError(404, 'You have no cart yet'))
   Object.values(wishlistApi).forEach((fn) => vi.mocked(fn).mockReset())
 })
 

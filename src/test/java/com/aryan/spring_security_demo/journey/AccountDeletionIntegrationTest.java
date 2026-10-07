@@ -1,5 +1,7 @@
 package com.aryan.spring_security_demo.journey;
 
+import com.aryan.spring_security_demo.cart.CartItemRepository;
+import com.aryan.spring_security_demo.cart.CartRepository;
 import com.aryan.spring_security_demo.catalog.Category;
 import com.aryan.spring_security_demo.catalog.CategoryRepository;
 import com.aryan.spring_security_demo.catalog.Product;
@@ -73,6 +75,8 @@ class AccountDeletionIntegrationTest {
     @Autowired private WishlistItemRepository wishlistItemRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private OrderRepository orderRepository;
+    @Autowired private CartRepository cartRepository;
+    @Autowired private CartItemRepository cartItemRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
     private Long userId;
@@ -80,6 +84,7 @@ class AccountDeletionIntegrationTest {
     @BeforeEach
     void setUp() {
         refreshTokenRepository.deleteAll();  // FK on users — clear before the users
+        cartRepository.deleteAll();  // FK on users; a cart's lines go with it
         userRepository.deleteAll();
 
         Role customer = roleRepository.findByName("ROLE_CUSTOMER")
@@ -192,6 +197,29 @@ class AccountDeletionIntegrationTest {
 
         orderRepository.deleteAllById(List.of(open, delivered));
         productRepository.deleteById(product.getId());  // by id: the restock bumped its version
+    }
+
+    // The cart used to go with the account through a cascading User.cart mapping;
+    // the cart module now deletes it itself, as the account is deleted.
+    @Test
+    @DisplayName("an account with a cart can be deleted; the cart and its lines go with it")
+    void deleteOwnAccount_withACart() throws Exception {
+        Product product = productRepository.save(new Product(
+                "Mug", new BigDecimal("8.00"), "", "Acme", 5, electronics()));
+        String bearer = "Bearer " + login().path("token").asText();
+        mockMvc.perform(post("/api/v1/cartItems").header("Authorization", bearer)
+                        .param("productId", String.valueOf(product.getId()))
+                        .param("quantity", "2"))
+                .andExpect(status().isCreated());
+        assertThat(cartRepository.findByUserId(userId)).as("the cart exists").isNotNull();
+
+        mockMvc.perform(delete("/api/v1/users/" + userId).header("Authorization", bearer))
+                .andExpect(status().isNoContent());
+
+        assertThat(userRepository.findById(userId)).isEmpty();
+        assertThat(cartRepository.findByUserId(userId)).isNull();
+        assertThat(cartItemRepository.findByProductIdWithCart(product.getId())).isEmpty();
+        productRepository.deleteById(product.getId());
     }
 
     private Category electronics() {

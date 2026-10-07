@@ -209,7 +209,7 @@ class UserServiceTest {
         doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(USER_ID);
 
         assertThatThrownBy(() -> userService.getUserById(USER_ID)).isInstanceOf(AccessDeniedException.class);
-        verify(userRepository, never()).findByIdWithCart(any());
+        verify(userRepository, never()).findById(any());
     }
 
     // ---- helpers ----------------------------------------------------------

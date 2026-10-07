@@ -82,6 +82,25 @@ class CartServiceTest {
     }
 
     @Test
+    void getMyCartDto_mapsTheCallersOwnCart() {
+        Cart mine = cartOwnedBy(OWNER_ID);
+        CartDto dto = new CartDto();
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
+        when(cartRepository.findByUserId(OWNER_ID)).thenReturn(mine);
+        when(modelMapper.map(mine, CartDto.class)).thenReturn(dto);
+
+        assertThat(cartService.getMyCartDto()).isSameAs(dto);
+    }
+
+    @Test
+    void getMyCartDto_beforeTheFirstAdd_is404() {
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
+        when(cartRepository.findByUserId(OWNER_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> cartService.getMyCartDto()).isInstanceOf(CartNotFoundException.class);
+    }
+
+    @Test
     void clearCart_someoneElses_deletesNothing() {
         when(cartRepository.findByIdForUpdate(CART_ID)).thenReturn(Optional.of(cartOwnedBy(OWNER_ID)));
         doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(OWNER_ID);
