@@ -14,7 +14,8 @@ a PR adds or changes; older code may predate some of them.
 ./mvnw test -pl shop-app -am -Dtest=WishlistIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw test -DexcludedGroups=integration              # unit tests only (the pipeline's "Unit tests")
 ./mvnw test -pl shop-app -am -Dgroups=integration     # integration tests only ("Integration tests")
-./mvnw verify                        # all tests + coverage report: shop-app/target/site/jacoco-aggregate/index.html
+./mvnw verify                        # all tests, coverage report (shop-app/target/site/jacoco-aggregate/) and static analysis
+./mvnw -Dmaven.test.skip=true verify # static analysis only: SpotBugs + FindSecBugs, PMD, CPD (the pipeline's "Static analysis")
 ./mvnw -DskipTests package dependency-check:aggregate   # OWASP CVE scan; report in target/ (set NVD_API_KEY to speed up the download)
 cd frontend && npm test              # Vitest
 cd frontend && npm run test:coverage # Vitest with coverage (coverage/index.html)
@@ -32,7 +33,7 @@ modules in the local repository, where they are never installed.
 ## CI/CD
 
 `.github/workflows/pipeline.yml` runs every change through Build → Unit tests →
-Integration tests (with Security scan alongside) → Quality gate → Build artifact →
+Integration tests (with Security scan and Static analysis alongside) → Quality gate → Build artifact →
 Staging (deploy + E2E) → Deploy production; pull requests stop after staging, and
 production needs a reviewer's approval. Staging is the production setup from
 `deploy/` started on the CI runner from the new images, with
@@ -118,6 +119,7 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 
 ### Pipeline and deployment
 - Never lower a coverage floor in `.github/scripts/quality_gate.py`, skip a stage, or loosen a check to get a change through; fix the change or add the tests.
+- The build fails on a compiler warning and on any SpotBugs, FindSecBugs, PMD or CPD finding. Fix the code; an exclusion (`spotbugs-exclude.xml`, a PMD `@SuppressWarnings("PMD.RuleName")`) is only for a finding that is wrong for that code, with a comment saying why.
 - A new user-facing journey (a page or flow a customer or admin depends on) gets an E2E test in `frontend/e2e/` (`*.e2e.ts`), and a change that breaks one updates it in the same PR. E2E tests create their own data through the API and never depend on what is already in the database.
 - The staging setup stays the production setup: `deploy/docker-compose.staging.yml` only adds what the CI runner lacks (the database container) and test-only settings, each with a comment saying why.
 - The production setup changes only through `deploy/` (`docker-compose.yml`, `Caddyfile`, `deploy.sh`): every deployment copies those files to the server, so an edit made to them there is overwritten.

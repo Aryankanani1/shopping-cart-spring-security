@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.identity.security;
 
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
@@ -72,7 +72,7 @@ class AuthUtilsTest {
     private static void signIn(Long id, String... roles) {
         List<GrantedAuthority> authorities = Arrays.stream(roles)
                 .<GrantedAuthority>map(SimpleGrantedAuthority::new).toList();
-        UserDetails principal = new UserDetails(id, "user" + id + "@example.com", "hash", authorities);
+        ShopUserDetails principal = new ShopUserDetails(id, "user" + id + "@example.com", "hash", authorities);
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, authorities));
     }

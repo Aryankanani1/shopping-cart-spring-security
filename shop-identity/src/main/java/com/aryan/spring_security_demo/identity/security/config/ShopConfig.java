@@ -6,9 +6,8 @@ import com.aryan.spring_security_demo.identity.security.jwt.AuthTokenFilter;
 import com.aryan.spring_security_demo.identity.security.jwt.JwtEntryPoint;
 import com.aryan.spring_security_demo.identity.security.ratelimit.RateLimitFilter;
 import com.aryan.spring_security_demo.identity.security.ratelimit.RateLimitService;
-import com.aryan.spring_security_demo.identity.security.user.UserDetailsService;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetailsService;
 import lombok.RequiredArgsConstructor;
-import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.http.HttpMethod;
@@ -32,7 +31,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class ShopConfig {
 
-  private final UserDetailsService userDetailsService;
+  private final ShopUserDetailsService userDetailsService;
   private final JwtEntryPoint jwtEntryPoint;
   private final ApiAccessDeniedHandler apiAccessDeniedHandler;
 

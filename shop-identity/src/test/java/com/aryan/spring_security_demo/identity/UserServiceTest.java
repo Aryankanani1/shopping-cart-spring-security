@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.identity;
 
 import com.aryan.spring_security_demo.common.exception.AlreadyExistsException;
+import com.aryan.spring_security_demo.common.exception.AuthenticationFailedException;
 import com.aryan.spring_security_demo.identity.security.AuthUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
@@ -210,6 +212,18 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.getUserById(USER_ID)).isInstanceOf(AccessDeniedException.class);
         verify(userRepository, never()).findById(any());
+    }
+
+    // ---- the signed-in user -----------------------------------------------
+
+    @Test
+    void getAuthenticatedUser_withNoAuthentication_failsAs401NotNpe() {
+        SecurityContextHolder.clearContext();
+
+        // AuthenticationFailedException is a 401; the NPE it replaces was a 500.
+        assertThatThrownBy(() -> userService.getAuthenticatedUser())
+                .isInstanceOf(AuthenticationFailedException.class);
+        verify(userRepository, never()).findByEmailWithRoles(any());
     }
 
     // ---- helpers ----------------------------------------------------------

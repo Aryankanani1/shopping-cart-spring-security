@@ -1,7 +1,7 @@
 package com.aryan.spring_security_demo.identity;
 import com.aryan.spring_security_demo.common.exception.AlreadyExistsException;
+import com.aryan.spring_security_demo.common.exception.AuthenticationFailedException;
 import com.aryan.spring_security_demo.identity.security.AuthUtils;
-import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.context.ApplicationEventPublisher;
@@ -135,6 +135,11 @@ public class UserService implements UserServiceInterface{
     @Transactional(readOnly = true)
     public User getAuthenticatedUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            // A request no authentication reached: answer 401, not a 500 from the NPE.
+            throw new AuthenticationFailedException("Authentication required",
+                    "No authentication in the security context");
+        }
         String email = authentication.getName();
         return userRepository.findByEmailWithRoles(email)
                 .orElseThrow(() -> new UserNotFoundException("failed to find user"));

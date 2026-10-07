@@ -8,7 +8,7 @@ import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import com.aryan.spring_security_demo.order.Order;
 import com.aryan.spring_security_demo.order.OrderRepository;
 import com.aryan.spring_security_demo.order.OrderStatus;
@@ -48,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li><b>Object-level ownership</b> (service layer, {@link AuthUtils}): a user
  *       may only touch their own cart/order (IDOR). This needs the real principal
  *       <em>id</em>, which {@code @WithMockUser} cannot supply — so those tests
- *       authenticate with the app's own {@link UserDetails} via a request
+ *       authenticate with the app's own {@link ShopUserDetails} via a request
  *       post-processor, carrying a genuine persisted user id.</li>
  * </ul>
  *
@@ -226,15 +226,15 @@ class SecurityAuthorizationTest {
 
     /** Authenticate the request as the app's own principal, carrying a real user id. */
     private static RequestPostProcessor asCustomer(Long id, String email) {
-        return authAs(new UserDetails(id, email, null, List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"))));
+        return authAs(new ShopUserDetails(id, email, null, List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"))));
     }
 
     private static RequestPostProcessor asAdmin() {
-        return authAs(new UserDetails(-1L, "admin@example.com", null,
+        return authAs(new ShopUserDetails(-1L, "admin@example.com", null,
                 List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
     }
 
-    private static RequestPostProcessor authAs(UserDetails principal) {
+    private static RequestPostProcessor authAs(ShopUserDetails principal) {
         return authentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
     }

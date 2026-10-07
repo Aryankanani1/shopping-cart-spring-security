@@ -3,7 +3,8 @@ name: CI/CD
 # Every change goes through these stages (the job names, as the run's graph shows them):
 #
 #   Build ─┬─ Unit tests ── Integration tests ─┬─ Quality gate ─ Build artifact ─ Staging (deploy + E2E) ─ Deploy production
-#          └─ Security scan ───────────────────┘
+#          ├─ Security scan ───────────────────┤
+#          └─ Static analysis ─────────────────┘
 #   any stage fails ──▶ Failed build (which stage, in the run's summary)
 #
 # Pull request: every stage up to and including staging. The images are built on the
@@ -213,11 +214,30 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           "$RUNNER_TEMP/gitleaks" git --redact --no-banner --exit-code 1 .
 
+  # SpotBugs with FindSecBugs (bugs, and security flaws in the code itself: the
+  # SAST part), PMD and CPD (copy-pasted code), on every module's main code. They are
+  # bound to `verify` in the poms, so this is the same check a local `./mvnw verify`
+  # runs. Exclusions, each with its reason, are in spotbugs-exclude.xml.
+  static-analysis:
+    name: Static analysis
+    needs: build
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - run: ./mvnw -B -Dmaven.test.skip=true verify
+
   # Runs only when every stage before it passed, then checks coverage against the
   # floors in .github/scripts/quality_gate.py.
   quality-gate:
     name: Quality gate
-    needs: [build, unit-tests, integration-tests, security-scan]
+    needs: [build, unit-tests, integration-tests, security-scan, static-analysis]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -233,8 +253,9 @@ jobs:
           merge-multiple: true
       # shop-app's report-aggregate (on `verify`) merges every module's
       # target/*.exec: the unit and the integration stage's coverage.
+      # Static analysis ran as its own stage; skip it here.
       - name: Merge the coverage of both test stages
-        run: ./mvnw -B -DskipTests verify
+        run: ./mvnw -B -DskipTests -Dspotbugs.skip -Dpmd.skip -Dcpd.skip verify
       - name: Check the gate
         env:
           STAGES: ${{ toJSON(needs) }}
@@ -520,7 +541,7 @@ jobs:
   # The "failed build" end of the pipeline: names the stages that failed.
   failed-build:
     name: Failed build
-    needs: [build, unit-tests, integration-tests, security-scan, quality-gate, build-artifact, staging, deploy-production]
+    needs: [build, unit-tests, integration-tests, security-scan, static-analysis, quality-gate, build-artifact, staging, deploy-production]
     if: failure()
     runs-on: ubuntu-latest
     timeout-minutes: 5

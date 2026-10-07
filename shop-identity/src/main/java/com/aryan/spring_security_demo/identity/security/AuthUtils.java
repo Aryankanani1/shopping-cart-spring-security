@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.identity.security;
 
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 /**
  * Object-level authorization helper. Reads the authenticated principal straight
  * from the {@link SecurityContextHolder} — the id and roles are already carried
- * in the JWT-derived {@link UserDetails}, so no database round-trip is needed —
+ * in the JWT-derived {@link ShopUserDetails}, so no database round-trip is needed —
  * and enforces that a caller may only act on the resources it owns, unless it is
  * an admin.
  *
@@ -50,9 +50,9 @@ public class AuthUtils {
         }
     }
 
-    private UserDetails principal() {
+    private ShopUserDetails principal() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || !(auth.getPrincipal() instanceof UserDetails userDetails)) {
+        if (auth == null || !(auth.getPrincipal() instanceof ShopUserDetails userDetails)) {
             throw new AccessDeniedException("Authentication required");
         }
         return userDetails;

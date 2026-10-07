@@ -15,7 +15,7 @@ import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import com.aryan.spring_security_demo.order.Order;
 import com.aryan.spring_security_demo.order.OrderDto;
 import com.aryan.spring_security_demo.order.OrderItem;
@@ -104,7 +104,7 @@ class QueryCountTest {
         // seeded owner so this query-count test runs the path a real request does.
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(
-                        new UserDetails(userId, user.getEmail(), null, List.of()), null, List.of()));
+                        new ShopUserDetails(userId, user.getEmail(), null, List.of()), null, List.of()));
 
         Order order = new Order();
         order.setUser(user);

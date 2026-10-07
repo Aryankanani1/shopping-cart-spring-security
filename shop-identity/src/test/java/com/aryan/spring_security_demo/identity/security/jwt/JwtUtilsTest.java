@@ -1,7 +1,7 @@
 package com.aryan.spring_security_demo.identity.security.jwt;
 
 import com.aryan.spring_security_demo.identity.AuthTokenProperties;
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -45,8 +45,8 @@ class JwtUtilsTest {
         return new JwtUtils(properties, Clock.fixed(now, ZoneOffset.UTC));
     }
 
-    private static UserDetails principal() {
-        return new UserDetails(1L, "ada@example.com", "hash",
+    private static ShopUserDetails principal() {
+        return new ShopUserDetails(1L, "ada@example.com", "hash",
                 List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER")));
     }
 }

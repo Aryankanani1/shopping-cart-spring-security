@@ -11,7 +11,7 @@ import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import com.aryan.spring_security_demo.notification.Notification;
 import com.aryan.spring_security_demo.notification.NotificationRepository;
 import com.aryan.spring_security_demo.order.Order;
@@ -241,7 +241,7 @@ class AccountDeletionIntegrationTest {
     }
 
     private static RequestPostProcessor admin() {
-        UserDetails admin = new UserDetails(-1L, "admin@example.com", null,
+        ShopUserDetails admin = new ShopUserDetails(-1L, "admin@example.com", null,
                 List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
         return authentication(new UsernamePasswordAuthenticationToken(admin, null, admin.getAuthorities()));
     }

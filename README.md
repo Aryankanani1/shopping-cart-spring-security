@@ -516,7 +516,8 @@ through these stages:
 
 ```
 commit ─▶ Build ─┬─▶ Unit tests ─▶ Integration tests ─┬─▶ Quality gate ──pass──▶ Build artifact ─▶ Staging: deploy + E2E ─▶ Deploy production
-                 └─▶ Security scan ────────────────────┘        │                                                             (after approval)
+                 ├─▶ Security scan ────────────────────┤        │                                                             (after approval)
+                 └─▶ Static analysis ──────────────────┘        │
                                                                fail
                                                                 ▼
                                                           Failed build
@@ -525,6 +526,9 @@ commit ─▶ Build ─┬─▶ Unit tests ─▶ Integration tests ─┬─�
 - **Build** compiles every module (tests included) and builds the storefront.
 - **Unit tests**: JUnit/Mockito and the Spring slices, plus Vitest, with coverage.
 - **Integration tests**: the `@SpringBootTest` tests, the whole API on H2.
+- **Static analysis**: SpotBugs with FindSecBugs (bugs, and security flaws in the
+  code), PMD and CPD (copy-pasted code); any finding fails it. The same runs on a
+  local `./mvnw verify`.
 - **Security scan**: OWASP Dependency-Check and `npm audit`, failing on a HIGH or
   CRITICAL CVE (they also run daily on `master`), and gitleaks over the git history
   for committed secrets.

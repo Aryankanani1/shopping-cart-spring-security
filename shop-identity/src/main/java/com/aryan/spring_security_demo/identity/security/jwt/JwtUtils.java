@@ -1,7 +1,7 @@
 package com.aryan.spring_security_demo.identity.security.jwt;
 
 import com.aryan.spring_security_demo.identity.AuthTokenProperties;
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
@@ -25,7 +25,10 @@ public class JwtUtils {
     private final Clock clock;
 
     public String generateUserTokenFromUser(Authentication authentication){
-        return generateTokenFromUserDetails((UserDetails) authentication.getPrincipal());
+        if (!(authentication.getPrincipal() instanceof ShopUserDetails user)) {
+            throw new IllegalStateException("Not a signed-in user's authentication: no ShopUserDetails principal");
+        }
+        return generateTokenFromUserDetails(user);
     }
 
     /**
@@ -33,7 +36,7 @@ public class JwtUtils {
      * authenticated {@code Authentication}) and on refresh, where the principal is
      * rebuilt from the refresh token's user rather than a login.
      */
-    public String generateTokenFromUserDetails(UserDetails userPrinciple){
+    public String generateTokenFromUserDetails(ShopUserDetails userPrinciple){
         List<String> roles = userPrinciple.getAuthorities()
                 .stream().map(GrantedAuthority::getAuthority).toList();
 
