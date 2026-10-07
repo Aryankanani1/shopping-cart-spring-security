@@ -526,12 +526,15 @@ commit ─▶ Build ─┬─▶ Unit tests ─▶ Integration tests ─┬─�
 - **Unit tests**: JUnit/Mockito and the Spring slices, plus Vitest, with coverage.
 - **Integration tests**: the `@SpringBootTest` tests, the whole API on H2.
 - **Security scan**: OWASP Dependency-Check and `npm audit`, failing on a HIGH or
-  CRITICAL CVE. It also runs daily on `master`.
+  CRITICAL CVE (they also run daily on `master`), and gitleaks over the git history
+  for committed secrets.
 - **Quality gate**: runs only if all of the above passed, then holds backend and
   frontend coverage to the floors in
   [`quality_gate.py`](.github/scripts/quality_gate.py).
-- **Build artifact**: the API and storefront images. On `master` they are pushed to
-  GitHub Container Registry for amd64 and arm64, tagged with the commit SHA.
+- **Build artifact**: the API and storefront images, scanned with Trivy (a fixable
+  HIGH or CRITICAL CVE in the OS packages or the libraries inside fails it). On
+  `master` they are pushed to GitHub Container Registry for amd64 and arm64, tagged
+  with the commit SHA.
 - **Staging (deploy + E2E)**: the production setup from [`deploy/`](deploy/), started
   on the CI runner from those images with a MySQL container, then the Playwright
   tests in [`frontend/e2e/`](frontend/e2e/) against it over HTTPS. On `master` the
