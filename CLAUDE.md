@@ -128,4 +128,3 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 - `queryFn` and `mutationFn` wrap API calls in arrow functions (`(id: number) => wishlistApi.remove(id)`), never pass the API function itself — React Query passes an extra context argument.
 - When a backend DTO changes, `src/api/types.ts` changes in the same PR to match.
 - A new page or component with logic has a Vitest + Testing Library test.
-``
