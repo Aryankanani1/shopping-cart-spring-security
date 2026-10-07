@@ -34,8 +34,7 @@ import java.time.Instant;
 public class WishlistItem {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "wishlist_item_seq")
-    @SequenceGenerator(name = "wishlist_item_seq", sequenceName = "wishlist_item_seq", allocationSize = 50)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Version

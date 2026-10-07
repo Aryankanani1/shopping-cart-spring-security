@@ -15,8 +15,7 @@ import java.sql.Blob;
 @Entity
 public class Image {
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "image_seq")
-    @SequenceGenerator(name = "image_seq", sequenceName = "image_seq", allocationSize = 50)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Version

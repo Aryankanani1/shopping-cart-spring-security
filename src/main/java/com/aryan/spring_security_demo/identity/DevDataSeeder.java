@@ -32,8 +32,7 @@ import java.util.Set;
 @Slf4j
 public class DevDataSeeder implements ApplicationListener<ApplicationReadyEvent> {
 
-    // Matches hibernate.jdbc.batch_size so the persistence context is flushed and
-    // cleared on the same boundary Hibernate uses to send JDBC batches, keeping
+    // Flush and clear the persistence context every BATCH_SIZE users, keeping
     // memory bounded during bulk inserts (avoids a bloated first-level cache).
     private static final int BATCH_SIZE = 20;
 

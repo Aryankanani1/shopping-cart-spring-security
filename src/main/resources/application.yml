@@ -69,7 +69,9 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
         # Turn a would-be N+1 on lazy associations into a single IN (...) query.
         default_batch_fetch_size: 20
-        # Batch writes — works because ids use SEQUENCE with a pooled optimizer.
+        # Batch updates and deletes. Inserts aren't batched: ids are AUTO_INCREMENT
+        # (IDENTITY), so Hibernate inserts each row as it is saved to learn its id.
+        # Ids came from sequence tables before V9; see that migration for why not.
         jdbc:
           batch_size: 20
         order_inserts: true

@@ -12,7 +12,7 @@
 An e-commerce REST API built with **Spring Boot 4.1** and **Java 17**, featuring
 JWT-based stateless authentication, role-based authorization, a product catalog,
 cart, and order flow. Persistence is tuned for Hibernate best practices
-(batching, sequence pooling, optimistic locking, `open-in-view=false`), and
+(batching, optimistic locking, `open-in-view=false`), and
 interactive API documentation is served by **Swagger UI** (springdoc-openapi).
 
 A **React + Vite + TypeScript** customer storefront lives in
@@ -164,6 +164,11 @@ export, so `ddl-auto: validate` accepts it verbatim. All later changes go in new
 `V2__…`, `V3__…` files — never edit an applied migration. `baseline-on-migrate`
 is enabled so Flyway can adopt a pre-existing database (e.g. a dev schema built by
 an earlier `ddl-auto: update`) instead of failing on a non-empty schema.
+
+Ids are MySQL `AUTO_INCREMENT` columns (`GenerationType.IDENTITY`). V1 created
+`*_seq` tables to emulate sequences, but Hibernate reads those on a second pooled
+connection mid-transaction, which let enough simultaneous requests stall the whole
+pool; `V9__auto_increment_ids.sql` switched every id column and dropped the tables.
 
 > **Boot 4 note**: the migrations only run because `spring-boot-starter-flyway` is
 > on the classpath. Boot 4 moved the autoconfiguration into a per-module jar, so
