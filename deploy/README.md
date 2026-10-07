@@ -18,12 +18,15 @@ browser ──HTTPS──▶ web (Caddy) ──/api──▶ api (Spring Boot) �
 The images come from GitHub Container Registry. After CI passes on `master`,
 [`publish-images.yml`](../.github/workflows/publish-images.yml) pushes
 `ghcr.io/aryankanani1/shopping-cart-api` and `ghcr.io/aryankanani1/shopping-cart-web`,
-tagged with the commit SHA and `latest`.
+tagged with the commit SHA and `latest`, for `linux/amd64` and `linux/arm64`. They
+are public, like the repository, so pulling them needs no login. They contain the
+same code as the repository and no secrets: those come from `.env` at run time.
 
 ## What you need
 
 - A server with Docker Engine and the Compose plugin, ports **80** and **443**
-  open. 2 GB of memory is enough for the API (`-XX:MaxRAMPercentage=75.0`).
+  open, x86-64 or ARM64 (the images are built for both). 2 GB of memory is
+  enough for the API (`-XX:MaxRAMPercentage=75.0`).
 - A domain whose DNS record points at the server (Caddy needs it for the
   certificate).
 - A managed MySQL 8 database, an empty schema, and a user with full rights on it.
@@ -41,20 +44,14 @@ tagged with the commit SHA and `latest`.
    - `ADMIN_EMAIL` and `ADMIN_PASSWORD` (12+ characters) — the first admin.
 
    Keep it readable only by the deploying user: `chmod 600 .env`.
-3. New GHCR packages are private. On the server, log in with a GitHub token that
-   has the `read:packages` scope:
-   ```bash
-   echo "$TOKEN" | docker login ghcr.io -u <github-user> --password-stdin
-   ```
-   (Or make both packages public in their GitHub settings and skip this.)
-4. Start it:
+3. Start it:
    ```bash
    docker compose pull
    docker compose up -d
    docker compose logs -f api   # wait for "Started SpringSecurityDemoApplication"
    ```
-5. Open `https://<your domain>`, sign in as the admin, and add the catalogue.
-6. Remove `ADMIN_PASSWORD` from `.env` and run `docker compose up -d` again. The
+4. Open `https://<your domain>`, sign in as the admin, and add the catalogue.
+5. Remove `ADMIN_PASSWORD` from `.env` and run `docker compose up -d` again. The
    admin account keeps its password; change it from the account page.
 
 ## Updating
