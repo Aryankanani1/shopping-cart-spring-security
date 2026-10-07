@@ -55,6 +55,14 @@ RUN ./mvnw -B -pl shop-app -am clean package -DskipTests
 FROM eclipse-temurin:17-jre-jammy@sha256:8993f1aed8b25fcea7a7047a7949c1866fa558fc6830d938c22c4f13b26be9d7
 WORKDIR /app
 
+# Ubuntu's security fixes released since the pinned base image was built: the image
+# scan fails the pipeline on a HIGH or CRITICAL one that has a fix, and Temurin's
+# rebuild (the Dependabot digest bump) can lag Ubuntu by days. Upgrades only, no new
+# packages. This layer reflects the archive at build time, not the digest alone.
+RUN apt-get update \
+ && apt-get -y upgrade --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/*
+
 # Create an unprivileged user and group; the container must not run as root.
 RUN groupadd --system spring && useradd --system --gid spring --home /app spring
 

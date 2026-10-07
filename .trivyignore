@@ -1,0 +1,5 @@
+# Exceptions to the container image scan (Trivy, in the pipeline's Build artifact
+# stage), one CVE id per line. Only for a finding that does not apply to these
+# images: the vulnerable code is never loaded, or the CVE is for another product.
+# A real one is fixed (a new base image digest, an upgraded dependency), never
+# listed. Each id goes under a comment with the reason and when to look again.

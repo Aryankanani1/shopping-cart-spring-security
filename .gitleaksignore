@@ -1,0 +1,15 @@
+# Findings of the secret scan (gitleaks, in the pipeline's Security scan) that are
+# not secrets, or no longer are. One fingerprint (commit:file:rule:line) per line,
+# each under a comment saying why. A real secret that leaked is rotated first,
+# then listed here with that noted; it is never just ignored.
+
+# A development JWT signing key that .env.example shipped until 95d4162 removed it
+# (2026-10-04). It is not used anywhere since: every environment generates its own
+# key (openssl rand -base64 32), and the local .env's key is a different one.
+7a9b968a10af6146e321daf042a4977786d14f7d:.env.example:generic-api-key:30
+868791fedf61d7ee3469bb7bbe3f43c6c53fa498:.env.example:generic-api-key:30
+
+# Fixed JWT keys of the test suite (test profile, a unit test), in files that have
+# since moved into shop-app. They sign tokens only inside the tests.
+0bb6c04a694d1c5f18103bf0a9e19ec426ff81e7:src/test/java/com/aryan/spring_security_demo/identity/AuthTokenPropertiesTest.java:generic-api-key:24
+e1c60147211a0ba941bfdfbcb14c72308dc76e64:src/test/resources/application-test.yml:generic-api-key:31

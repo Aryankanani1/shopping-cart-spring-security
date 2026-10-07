@@ -75,6 +75,13 @@
 		     CVE-2026-60623 (9.7.0-9.7.1). 26.7.0 is the release after 9.7; Oracle
 		     numbers releases by year and month since then. -->
 		<mysql.version>26.7.0</mysql.version>
+		<!-- Jackson 2 (springdoc, jjwt-jackson) and Jackson 3 (Spring Boot 4): Boot
+		     4.1.1's 2.21.5 and 3.1.5 have CVE-2026-89407, CVE-2026-89425,
+		     CVE-2026-68497, CVE-2026-91776 and CVE-2026-91777, fixed in 2.21.7 and
+		     3.1.7. Found by the image scan (GitHub's advisories), not yet by
+		     Dependency-Check (the NVD's). -->
+		<jackson-2-bom.version>2.21.7</jackson-2-bom.version>
+		<jackson-bom.version>3.1.7</jackson-bom.version>
 		<!-- spring-boot:run only starts shop-app; the library modules have no main
 		     class, so `./mvnw -pl shop-app -am spring-boot:run` skips them. -->
 		<spring-boot.run.skip>true</spring-boot.run.skip>
