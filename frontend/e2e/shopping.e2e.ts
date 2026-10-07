@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test'
-import { adminToken, createProduct, inventoryOf, unique, type CreatedProduct } from './support'
+import { adminToken, createProduct, expect, inventoryOf, test, unique, type CreatedProduct } from './support'
 
 // The customer's path through the shop, in a real browser against the real stack:
 // sign up, find a product, put it in the bag, check out, and find the order again.
@@ -33,12 +32,13 @@ test('a new customer signs up, buys a product and finds the order', async ({ pag
 
   await test.step('put the product in the bag', async () => {
     await page.goto(`/products/${product.id}`)
-    await expect(page.getByRole('heading', { name: product.name })).toBeVisible()
+    await expect(page.getByRole('heading', { name: product.name, exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Add to bag' }).click()
     await expect(page.getByText('Added to your bag.')).toBeVisible()
     await page.getByRole('link', { name: 'View bag →' }).click()
     await expect(page).toHaveURL('/cart')
-    await expect(page.getByRole('link', { name: product.name })).toBeVisible()
+    // The line's name link (its picture links to the product too).
+    await expect(page.getByRole('link', { name: product.name, exact: true }).first()).toBeVisible()
   })
 
   let orderUrl = ''

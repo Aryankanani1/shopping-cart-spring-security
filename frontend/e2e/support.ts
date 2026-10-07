@@ -1,4 +1,20 @@
-import { expect, type APIRequestContext } from '@playwright/test'
+import { test as base, expect, type APIRequestContext } from '@playwright/test'
+
+/**
+ * The tests' `test`: Playwright's, with requests to Google Fonts aborted, so a slow
+ * or unreachable font CDN can't hold up a page load (the stylesheet blocks it).
+ * The tests are about this shop; the pages fall back to the system fonts.
+ */
+export const test = base.extend<{ offlineFonts: void }>({
+  offlineFonts: [
+    async ({ page }, use) => {
+      await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.abort())
+      await use()
+    },
+    { auto: true },
+  ],
+})
+export { expect }
 
 // Shared setup for the E2E tests: test data is created through the API, as the
 // admin, so each test drives only the screens it is about.
