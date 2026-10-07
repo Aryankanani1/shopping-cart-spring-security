@@ -28,10 +28,67 @@
 	</scm>
 	<properties>
 		<java.version>17</java.version>
-		<jjwt-api.version>0.12.5</jjwt-api.version>
-		<jjwt-impl.version>0.12.5</jjwt-impl.version>
-		<jjwt-jackson.version>0.12.5</jjwt-jackson.version>
+		<!-- Versions of the libraries the Spring Boot BOM (from the parent) doesn't
+		     manage. Each is set once here and applied by dependencyManagement below;
+		     no <dependency> in this file declares a version of its own. -->
+		<jjwt.version>0.12.5</jjwt.version>
+		<shedlock.version>7.10.1</shedlock.version>
+		<springdoc-openapi.version>3.1.0</springdoc-openapi.version>
+		<modelmapper.version>3.2.4</modelmapper.version>
 	</properties>
+
+	<!-- A library's own BOM keeps all of its modules on one version, the way the
+	     parent's Spring Boot BOM does for Spring, Hibernate, Jackson, MySQL and the
+	     rest. Careful: a BOM imported here is resolved before the BOMs the Boot BOM
+	     imports itself (Jackson's among them), so it can override their versions.
+	     After adding or changing one, compare `./mvnw dependency:list` before and
+	     after; only the intended artifacts should move. -->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>net.javacrumbs.shedlock</groupId>
+				<artifactId>shedlock-bom</artifactId>
+				<version>${shedlock.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<dependency>
+				<groupId>org.springdoc</groupId>
+				<artifactId>springdoc-openapi-bom</artifactId>
+				<version>${springdoc-openapi.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+
+			<!-- JJWT is listed module by module rather than through jjwt-bom: that BOM
+			     inherits jjwt-root's pin of jackson-databind 2.12.7.1, which Maven
+			     imports with it, and it overrides the Boot BOM's Jackson 2 (2.21.x) used
+			     by springdoc and jjwt-jackson. -->
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-api</artifactId>
+				<version>${jjwt.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-impl</artifactId>
+				<version>${jjwt.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-jackson</artifactId>
+				<version>${jjwt.version}</version>
+			</dependency>
+
+			<!-- A single artifact; ModelMapper publishes no BOM. -->
+			<dependency>
+				<groupId>org.modelmapper</groupId>
+				<artifactId>modelmapper</artifactId>
+				<version>${modelmapper.version}</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
 	<dependencies>
 
 		<dependency>
@@ -95,12 +152,10 @@
 		<dependency>
 			<groupId>net.javacrumbs.shedlock</groupId>
 			<artifactId>shedlock-spring</artifactId>
-			<version>7.10.1</version>
 		</dependency>
 		<dependency>
 			<groupId>net.javacrumbs.shedlock</groupId>
 			<artifactId>shedlock-provider-jdbc-template</artifactId>
-			<version>7.10.1</version>
 		</dependency>
 
 		<!-- Bean Validation (JSR-380) — powers @Validated on @ConfigurationProperties. -->
@@ -177,7 +232,6 @@
 		<dependency>
 			<groupId>org.modelmapper</groupId>
 			<artifactId>modelmapper</artifactId>
-			<version>3.2.4</version>
 		</dependency>
 
 		<!-- OpenAPI 3 + Swagger UI (springdoc). The 3.x line targets Spring Boot 4 /
@@ -186,30 +240,25 @@
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-			<version>3.1.0</version>
 		</dependency>
 
-
+		<!-- JWT signing and parsing. The code compiles against jjwt-api only; the
+		     implementation and its Jackson serializer are runtime-only, as JJWT
+		     recommends, so nothing can come to depend on their internals. -->
 		<dependency>
-		<groupId>io.jsonwebtoken</groupId>
-		<artifactId>jjwt-api</artifactId>
-			<version>0.12.5</version>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
 		</dependency>
-
 		<dependency>
-		<groupId>io.jsonwebtoken</groupId>
-		<artifactId>jjwt-impl</artifactId>
-			<version>0.12.5</version>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<scope>runtime</scope>
 		</dependency>
-
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
 			<artifactId>jjwt-jackson</artifactId>
-			<version>0.12.5</version>
 			<scope>runtime</scope>
 		</dependency>
-
-
 	</dependencies>
 
 	<build>
