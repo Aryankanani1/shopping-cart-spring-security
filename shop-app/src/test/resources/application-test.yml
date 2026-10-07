@@ -1,30 +1,22 @@
 # ===========================================================================
-# TEST profile — used by @ActiveProfiles("test") integration tests only.
-# Overrides the base (MySQL) datasource with an in-memory H2 database so the
-# full HTTP -> security -> service -> JPA stack can be exercised in CI without
-# a live MySQL. The dev seeder (@Profile("dev")) does NOT run under this
-# profile, so tests own their own data setup.
+# TEST profile: the integration tests (@Tag("integration"), @ActiveProfiles("test")).
+# The database is MySQL 8.4 in a container that Testcontainers starts on the first
+# connection and keeps for the whole test run (Docker is required), with the real
+# Flyway migrations and ddl-auto: validate, as in dev and production. Every test
+# context in the run shares it, so tests set up (and clear) their own data. The
+# dev seeder (@Profile("dev")) does not run under this profile.
 # ===========================================================================
 spring:
-  # The MySQL-dialect Flyway migrations don't apply to H2; tests build the schema
-  # from the entities via ddl-auto: create-drop below, so keep Flyway off here.
-  flyway:
-    enabled: false
-
   datasource:
-    url: jdbc:h2:mem:checkoutdb;DB_CLOSE_DELAY=-1
-    username: sa
-    password: ""
-    driver-class-name: org.h2.Driver
-
+    url: jdbc:tc:mysql:8.4:///shop?TC_DAEMON=true
+    username: test
+    password: test
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
   jpa:
     hibernate:
-      # Build the schema from the entities for each test context, drop on shutdown.
-      ddl-auto: create-drop
-    properties:
-      hibernate:
-        # Override the base MySQLDialect with H2.
-        dialect: org.hibernate.dialect.H2Dialect
+      # As in dev and production: Flyway builds the schema, Hibernate checks that the
+      # entities match it, so a missing migration fails the tests.
+      ddl-auto: validate
 
 # Base path prefix for all REST controllers (mirrors the base config).
 api:

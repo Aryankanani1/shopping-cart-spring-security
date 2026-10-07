@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo.identity;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * unexpired token in place (a revoked-but-unexpired token is kept so a replay of
  * it can still be caught as reuse).
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")

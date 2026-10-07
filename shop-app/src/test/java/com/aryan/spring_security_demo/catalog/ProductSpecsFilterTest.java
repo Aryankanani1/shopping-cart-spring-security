@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo.catalog;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * idiom). The unfiltered case must return every product; individual filters must
  * still narrow the result.
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")

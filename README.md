@@ -171,7 +171,8 @@ files happen to sit, and a module can be conditional as a unit:
 - **Flyway owns the schema** in every environment: versioned SQL migrations under
   `shop-app/src/main/resources/db/migration` build the DDL, and Hibernate runs `ddl-auto: validate`
   in **both dev and prod** — it only checks the entities match the schema, never
-  mutates it. Tests use H2 with `create-drop` and disable Flyway.
+  mutates it. The integration tests do the same against MySQL 8.4 in a container
+  (Testcontainers), so a migration that doesn't match the entities fails them.
 
 ### Database migrations
 
@@ -507,7 +508,8 @@ accounts are never created in production.
 
 Unit tests live in the module whose code they test; the tests that need the
 application context (`@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`) are in
-`shop-app`. The `@SpringBootTest` ones are tagged `integration`.
+`shop-app`. The `@SpringBootTest` and `@DataJpaTest` ones are tagged `integration` and
+run against MySQL in a container, so they need Docker.
 
 ## CI/CD pipeline
 
@@ -525,7 +527,8 @@ commit ─▶ Build ─┬─▶ Unit tests ─▶ Integration tests ─┬─�
 
 - **Build** compiles every module (tests included) and builds the storefront.
 - **Unit tests**: JUnit/Mockito and the Spring slices, plus Vitest, with coverage.
-- **Integration tests**: the `@SpringBootTest` tests, the whole API on H2.
+- **Integration tests**: the `@SpringBootTest` and `@DataJpaTest` tests, the whole API
+  on MySQL 8.4 (Testcontainers) with the real Flyway migrations.
 - **Static analysis**: SpotBugs with FindSecBugs (bugs, and security flaws in the
   code), PMD and CPD (copy-pasted code); any finding fails it. The same runs on a
   local `./mvnw verify`.
