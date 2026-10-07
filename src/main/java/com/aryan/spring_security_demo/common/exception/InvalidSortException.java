@@ -8,8 +8,8 @@ import java.util.Collection;
  * callers order by arbitrary (possibly unindexed or internal) columns; this keeps
  * sorting to a known, indexed set. Mapped to 400 by the global handler.
  */
-public class InvalidSortException extends RuntimeException {
+public class InvalidSortException extends BadRequestException {
     public InvalidSortException(String property, Collection<String> allowed) {
-        super("Unsupported sort property '" + property + "'. Allowed sort fields: " + allowed);
+        super("Invalid sort parameter", "Unsupported sort property '" + property + "'. Allowed sort fields: " + allowed);
     }
 }

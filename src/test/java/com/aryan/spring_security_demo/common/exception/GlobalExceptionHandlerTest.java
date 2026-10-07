@@ -1,8 +1,5 @@
 package com.aryan.spring_security_demo.common.exception;
 
-import com.aryan.spring_security_demo.catalog.Product;
-import com.aryan.spring_security_demo.identity.InvalidPasswordException;
-import com.aryan.spring_security_demo.identity.InvalidRefreshTokenException;
 import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.CannotAcquireLockException;
@@ -46,10 +43,10 @@ class GlobalExceptionHandlerTest {
     @Test
     void optimisticLockConflict_is409AskingToRetry() {
         ProblemDetail problem = handler.handleOptimisticLock(
-                new ObjectOptimisticLockingFailureException(Product.class, 5L));
+                new ObjectOptimisticLockingFailureException(SecretEntity.class, 5L));
 
         assertThat(problem.getStatus()).isEqualTo(409);
-        assertThat(problem.getDetail()).contains("retry").doesNotContain("Product");
+        assertThat(problem.getDetail()).contains("retry").doesNotContain("SecretEntity");
     }
 
     // Regression: a deadlock (or a lock wait that timed out) fell through to the
@@ -73,11 +70,11 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void refreshTokenFailures_allLookTheSame() {
-        String revoked = handler.handleInvalidRefreshToken(
-                new InvalidRefreshTokenException("Refresh token has been revoked")).getDetail();
-        String unknown = handler.handleInvalidRefreshToken(
-                new InvalidRefreshTokenException("Unknown refresh token")).getDetail();
+    void authenticationFailures_showOnlyThePublicDetail() {
+        String revoked = handler.handleAuthenticationFailed(
+                new AuthenticationFailedException("Invalid or expired refresh token", "Refresh token has been revoked")).getDetail();
+        String unknown = handler.handleAuthenticationFailed(
+                new AuthenticationFailedException("Invalid or expired refresh token", "Unknown refresh token")).getDetail();
 
         assertThat(revoked).isEqualTo(unknown).isEqualTo("Invalid or expired refresh token");
     }
@@ -99,12 +96,16 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void invalidPassword_isAFieldError() {
-        ProblemDetail problem = handler.handleInvalidPassword(
-                new InvalidPasswordException("currentPassword", "Current password is incorrect"));
+    void fieldValidation_isAFieldError() {
+        ProblemDetail problem = handler.handleFieldValidation(
+                new FieldValidationException("currentPassword", "Current password is incorrect"));
 
         assertThat(problem.getStatus()).isEqualTo(400);
         assertThat(problem.getProperties())
                 .containsEntry("errors", Map.of("currentPassword", "Current password is incorrect"));
+    }
+
+    /** Stands in for an entity whose name must not reach the client. */
+    private static class SecretEntity {
     }
 }
