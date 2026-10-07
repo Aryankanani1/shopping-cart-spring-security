@@ -1,5 +1,9 @@
 package com.aryan.spring_security_demo.identity;
 
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import lombok.Getter;
@@ -12,8 +16,8 @@ import org.springframework.validation.annotation.Validated;
  * scattered {@code @Value} lookups in {@code JwtUtils}.
  *
  * <p>The secret has no default — it must be supplied per environment (via the
- * {@code JWT_SECRET} env var). {@code @NotBlank} makes a missing secret fail the
- * application at startup instead of at first login.
+ * {@code JWT_SECRET} env var). A missing secret, or one that can't be used as an
+ * HS256 key, fails the application at startup instead of at first login.
  */
 @Getter
 @Setter
@@ -24,6 +28,25 @@ public class AuthTokenProperties {
     /** Base64-encoded HMAC secret; must be >= 256 bits (32 bytes) for HS256. */
     @NotBlank
     private String jwtSecret;
+
+    /**
+     * Builds the key the same way {@code JwtUtils} does, so a secret that passes
+     * here signs tokens. Without this check, a short or non-Base64 secret started
+     * fine and then failed every login with a 401 "Invalid or expired token".
+     */
+    @AssertTrue(message = "JWT_SECRET must be a Base64-encoded key of at least 256 bits "
+            + "(generate one with: openssl rand -base64 32)")
+    public boolean isJwtSecretUsable() {
+        if (jwtSecret == null || jwtSecret.isBlank()) {
+            return true;  // @NotBlank reports a missing secret
+        }
+        try {
+            Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtSecret));
+            return true;
+        } catch (JwtException e) {
+            return false;
+        }
+    }
 
     /**
      * Access-token lifetime in milliseconds. Kept short (default 15 min) so a
