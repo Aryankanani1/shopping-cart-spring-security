@@ -18,6 +18,7 @@ import com.aryan.spring_security_demo.wishlist.WishlistItemRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,6 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * product can still be deleted. Runs the full HTTP → security → service → JPA
  * stack against H2 (the {@code test} profile).
  */
+@Tag("integration")
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Basic. The account works there and nowhere else, and no other credentials
  * work there.
  */
+@Tag("integration")
 @SpringBootTest(properties = {
         "app.metrics.prometheus.scrape-enabled=true",
         "app.metrics.prometheus.username=prometheus",

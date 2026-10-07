@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.identity.security.ratelimit;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * unknown token still returns 200 — so each pre-limit request has a clean outcome
  * that isn't entangled with credential checks or seeded data.
  */
+@Tag("integration")
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

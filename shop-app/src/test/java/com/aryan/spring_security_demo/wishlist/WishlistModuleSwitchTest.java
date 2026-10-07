@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.wishlist;
 import com.aryan.spring_security_demo.catalog.ProductController;
 import com.aryan.spring_security_demo.notification.NotificationController;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,6 +22,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * endpoints, services and the scheduled alert job — while every other module
  * keeps working. (With the default, the module is on: see WishlistIntegrationTest.)
  */
+@Tag("integration")
 @SpringBootTest(properties = "app.modules.wishlist.enabled=false")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

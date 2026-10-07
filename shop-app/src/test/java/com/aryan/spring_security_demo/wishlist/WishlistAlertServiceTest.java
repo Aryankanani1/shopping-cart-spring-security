@@ -15,6 +15,7 @@ import com.aryan.spring_security_demo.notification.NotificationType;
 import com.aryan.spring_security_demo.order.OrderRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * restock is announced exactly once, and nothing is announced while alerts are
  * off. Time is passed in explicitly, so no test depends on the wall clock.
  */
+@Tag("integration")
 @SpringBootTest
 @ActiveProfiles("test")
 class WishlistAlertServiceTest {

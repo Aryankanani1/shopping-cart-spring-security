@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -55,6 +56,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * steps: the auth guard, the token round-trip, cart totals, order creation,
  * inventory decrement and cart clean-up. Nothing is mocked.
  */
+@Tag("integration")
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

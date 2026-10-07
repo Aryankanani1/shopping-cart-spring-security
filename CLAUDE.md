@@ -12,10 +12,15 @@ a PR adds or changes; older code may predate some of them.
 ./mvnw test                          # every module's tests (H2, `test` profile — no MySQL needed)
 ./mvnw test -pl shop-cart -am        # one module, with the modules it depends on
 ./mvnw test -pl shop-app -am -Dtest=WishlistIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw test -DexcludedGroups=integration              # unit tests only (the pipeline's "Unit tests")
+./mvnw test -pl shop-app -am -Dgroups=integration     # integration tests only ("Integration tests")
+./mvnw verify                        # all tests + coverage report: shop-app/target/site/jacoco-aggregate/index.html
 ./mvnw -DskipTests package dependency-check:aggregate   # OWASP CVE scan; report in target/ (set NVD_API_KEY to speed up the download)
 cd frontend && npm test              # Vitest
+cd frontend && npm run test:coverage # Vitest with coverage (coverage/index.html)
 cd frontend && npm run build         # type-check + production build
 cd frontend && npm audit --omit=dev --audit-level=high   # CVE scan of the packages that ship
+cd frontend && npm run e2e           # Playwright, against a running deployment (see playwright.config.ts)
 ```
 
 Running locally: the Vite dev server proxies `/api` to **port 8082**, and the
@@ -23,6 +28,17 @@ default profile is `prod`, so start the API with
 `SPRING_PROFILES_ACTIVE=dev ./mvnw -pl shop-app -am spring-boot:run -Dspring-boot.run.arguments=--server.port=8082`
 (see README for the database settings). Without `-am` Maven looks for the other
 modules in the local repository, where they are never installed.
+
+## CI/CD
+
+`.github/workflows/pipeline.yml` runs every change through Build → Unit tests →
+Integration tests (with Security scan alongside) → Quality gate → Build artifact →
+Staging (deploy + E2E) → Deploy production; pull requests stop after staging, and
+production needs a reviewer's approval. Staging is the production setup from
+`deploy/` started on the CI runner from the new images, with
+`deploy/docker-compose.staging.yml` adding a MySQL container; the Playwright tests in
+`frontend/e2e/` run against it. The quality gate's coverage floors are in
+`.github/scripts/quality_gate.py`.
 
 ## Layout
 
@@ -97,8 +113,14 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 - Integration tests (`@SpringBootTest` + MockMvc against H2) are only for security-sensitive and business-critical paths: authentication and sessions (login, tokens, passwords), access rules and ownership checks, money and stock (checkout, prices, inventory), and behavior a mock can't show (transactions, database constraints and cascades, cross-module events, security and actuator configuration).
 - A new or changed access rule or ownership check has an integration test of its failure case (401, 403 or 404).
 - Every bug fix comes with a test that fails without the fix: a unit test, unless the bug is in one of the integration-test areas above.
-- `@SpringBootTest` tests use `@ActiveProfiles("test")`.
+- `@SpringBootTest` tests use `@ActiveProfiles("test")` and `@Tag("integration")`; the tag puts them in the pipeline's Integration tests stage, and everything without it runs as a unit test.
 - Tests never `Thread.sleep` or depend on the wall clock; time-dependent code is tested with an explicit `Instant` or a fixed `Clock`.
+
+### Pipeline and deployment
+- Never lower a coverage floor in `.github/scripts/quality_gate.py`, skip a stage, or loosen a check to get a change through; fix the change or add the tests.
+- A new user-facing journey (a page or flow a customer or admin depends on) gets an E2E test in `frontend/e2e/` (`*.e2e.ts`), and a change that breaks one updates it in the same PR. E2E tests create their own data through the API and never depend on what is already in the database.
+- The staging setup stays the production setup: `deploy/docker-compose.staging.yml` only adds what the CI runner lacks (the database container) and test-only settings, each with a comment saying why.
+- The production setup changes only through `deploy/` (`docker-compose.yml`, `Caddyfile`, `deploy.sh`): every deployment copies those files to the server, so an edit made to them there is overwritten.
 
 ### Frontend (`frontend/`)
 - HTTP calls go through `request()` in `src/api/client.ts`, via a per-feature module in `src/api/`; components never call `fetch` directly.
@@ -106,3 +128,4 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 - `queryFn` and `mutationFn` wrap API calls in arrow functions (`(id: number) => wishlistApi.remove(id)`), never pass the API function itself — React Query passes an extra context argument.
 - When a backend DTO changes, `src/api/types.ts` changes in the same PR to match.
 - A new page or component with logic has a Vitest + Testing Library test.
+``

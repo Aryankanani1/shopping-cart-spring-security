@@ -27,6 +27,7 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * its <b>own</b> category — otherwise a shared category would be cached on first
  * load and mask a reverted fetch join / entity graph.
  */
+@Tag("integration")
 @SpringBootTest
 @ActiveProfiles("test")
 class QueryCountTest {

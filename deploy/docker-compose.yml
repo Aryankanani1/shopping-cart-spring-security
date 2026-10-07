@@ -8,8 +8,10 @@
 #         compose network; its actuator is never exposed.
 #
 # MySQL is a managed database outside this file (DB_URL). Both images come from
-# GitHub Container Registry, published by .github/workflows/publish-images.yml
-# after CI passes on master.
+# GitHub Container Registry, built by the CI/CD pipeline
+# (.github/workflows/pipeline.yml) once a commit on master has passed every
+# stage up to the quality gate. docker-compose.staging.yml runs this same file
+# for the pipeline's staging stage.
 #
 # One instance of each, on purpose: the API's rate limiter and category cache
 # live in memory (see the README), so a second API replica would not share them.
