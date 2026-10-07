@@ -1,0 +1,66 @@
+# ===========================================================================
+# Production: the whole shop on one server. Steps in deploy/README.md.
+#
+#   web   Caddy with the built storefront (frontend/Dockerfile). The only container
+#         with published ports: HTTPS for SITE_ADDRESS, the storefront, and /api
+#         proxied to `api`. Frontend and API share one origin, so no CORS.
+#   api   The Spring Boot API (Dockerfile), prod profile. Reachable only on this
+#         compose network; its actuator is never exposed.
+#
+# MySQL is a managed database outside this file (DB_URL). Both images come from
+# GitHub Container Registry, published by .github/workflows/publish-images.yml
+# after CI passes on master.
+#
+# One instance of each, on purpose: the API's rate limiter and category cache
+# live in memory (see the README), so a second API replica would not share them.
+# ===========================================================================
+
+x-logging: &logging
+  # Rotate the logs, or they grow until the disk is full.
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  api:
+    image: ghcr.io/aryankanani1/shopping-cart-api:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: ${DB_URL:?Set DB_URL in .env (the managed MySQL)}
+      DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -base64 32)}
+      # First start only: creates this account as the admin (see the README).
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Requests arrive through Caddy: take the client's address and scheme from
+      # its X-Forwarded-* headers (rate limiting per client, https Location headers).
+      # Tomcat trusts them only from private-network addresses, which Caddy's is here.
+      SERVER_FORWARD_HEADERS_STRATEGY: native
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}
+    logging: *logging
+
+  web:
+    image: ghcr.io/aryankanani1/shopping-cart-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env (the shop's domain)}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Caddy's certificates and account keys: keep them, or every restart
+      # requests new certificates and can hit Let's Encrypt's rate limits.
+      - caddy-data:/data
+      - caddy-config:/config
+    logging: *logging
+
+volumes:
+  caddy-data:
+  caddy-config:

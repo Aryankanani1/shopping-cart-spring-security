@@ -509,6 +509,13 @@ Client-side auth, a typed API client (envelope unwrap, problem+json errors,
 single-flight token refresh), and a Vitest test suite are covered in
 [`frontend/README.md`](frontend/README.md).
 
+## Deploying
+
+[`deploy/`](deploy/) runs the shop on one server with Docker Compose: Caddy in
+front (automatic HTTPS, the storefront, `/api` proxied to the API) and a managed
+MySQL. CI publishes both images to GitHub Container Registry after the tests pass
+on `master`. Steps, updates and limits: [`deploy/README.md`](deploy/README.md).
+
 ## Docker
 
 A multi-stage `Dockerfile` builds the jar with a JDK and ships it on a slim,
