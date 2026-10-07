@@ -168,6 +168,15 @@ app:
       scrape-enabled: ${PROMETHEUS_SCRAPE_ENABLED:false}
       username: ${PROMETHEUS_SCRAPE_USERNAME:prometheus}
       password: ${PROMETHEUS_SCRAPE_PASSWORD:}
+  # First admin account (see AdminBootstrap). Outside dev there is no other way to
+  # get one: sign-up makes customers, and the dev seeder's admins are dev-only.
+  # Off while ADMIN_EMAIL is empty. ADMIN_PASSWORD (12-72 characters) is only used
+  # to create the account; an existing account keeps its password, so remove it
+  # from the environment once the first start has created the admin.
+  bootstrap:
+    admin:
+      email: ${ADMIN_EMAIL:}
+      password: ${ADMIN_PASSWORD:}
   # Optional feature modules (see WishlistModule). Turning one off removes its
   # endpoints, services and scheduled jobs; every other module is always on.
   modules:
