@@ -14,6 +14,15 @@ public class CartController {
 
     private final CartServiceInterface cartServiceInterface;
 
+    /**
+     * The signed-in user's cart, found from the token. 404 until their first
+     * add-to-cart creates it.
+     */
+    @GetMapping("/mine")
+    public ResponseEntity<ApiResponse<?>> getMyCart(){
+        return ResponseEntity.ok(new ApiResponse<>("Success", cartServiceInterface.getMyCartDto()));
+    }
+
     @GetMapping("/{cartId}")
     public ResponseEntity<ApiResponse<?>> getCart(@PathVariable Long cartId){
         CartDto cart = cartServiceInterface.getCartDto(cartId);

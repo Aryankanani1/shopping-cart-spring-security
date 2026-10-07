@@ -1,18 +1,5 @@
 package com.aryan.spring_security_demo.common.exception;
 
-import com.aryan.spring_security_demo.cart.CartNotFoundException;
-import com.aryan.spring_security_demo.catalog.CategoryNotFoundException;
-import com.aryan.spring_security_demo.catalog.ImageNotFoundException;
-import com.aryan.spring_security_demo.catalog.InsufficientStockException;
-import com.aryan.spring_security_demo.catalog.InvalidImageException;
-import com.aryan.spring_security_demo.catalog.ProductInUseException;
-import com.aryan.spring_security_demo.catalog.ProductNotFoundException;
-import com.aryan.spring_security_demo.identity.InvalidPasswordException;
-import com.aryan.spring_security_demo.identity.InvalidRefreshTokenException;
-import com.aryan.spring_security_demo.identity.UserNotFoundException;
-import com.aryan.spring_security_demo.order.EmptyCartException;
-import com.aryan.spring_security_demo.order.InvalidCursorException;
-import com.aryan.spring_security_demo.order.InvalidOrderStateException;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -66,53 +53,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // found"), never an internal/framework message, so it is safe to return.
     // -----------------------------------------------------------------------
 
-    /** 404 — the requested resource does not exist. */
-    @ExceptionHandler({
-            ResourceNotFoundException.class,
-            CartNotFoundException.class,
-            ProductNotFoundException.class,
-            CategoryNotFoundException.class,
-            ImageNotFoundException.class,
-            UserNotFoundException.class
-    })
-    public ProblemDetail handleNotFound(RuntimeException ex) {
+    /** 404 — the requested resource does not exist (every module's "not found" extends this). */
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ProblemDetail handleNotFound(ResourceNotFoundException ex) {
         log.debug("404 Not found: {}", ex.getMessage());
         return problem(HttpStatus.NOT_FOUND, "Resource not found", ex.getMessage());
     }
 
-    /** 409 — the resource being created already exists. */
-    @ExceptionHandler(AlreadyExistsException.class)
-    public ProblemDetail handleConflict(AlreadyExistsException ex) {
-        log.debug("409 Conflict: {}", ex.getMessage());
-        return problem(HttpStatus.CONFLICT, "Resource already exists", ex.getMessage());
-    }
-
-    /** 409 — an order-status change that the lifecycle state machine forbids. */
-    @ExceptionHandler(InvalidOrderStateException.class)
-    public ProblemDetail handleInvalidOrderState(InvalidOrderStateException ex) {
-        log.debug("409 Invalid order state: {}", ex.getMessage());
-        return problem(HttpStatus.CONFLICT, "Invalid order state", ex.getMessage());
-    }
-
-    /** 409 — a cart line or order asks for more units than are in stock. */
-    @ExceptionHandler(InsufficientStockException.class)
-    public ProblemDetail handleInsufficientStock(InsufficientStockException ex) {
-        log.debug("409 Insufficient stock: {}", ex.getMessage());
-        return problem(HttpStatus.CONFLICT, "Insufficient stock", ex.getMessage());
-    }
-
-    /** 409 — deleting a product that past orders still refer to. */
-    @ExceptionHandler(ProductInUseException.class)
-    public ProblemDetail handleProductInUse(ProductInUseException ex) {
-        log.debug("409 Product in use: {}", ex.getMessage());
-        return problem(HttpStatus.CONFLICT, "Product in use", ex.getMessage());
-    }
-
-    /** 409 — checkout attempted with nothing in the cart. */
-    @ExceptionHandler(EmptyCartException.class)
-    public ProblemDetail handleEmptyCart(EmptyCartException ex) {
-        log.debug("409 Empty cart: {}", ex.getMessage());
-        return problem(HttpStatus.CONFLICT, "Cart is empty", ex.getMessage());
+    /**
+     * 409 — the request conflicts with current state: a duplicate, an illegal
+     * order-status change, too little stock, a product still in orders, an empty
+     * cart. Each exception names its own title (see {@link ConflictException}).
+     */
+    @ExceptionHandler(ConflictException.class)
+    public ProblemDetail handleConflict(ConflictException ex) {
+        log.debug("409 {}: {}", ex.getTitle(), ex.getMessage());
+        return problem(HttpStatus.CONFLICT, ex.getTitle(), ex.getMessage());
     }
 
     /** 401 — a bad or expired JWT surfaced from within a controller. */
@@ -123,14 +79,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     /**
-     * 401 — the presented refresh token is unknown, expired, or revoked. The
-     * detail is generic so a caller cannot distinguish those cases and probe for
-     * valid tokens.
+     * 401 — a credential was refused, e.g. an unknown, expired or revoked refresh
+     * token. The detail is the exception's fixed public one, the same whatever the
+     * reason, so a caller cannot probe for valid credentials.
      */
-    @ExceptionHandler(InvalidRefreshTokenException.class)
-    public ProblemDetail handleInvalidRefreshToken(InvalidRefreshTokenException ex) {
-        log.debug("401 Invalid refresh token: {}", ex.getMessage());
-        return problem(HttpStatus.UNAUTHORIZED, "Authentication failed", "Invalid or expired refresh token");
+    @ExceptionHandler(AuthenticationFailedException.class)
+    public ProblemDetail handleAuthenticationFailed(AuthenticationFailedException ex) {
+        log.debug("401 Authentication failed: {}", ex.getMessage());
+        return problem(HttpStatus.UNAUTHORIZED, "Authentication failed", ex.getDetail());
     }
 
     /**
@@ -175,35 +131,25 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, problem, headers, HttpStatus.BAD_REQUEST, request);
     }
 
-    /** 400 — client asked to sort on a field outside the endpoint's allowlist. */
-    @ExceptionHandler(InvalidSortException.class)
-    public ProblemDetail handleInvalidSort(InvalidSortException ex) {
-        log.debug("400 Invalid sort: {}", ex.getMessage());
-        return problem(HttpStatus.BAD_REQUEST, "Invalid sort parameter", ex.getMessage());
-    }
-
-    /** 400 — client supplied a malformed/tampered pagination cursor. */
-    @ExceptionHandler(InvalidCursorException.class)
-    public ProblemDetail handleInvalidCursor(InvalidCursorException ex) {
-        log.debug("400 Invalid cursor: {}", ex.getMessage());
-        return problem(HttpStatus.BAD_REQUEST, "Invalid pagination cursor", ex.getMessage());
-    }
-
-    /** 400 — an uploaded file is empty or not a supported image type. */
-    @ExceptionHandler(InvalidImageException.class)
-    public ProblemDetail handleInvalidImage(InvalidImageException ex) {
-        log.debug("400 Invalid image: {}", ex.getMessage());
-        return problem(HttpStatus.BAD_REQUEST, "Invalid image", ex.getMessage());
+    /**
+     * 400 — a request Bean Validation can't judge: an unknown sort field, a
+     * tampered pagination cursor, a file that isn't an image. Each exception names
+     * its own title (see {@link BadRequestException}).
+     */
+    @ExceptionHandler(BadRequestException.class)
+    public ProblemDetail handleBadRequest(BadRequestException ex) {
+        log.debug("400 {}: {}", ex.getTitle(), ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, ex.getTitle(), ex.getMessage());
     }
 
     /**
-     * 400 — a password change was rejected (wrong current password, or the new one
-     * is unchanged). Shaped like a validation failure, with the message under the
+     * 400 — one field failed a check made in the service (e.g. a wrong current
+     * password). Shaped like a validation failure, with the message under the
      * offending field, so clients render it exactly like an {@code @Valid} error.
      */
-    @ExceptionHandler(InvalidPasswordException.class)
-    public ProblemDetail handleInvalidPassword(InvalidPasswordException ex) {
-        log.debug("400 Invalid password change: {}", ex.getMessage());
+    @ExceptionHandler(FieldValidationException.class)
+    public ProblemDetail handleFieldValidation(FieldValidationException ex) {
+        log.debug("400 Invalid {}: {}", ex.getField(), ex.getMessage());
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "Validation failed", ex.getMessage());
         problem.setProperty("errors", Map.of(ex.getField(), ex.getMessage()));
         return problem;

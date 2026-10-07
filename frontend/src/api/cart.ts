@@ -3,8 +3,11 @@ import type { CartDto } from './types'
 
 // Note: add-to-cart takes no cartId — the backend resolves (and lazily creates)
 // the authenticated user's cart. Mutations that DO need the cartId get it from
-// the user's embedded cart (usersApi.get -> cart.cartId).
+// the caller's cart (cartApi.mine -> cartId).
 export const cartApi = {
+  /** The signed-in user's cart; the API answers 404 until the first add-to-cart creates it. */
+  mine: () => request<CartDto>('/carts/mine'),
+
   addItem: (productId: number, quantity: number) =>
     request<null>('/cartItems', { method: 'POST', query: { productId, quantity } }),
 

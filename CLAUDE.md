@@ -50,7 +50,7 @@ no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s one
 ### API and errors
 - Success responses are wrapped in `ApiResponse` (`{message, data}`).
 - Errors are thrown as exceptions and turned into RFC 7807 responses by `common/exception/GlobalExceptionHandler`; controllers never build error responses themselves.
-- A new exception type must be mapped in `GlobalExceptionHandler` to its 4xx status, or it surfaces as a 500.
+- A new exception type extends one of the base types in `common/exception`, which `GlobalExceptionHandler` maps: `ResourceNotFoundException` (404), `ConflictException` (409), `BadRequestException` (400), `FieldValidationException` (400 with a field error) or `AuthenticationFailedException` (401). One that extends none of them surfaces as a 500.
 - Request bodies are dedicated request classes validated with `@Valid` and Bean Validation annotations.
 - Use `201 Created` with a `Location` header for creates, `204 No Content` for deletes, `404` for missing records, `409` for conflicts and `400` for invalid input.
 - Endpoints that list data which grows without bound (products, orders, notifications) must be paginated.

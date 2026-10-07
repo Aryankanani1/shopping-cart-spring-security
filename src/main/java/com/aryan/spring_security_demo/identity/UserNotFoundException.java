@@ -1,6 +1,8 @@
 package com.aryan.spring_security_demo.identity;
 
-public class UserNotFoundException extends RuntimeException {
+import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
+
+public class UserNotFoundException extends ResourceNotFoundException {
 
     public UserNotFoundException(String message){
         super(message);

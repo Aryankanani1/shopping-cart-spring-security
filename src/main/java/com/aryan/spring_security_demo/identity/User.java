@@ -1,6 +1,5 @@
 package com.aryan.spring_security_demo.identity;
 
-import com.aryan.spring_security_demo.cart.Cart;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -32,9 +31,6 @@ public class User {
     @NaturalId
     private String email;
     private String password;
-
-    @OneToOne(mappedBy = "user" ,cascade = CascadeType.ALL,orphanRemoval = true, fetch = FetchType.LAZY)
-    private Cart cart;
 
     @BatchSize(size = 20)
     @ManyToMany(fetch = FetchType.LAZY,cascade = {CascadeType.MERGE,

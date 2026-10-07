@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cartApi } from '../api/cart'
-import { usersApi } from '../api/users'
+import { ApiError } from '../api/client'
 import type { CartDto } from '../api/types'
 import { useAuth } from './AuthContext'
 import { queryKeys } from '../api/queryKeys'
@@ -44,9 +44,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const cartKey = queryKeys.cart(userId)
 
-  // The cart id isn't known up front (add-to-cart takes none), so resolve the
-  // whole cart from the user record. React Query keys it by user, caches it and
-  // dedupes concurrent readers — no more manual refresh() wiring in every page.
+  // The cart id isn't known up front (add-to-cart takes none), so load the
+  // caller's cart from GET /carts/mine; a 404 means there is none yet. React Query
+  // keys it by user, caches it and dedupes concurrent readers.
   const {
     data: cart = null,
     isLoading,
@@ -54,8 +54,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   } = useQuery({
     queryKey: cartKey,
     queryFn: async () => {
-      const user = await usersApi.get(userId as number)
-      return user.cart ?? null
+      try {
+        return await cartApi.mine()
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null
+        throw error
+      }
     },
     enabled: userId != null,
   })

@@ -34,7 +34,7 @@ public class UserService implements UserServiceInterface{
     public User getUserById(Long userId) {
         // Accounts are private: only the owner (or an admin) may read one.
         authUtils.requireSelfOrAdmin(userId);
-        return userRepository.findByIdWithCart(userId).orElseThrow(() -> new UserNotFoundException("failed to find user"));
+        return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException("failed to find user"));
     }
 
     @Override
@@ -73,8 +73,10 @@ public class UserService implements UserServiceInterface{
             // cascade), and any signed-in user has at least one token row — clear
             // them first or the delete fails on the constraint (surfacing as 409).
             refreshTokenService.endAllSessions(userId);
-            // Orders still open are cancelled and restocked first (OrderIdentityListener).
-            // The rest are kept for the shop's records: the database unlinks them.
+            // Other modules settle their rows first: the cart is deleted
+            // (CartIdentityListener), and orders still open are cancelled and
+            // restocked (OrderIdentityListener). The rest of the orders are kept
+            // for the shop's records: the database unlinks them.
             events.publishEvent(new UserDeletingEvent(userId));
             userRepository.delete(user);
         }, () -> {
@@ -106,13 +108,10 @@ public class UserService implements UserServiceInterface{
     }
 
     // ---- DTO-returning operations: load + map in ONE transaction --------------
-    // UserDto pulls in the cart (-> cartItems -> products), all lazy.
-    // findByIdWithCart fetches the cart, but its nested cartItems still
-    // lazy-load. Converting
-    // inside the transaction lets those resolve while the session is open —
-    // without this, ModelMapper walks a lazy collection after the tx closed and
-    // (open-in-view=false) throws LazyInitializationException. Controllers call
-    // these and never map a User entity themselves.
+    // Converting inside the transaction keeps any lazy association readable while
+    // the session is open (open-in-view is off). Controllers call these and never
+    // map a User entity themselves. The cart is not part of the account: it is
+    // served by GET /carts/mine.
 
     @Override
     @Transactional(readOnly = true)

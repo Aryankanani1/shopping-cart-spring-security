@@ -71,6 +71,20 @@ public class CartService implements CartServiceInterface{
         return modelMapper.map(getCart(id), CartDto.class);
     }
 
+    /**
+     * The caller's own cart, mapped inside the transaction. Whose cart it is comes
+     * from the token, so there is no id to guess (no IDOR, no ownership check).
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public CartDto getMyCartDto() {
+        Cart cart = cartRepository.findByUserId(authUtils.currentUserId());
+        if (cart == null) {
+            throw new CartNotFoundException("You have no cart yet");
+        }
+        return modelMapper.map(cart, CartDto.class);
+    }
+
     @Override
     @Transactional
     public void clearCart(Long id) {

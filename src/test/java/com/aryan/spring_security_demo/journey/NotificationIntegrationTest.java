@@ -100,11 +100,11 @@ class NotificationIntegrationTest {
         WishlistItem bobItem = wishlistItemRepository.save(new WishlistItem(bob, product, T0));
 
         // Alice: three entries, oldest first. Bob: one.
-        reminderId = notificationRepository.save(Notification.reminder(aliceItem, T0.plusSeconds(60))).getId();
+        reminderId = notificationRepository.save(Notification.reminder(aliceItem.getUser(), aliceItem.getProduct(), T0.plusSeconds(60))).getId();
         notificationRepository.save(Notification.priceDrop(
-                aliceItem, new BigDecimal("40.00"), new BigDecimal("32.50"), T0.plusSeconds(120)));
-        notificationRepository.save(Notification.backInStock(aliceItem, T0.plusSeconds(180)));
-        bobNotificationId = notificationRepository.save(Notification.reminder(bobItem, T0.plusSeconds(60))).getId();
+                aliceItem.getUser(), aliceItem.getProduct(), new BigDecimal("40.00"), new BigDecimal("32.50"), T0.plusSeconds(120)));
+        notificationRepository.save(Notification.backInStock(aliceItem.getUser(), aliceItem.getProduct(), T0.plusSeconds(180)));
+        bobNotificationId = notificationRepository.save(Notification.reminder(bobItem.getUser(), bobItem.getProduct(), T0.plusSeconds(60))).getId();
 
         aliceToken = login("alice@example.com");
     }

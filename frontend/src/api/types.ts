@@ -112,7 +112,6 @@ export interface UserDto {
   firstName: string
   lastName: string
   email: string
-  cart?: CartDto | null
 }
 
 export interface WishlistItemDto {

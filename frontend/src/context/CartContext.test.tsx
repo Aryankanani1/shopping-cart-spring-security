@@ -4,15 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './AuthContext'
 import { CartProvider, useCart } from './CartContext'
 import { setSession } from '../api/tokenStore'
-import type { CartDto, UserDto } from '../api/types'
+import type { CartDto } from '../api/types'
+import { ApiError } from '../api/client'
 
-// The cart is resolved from the user record; add-to-cart hits cartApi. Mock both.
-vi.mock('../api/users', () => ({ usersApi: { get: vi.fn() } }))
+// The cart comes from GET /carts/mine; add-to-cart and the line changes hit cartApi too.
 vi.mock('../api/cart', () => ({
-  cartApi: { addItem: vi.fn(), updateQuantity: vi.fn(), removeItem: vi.fn(), clear: vi.fn() },
+  cartApi: { mine: vi.fn(), addItem: vi.fn(), updateQuantity: vi.fn(), removeItem: vi.fn(), clear: vi.fn() },
 }))
 
-import { usersApi } from '../api/users'
 import { cartApi } from '../api/cart'
 
 function cartWith(items: Array<{ itemId: number; quantity: number }>): CartDto {
@@ -35,10 +34,6 @@ function cartWith(items: Array<{ itemId: number; quantity: number }>): CartDto {
       },
     })),
   }
-}
-
-function userWith(cart: CartDto | null): UserDto {
-  return { id: 7, firstName: 'A', lastName: 'B', email: 'a@b.com', cart }
 }
 
 function Probe() {
@@ -72,40 +67,48 @@ function renderCart() {
 beforeEach(() => {
   localStorage.clear()
   setSession(null)
-  vi.mocked(usersApi.get).mockReset()
+  vi.mocked(cartApi.mine).mockReset()
   vi.mocked(cartApi.addItem).mockReset()
 })
 
 describe('CartContext', () => {
   it('is empty and makes no API call when signed out', () => {
     renderCart()
-    expect(usersApi.get).not.toHaveBeenCalled()
+    expect(cartApi.mine).not.toHaveBeenCalled()
     expect(screen.getByTestId('count').textContent).toBe('0')
   })
 
-  it('resolves the cart from the user record and sums item quantities', async () => {
+  it('loads the caller\'s cart and sums item quantities', async () => {
     setSession({ id: 7, token: 't', refreshToken: 'r' })
-    vi.mocked(usersApi.get).mockResolvedValue(
-      userWith(cartWith([{ itemId: 1, quantity: 2 }, { itemId: 2, quantity: 3 }])),
-    )
+    vi.mocked(cartApi.mine).mockResolvedValue(cartWith([{ itemId: 1, quantity: 2 }, { itemId: 2, quantity: 3 }]))
 
     renderCart()
 
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('5'))
-    expect(usersApi.get).toHaveBeenCalledWith(7)
     expect(screen.getByTestId('cartId').textContent).toBe('500')
+  })
+
+  it('treats a 404 as no cart yet', async () => {
+    setSession({ id: 7, token: 't', refreshToken: 'r' })
+    vi.mocked(cartApi.mine).mockRejectedValue(new ApiError(404, 'You have no cart yet'))
+
+    renderCart()
+
+    await waitFor(() => expect(cartApi.mine).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByTestId('cartId').textContent).toBe('none'))
+    expect(screen.getByTestId('count').textContent).toBe('0')
   })
 
   it('addItem calls the API then refreshes the cart', async () => {
     setSession({ id: 7, token: 't', refreshToken: 'r' })
-    vi.mocked(usersApi.get).mockResolvedValue(userWith(cartWith([{ itemId: 1, quantity: 1 }])))
+    vi.mocked(cartApi.mine).mockResolvedValue(cartWith([{ itemId: 1, quantity: 1 }]))
     vi.mocked(cartApi.addItem).mockResolvedValue(null)
 
     renderCart()
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('1'))
 
     // Simulate the server-side cart growing after the add.
-    vi.mocked(usersApi.get).mockResolvedValue(userWith(cartWith([{ itemId: 1, quantity: 4 }])))
+    vi.mocked(cartApi.mine).mockResolvedValue(cartWith([{ itemId: 1, quantity: 4 }]))
     fireEvent.click(screen.getByText('add'))
 
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('4'))

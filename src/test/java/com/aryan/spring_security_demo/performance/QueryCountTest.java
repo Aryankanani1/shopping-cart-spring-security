@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.performance;
 
+import com.aryan.spring_security_demo.cart.CartRepository;
 import com.aryan.spring_security_demo.catalog.Category;
 import com.aryan.spring_security_demo.catalog.CategoryRepository;
 import com.aryan.spring_security_demo.catalog.Image;
@@ -65,6 +66,7 @@ class QueryCountTest {
     @Autowired private OrderServiceInterface orderService;
 
     @Autowired private UserRepository userRepository;
+    @Autowired private CartRepository cartRepository;
     @Autowired private RoleRepository roleRepository;
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private ProductRepository productRepository;
@@ -75,6 +77,7 @@ class QueryCountTest {
 
     @BeforeEach
     void setUp() {
+        cartRepository.deleteAll();  // FKs on users and products; a cart's lines go with it
         orderRepository.deleteAll();
         imageRepository.deleteAll();
         productRepository.deleteAll();

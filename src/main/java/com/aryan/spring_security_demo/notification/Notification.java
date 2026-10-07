@@ -2,7 +2,6 @@ package com.aryan.spring_security_demo.notification;
 
 import com.aryan.spring_security_demo.catalog.Product;
 import com.aryan.spring_security_demo.identity.User;
-import com.aryan.spring_security_demo.wishlist.WishlistItem;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -69,26 +68,29 @@ public class Notification {
     @Column(name = "read_at")
     private Instant readAt;
 
-    public static Notification reminder(WishlistItem item, Instant now) {
-        return about(item, NotificationType.WISHLIST_REMINDER, now);
+    // The factories take the user and product rather than the wishlist item that
+    // prompted them, so this module needs nothing from the wishlist module.
+    public static Notification reminder(User user, Product product, Instant now) {
+        return about(user, product, NotificationType.WISHLIST_REMINDER, now);
     }
 
-    public static Notification priceDrop(WishlistItem item, BigDecimal oldPrice, BigDecimal newPrice, Instant now) {
-        Notification n = about(item, NotificationType.PRICE_DROP, now);
+    public static Notification priceDrop(User user, Product product, BigDecimal oldPrice, BigDecimal newPrice,
+                                         Instant now) {
+        Notification n = about(user, product, NotificationType.PRICE_DROP, now);
         n.oldPrice = oldPrice;
         n.newPrice = newPrice;
         return n;
     }
 
-    public static Notification backInStock(WishlistItem item, Instant now) {
-        return about(item, NotificationType.BACK_IN_STOCK, now);
+    public static Notification backInStock(User user, Product product, Instant now) {
+        return about(user, product, NotificationType.BACK_IN_STOCK, now);
     }
 
-    private static Notification about(WishlistItem item, NotificationType type, Instant now) {
+    private static Notification about(User user, Product product, NotificationType type, Instant now) {
         Notification n = new Notification();
-        n.user = item.getUser();
-        n.product = item.getProduct();
-        n.productName = item.getProduct().getName();
+        n.user = user;
+        n.product = product;
+        n.productName = product.getName();
         n.type = type;
         n.createdAt = now;
         return n;

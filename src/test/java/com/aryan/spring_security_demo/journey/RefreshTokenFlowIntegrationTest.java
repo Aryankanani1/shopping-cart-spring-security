@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.journey;
 
+import com.aryan.spring_security_demo.cart.CartRepository;
 import com.aryan.spring_security_demo.identity.InvalidRefreshTokenException;
 import com.aryan.spring_security_demo.identity.RefreshTokenRepository;
 import com.aryan.spring_security_demo.identity.RefreshTokenService;
@@ -51,6 +52,7 @@ class RefreshTokenFlowIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository userRepository;
+    @Autowired private CartRepository cartRepository;
     @Autowired private RoleRepository roleRepository;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -60,6 +62,7 @@ class RefreshTokenFlowIntegrationTest {
     @BeforeEach
     void setUp() {
         refreshTokenRepository.deleteAll();  // FK on users — clear before the users
+        cartRepository.deleteAll();  // FK on users; a cart's lines go with it
         userRepository.deleteAll();
 
         Role customer = roleRepository.findByName("ROLE_CUSTOMER")
