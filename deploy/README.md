@@ -15,12 +15,15 @@ browser ──HTTPS──▶ web (Caddy) ──/api──▶ api (Spring Boot) �
   its actuator is never published.
 - **MySQL** — a managed database (with its own backups), not a container here.
 
-The images come from GitHub Container Registry. After CI passes on `master`,
-[`publish-images.yml`](../.github/workflows/publish-images.yml) pushes
+The images come from GitHub Container Registry. For every commit on `master`, the
+CI/CD pipeline ([`pipeline.yml`](../.github/workflows/pipeline.yml)) pushes
 `ghcr.io/aryankanani1/shopping-cart-api` and `ghcr.io/aryankanani1/shopping-cart-web`,
-tagged with the commit SHA and `latest`, for `linux/amd64` and `linux/arm64`. They
-are public, like the repository, so pulling them needs no login. They contain the
-same code as the repository and no secrets: those come from `.env` at run time.
+tagged with the commit SHA, for `linux/amd64` and `linux/arm64`, once the commit has
+passed the tests, the security scan and the quality gate. It then starts this setup
+from those images as staging and runs the end-to-end tests against it; the images that
+pass are also tagged `latest`. They are public, like the repository, so pulling them
+needs no login. They contain the same code as the repository and no secrets: those
+come from `.env` at run time.
 
 ## What you need
 
@@ -35,7 +38,8 @@ same code as the repository and no secrets: those come from `.env` at run time.
 ## First deployment
 
 1. Copy this directory to the server, e.g. `/opt/shop`: `docker-compose.yml`,
-   `Caddyfile` and `.env.example`.
+   `Caddyfile`, `deploy.sh` and `.env.example` (not `docker-compose.staging.yml`,
+   which is the pipeline's staging setup).
 2. Create `.env` from `.env.example` and fill it in:
    - `SITE_ADDRESS` — the domain;
    - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` — the managed database, with
@@ -56,13 +60,42 @@ same code as the repository and no secrets: those come from `.env` at run time.
 
 ## Updating
 
+Once it is set up (next section), the pipeline deploys every commit on `master` that
+passes staging, after you approve it in GitHub. By hand, on the server:
+
 ```bash
-docker compose pull && docker compose up -d
+./deploy.sh <commit SHA>     # or: docker compose pull && docker compose up -d   (latest)
 ```
 
-To run a specific build, set `IMAGE_TAG` in `.env` to its commit SHA. Setting it
-back to an earlier SHA rolls back, as long as no newer database migration has run.
-Flyway migrations only move forward, so check before rolling back across one.
+[`deploy.sh`](deploy.sh) sets `IMAGE_TAG` in `.env`, starts that build, waits up to
+five minutes for the API to be ready, and if it isn't, puts the previous build back.
+Running it with an earlier SHA rolls back, as long as no newer database migration has
+run: Flyway migrations only move forward, so check before rolling back across one.
+
+## Deploying from the pipeline
+
+The pipeline's last stage, **Deploy production**, copies `docker-compose.yml`,
+`Caddyfile` and `deploy.sh` to the server over SSH and runs `deploy.sh` with the
+commit's SHA, then checks the site from outside. It runs only for the newest commit on
+`master`, and only after a reviewer approves it in the `production` environment. Until
+`PRODUCTION_URL` is set it is skipped. To set it up, after the first deployment above:
+
+1. On the server, create a user for deployments that may run Docker, and give it the
+   deployment directory (`/opt/shop` by default).
+2. Create an SSH key pair for it (`ssh-keygen -t ed25519 -f shop-deploy -N ''`) and add
+   `shop-deploy.pub` to that user's `~/.ssh/authorized_keys`.
+3. In the repository's **Settings → Environments → production** (required reviewers:
+   you; deployment branches: `master`), add the **secrets**
+   - `PRODUCTION_SSH_KEY` — the private key, `shop-deploy`;
+   - `PRODUCTION_SSH_KNOWN_HOSTS` — the server's host key line, from
+     `ssh-keyscan <server>` checked against the server's own fingerprint;
+   and the **variables** `PRODUCTION_SSH_TARGET` (`user@server`) and, if it isn't
+   `/opt/shop`, `PRODUCTION_DIR`.
+4. In **Settings → Secrets and variables → Actions → Variables**, add the repository
+   variable `PRODUCTION_URL` (`https://<your domain>`). The next commit on `master`
+   then waits for your approval to deploy.
+
+The server's `.env` never leaves the server; the pipeline only changes `IMAGE_TAG`.
 
 ## Checking on it
 

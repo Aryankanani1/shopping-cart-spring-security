@@ -24,5 +24,13 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: false,
+    // `npm run test:coverage`. CI's quality gate reads coverage/coverage-summary.json;
+    // the floors are in the gate (.github/scripts/quality_gate.py), not here.
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/main.tsx', 'src/vite-env.d.ts'],
+      reporter: ['text-summary', 'json-summary', 'html'],
+    },
   },
 })

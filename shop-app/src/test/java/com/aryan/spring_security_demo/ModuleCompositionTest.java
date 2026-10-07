@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo;
 
 import com.aryan.spring_security_demo.common.ModuleConfiguration;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanDefinition;
@@ -24,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * {@link SpringSecurityDemoApplication}: the application class lists its modules
  * instead of scanning, and each module scans only its own package.
  */
+@Tag("integration")
 @SpringBootTest
 @ActiveProfiles("test")
 class ModuleCompositionTest {

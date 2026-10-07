@@ -26,7 +26,7 @@ WORKDIR /workspace
 # dependencies of every module; it skips the project's own modules, which are
 # built from source below.
 COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
+COPY mvnw pom.xml lombok.config ./
 COPY shop-common/pom.xml shop-common/
 COPY shop-identity/pom.xml shop-identity/
 COPY shop-catalog/pom.xml shop-catalog/

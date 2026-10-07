@@ -10,6 +10,7 @@ import com.aryan.spring_security_demo.catalog.ProductDto;
 import com.aryan.spring_security_demo.catalog.ProductRepository;
 import com.aryan.spring_security_demo.catalog.ProductServiceInterface;
 import com.aryan.spring_security_demo.common.web.SlicedResponse;
+import com.aryan.spring_security_demo.identity.RefreshTokenRepository;
 import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
@@ -27,6 +28,7 @@ import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * its <b>own</b> category — otherwise a shared category would be cached on first
  * load and mask a reverted fetch join / entity graph.
  */
+@Tag("integration")
 @SpringBootTest
 @ActiveProfiles("test")
 class QueryCountTest {
@@ -66,6 +69,7 @@ class QueryCountTest {
     @Autowired private OrderServiceInterface orderService;
 
     @Autowired private UserRepository userRepository;
+    @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private CartRepository cartRepository;
     @Autowired private RoleRepository roleRepository;
     @Autowired private CategoryRepository categoryRepository;
@@ -82,6 +86,7 @@ class QueryCountTest {
         imageRepository.deleteAll();
         productRepository.deleteAll();
         categoryRepository.deleteAll();
+        refreshTokenRepository.deleteAll();  // FK on users; other tests' sign-ins leave tokens
         userRepository.deleteAll();
 
         Role customer = roleRepository.findByName("ROLE_CUSTOMER")

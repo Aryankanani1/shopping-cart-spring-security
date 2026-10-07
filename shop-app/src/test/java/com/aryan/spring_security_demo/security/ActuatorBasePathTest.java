@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.security;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * moving the base path keeps metrics admin-only. A path-based rule would have
  * stopped matching and let any signed-in customer in.
  */
+@Tag("integration")
 @SpringBootTest(properties = "management.endpoints.web.base-path=/manage")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

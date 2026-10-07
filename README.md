@@ -500,11 +500,47 @@ accounts are never created in production.
 ./mvnw test                          # every module's tests
 ./mvnw test -pl shop-cart -am        # one module, with the modules it uses
 ./mvnw clean package                 # build; the runnable jar is shop-app/target/shop-app-*.jar
+./mvnw test -DexcludedGroups=integration            # unit tests only
+./mvnw test -pl shop-app -am -Dgroups=integration   # integration tests only
+./mvnw verify                        # all tests + coverage: shop-app/target/site/jacoco-aggregate/index.html
 ```
 
 Unit tests live in the module whose code they test; the tests that need the
 application context (`@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`) are in
-`shop-app`.
+`shop-app`. The `@SpringBootTest` ones are tagged `integration`.
+
+## CI/CD pipeline
+
+[`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml) takes every change
+through these stages:
+
+```
+commit ─▶ Build ─┬─▶ Unit tests ─▶ Integration tests ─┬─▶ Quality gate ──pass──▶ Build artifact ─▶ Staging: deploy + E2E ─▶ Deploy production
+                 └─▶ Security scan ────────────────────┘        │                                                             (after approval)
+                                                               fail
+                                                                ▼
+                                                          Failed build
+```
+
+- **Build** compiles every module (tests included) and builds the storefront.
+- **Unit tests**: JUnit/Mockito and the Spring slices, plus Vitest, with coverage.
+- **Integration tests**: the `@SpringBootTest` tests, the whole API on H2.
+- **Security scan**: OWASP Dependency-Check and `npm audit`, failing on a HIGH or
+  CRITICAL CVE. It also runs daily on `master`.
+- **Quality gate**: runs only if all of the above passed, then holds backend and
+  frontend coverage to the floors in
+  [`quality_gate.py`](.github/scripts/quality_gate.py).
+- **Build artifact**: the API and storefront images. On `master` they are pushed to
+  GitHub Container Registry for amd64 and arm64, tagged with the commit SHA.
+- **Staging (deploy + E2E)**: the production setup from [`deploy/`](deploy/), started
+  on the CI runner from those images with a MySQL container, then the Playwright
+  tests in [`frontend/e2e/`](frontend/e2e/) against it over HTTPS. On `master` the
+  images that pass become `latest`.
+- **Deploy production**: on `master`, after a reviewer approves, over SSH with
+  [`deploy/deploy.sh`](deploy/deploy.sh), which rolls back if the new build doesn't
+  become ready. Setup: [`deploy/README.md`](deploy/README.md).
+
+Pull requests run every stage up to staging; nothing is pushed or deployed from them.
 
 ## Frontend
 
@@ -532,8 +568,9 @@ single-flight token refresh), and a Vitest test suite are covered in
 
 [`deploy/`](deploy/) runs the shop on one server with Docker Compose: Caddy in
 front (automatic HTTPS, the storefront, `/api` proxied to the API) and a managed
-MySQL. CI publishes both images to GitHub Container Registry after the tests and the
-dependency scan pass on `master`, public and for both amd64 and arm64. Steps, updates and limits: [`deploy/README.md`](deploy/README.md).
+MySQL. The CI/CD pipeline (above) builds both images, public and for both amd64 and
+arm64, tests them on staging, and deploys them after approval. Steps, updates and
+limits: [`deploy/README.md`](deploy/README.md).
 
 ## Docker
 

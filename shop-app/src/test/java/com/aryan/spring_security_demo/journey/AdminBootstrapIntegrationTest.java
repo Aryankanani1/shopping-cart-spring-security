@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo.journey;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Outside dev, ADMIN_EMAIL and ADMIN_PASSWORD are the only way to get an admin:
  * the account is created at startup, can sign in, and passes the admin-only rules.
  */
+@Tag("integration")
 @SpringBootTest(properties = {
         "app.bootstrap.admin.email=" + AdminBootstrapIntegrationTest.EMAIL,
         "app.bootstrap.admin.password=" + AdminBootstrapIntegrationTest.PASSWORD})

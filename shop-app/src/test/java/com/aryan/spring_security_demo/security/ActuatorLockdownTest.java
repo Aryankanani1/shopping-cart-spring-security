@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.security;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * the others are switched off ({@code management.endpoints.access.default: none}),
  * so a careless exposure change can't leak the environment or a heap dump.
  */
+@Tag("integration")
 @SpringBootTest(properties = "management.endpoints.web.exposure.include=*")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

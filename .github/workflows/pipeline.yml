@@ -1,0 +1,465 @@
+name: CI/CD
+
+# Every change goes through these stages (the job names, as the run's graph shows them):
+#
+#   Build ─┬─ Unit tests ── Integration tests ─┬─ Quality gate ─ Build artifact ─ Staging (deploy + E2E) ─ Deploy production
+#          └─ Security scan ───────────────────┘
+#   any stage fails ──▶ Failed build (which stage, in the run's summary)
+#
+# Pull request: every stage up to and including staging. The images are built on the
+#   runner for linux/amd64 and handed to the staging job; nothing is pushed.
+# Push to master: every stage. The images go to GitHub Container Registry for
+#   linux/amd64 and linux/arm64, tagged with the commit SHA; staging and the E2E tests
+#   run against exactly those images, which then become `latest`; production gets them
+#   after a reviewer approves (the `production` environment). See deploy/README.md.
+# Daily: Build and Security scan alone on master, so a CVE published for a dependency
+#   that hasn't changed fails a run (and GitHub emails about it) without waiting for a
+#   push. Dependabot alerts don't cover the backend's dependencies for this: GitHub's
+#   dependency graph sees only what the poms list, not Boot's versions or what they
+#   pull in.
+#
+# Make "Quality gate" and "Staging (deploy + E2E)" required checks for master, so a
+# pull request can't merge unless it passes them (and so every stage before them).
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '23 5 * * *'
+
+permissions:
+  contents: read
+
+# A pull request's new push cancels its previous run. A run on master is never
+# cancelled (it may be waiting for production approval): each has its own group.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  API_IMAGE: ghcr.io/aryankanani1/shopping-cart-api
+  WEB_IMAGE: ghcr.io/aryankanani1/shopping-cart-web
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # Compiles every module, tests included, and packages the jar.
+      - name: Backend
+        run: ./mvnw -B -DskipTests package
+      - name: Frontend (type-check and production bundle)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  unit-tests:
+    name: Unit tests
+    needs: build
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # Everything but the @Tag("integration") tests: plain JUnit and Mockito, and
+      # the @WebMvcTest/@DataJpaTest slices.
+      - name: Backend
+        run: ./mvnw -B test -DexcludedGroups=integration -Djacoco.destFile=target/jacoco-unit.exec
+      - name: Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: |
+            */target/jacoco-unit.exec
+            frontend/coverage/coverage-summary.json
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: '*/target/surefire-reports/'
+          if-no-files-found: ignore
+
+  integration-tests:
+    name: Integration tests
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      # The @Tag("integration") tests: the whole application on H2 (`test` profile).
+      - run: ./mvnw -B -pl shop-app -am test -Dgroups=integration -Djacoco.destFile=target/jacoco-it.exec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-it
+          path: '*/target/jacoco-it.exec'
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: shop-app/target/surefire-reports/
+          if-no-files-found: ignore
+
+  # Fails on a dependency with a known CVE of HIGH or CRITICAL severity; CLAUDE.md
+  # ("Dependencies and vulnerabilities") says how to fix one.
+  security-scan:
+    name: Security scan
+    needs: build
+    runs-on: ubuntu-latest
+    # The first run downloads the whole NVD database: minutes with an API key,
+    # about an hour without one. Later runs start from the cached copy.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Backend: OWASP Dependency-Check, configured in pom.xml. Its NVD database is
+      # cached once a day; a run restores the newest copy and downloads only what
+      # changed since. The update is a step of its own so that the database is
+      # saved even when the scan then fails on a finding, and is not saved when
+      # the update itself fails part-way.
+      - id: today
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - id: nvd-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.dependency-check-data
+          key: dependency-check-data-${{ steps.today.outputs.date }}
+          restore-keys: dependency-check-data-
+      - name: Update the NVD database
+        env:
+          # Optional: without it the update works, only much more slowly. Forks
+          # and Dependabot's pull requests don't get the secret.
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: ./mvnw -B dependency-check:update-only -DdataDirectory="$HOME/.dependency-check-data"
+      - if: steps.nvd-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.dependency-check-data
+          key: dependency-check-data-${{ steps.today.outputs.date }}
+      # `package` first, so the scan finds the project's own modules as jars.
+      - name: Backend dependencies (OWASP Dependency-Check)
+        run: >-
+          ./mvnw -B -Dmaven.test.skip=true package dependency-check:aggregate
+          -DautoUpdate=false -DdataDirectory="$HOME/.dependency-check-data"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: target/dependency-check-report.html
+          if-no-files-found: ignore
+
+      # Frontend: the packages that ship in the bundle, not the build and test tools.
+      - name: Frontend dependencies (npm audit)
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+  # Runs only when every stage before it passed, then checks coverage against the
+  # floors in .github/scripts/quality_gate.py.
+  quality-gate:
+    name: Quality gate
+    needs: [build, unit-tests, integration-tests, security-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+      # shop-app's report-aggregate (on `verify`) merges every module's
+      # target/*.exec: the unit and the integration stage's coverage.
+      - name: Merge the coverage of both test stages
+        run: ./mvnw -B -DskipTests verify
+      - name: Check the gate
+        env:
+          STAGES: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/quality_gate.py
+
+  build-artifact:
+    name: Build artifact
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: api
+            context: .
+            file: Dockerfile
+          - name: web
+            context: frontend
+            file: frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - id: image
+        run: echo "ref=${{ matrix.name == 'api' && env.API_IMAGE || env.WEB_IMAGE }}:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+
+      # Pull request: amd64 only, saved as a file for the staging job.
+      - if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          tags: ${{ steps.image.outputs.ref }}
+          outputs: type=docker,dest=${{ runner.temp }}/${{ matrix.name }}.tar
+          cache-from: type=gha,scope=shopping-cart-${{ matrix.name }}
+      - if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.name }}
+          path: ${{ runner.temp }}/${{ matrix.name }}.tar
+          retention-days: 1
+
+      # master: both platforms, pushed. QEMU emulates arm64 for the few steps of
+      # each image's final stage; the jar and the storefront are built natively
+      # ($BUILDPLATFORM in the Dockerfiles).
+      - if: github.event_name == 'push'
+        uses: docker/setup-qemu-action@v3
+      - if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.image.outputs.ref }}
+          cache-from: type=gha,scope=shopping-cart-${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=shopping-cart-${{ matrix.name }}
+
+  # The production setup (deploy/docker-compose.yml and Caddyfile) started on the
+  # runner from the new images, with a MySQL container for the managed database
+  # (deploy/docker-compose.staging.yml); then the Playwright tests in frontend/e2e
+  # run against it over HTTPS. Nothing is kept afterwards.
+  staging:
+    name: Staging (deploy + E2E)
+    needs: build-artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: github.event_name == 'pull_request'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/images
+      - if: github.event_name == 'pull_request'
+        name: Load the images built for this pull request
+        run: for f in "$RUNNER_TEMP"/images/*.tar; do docker load --input "$f"; done
+
+      - name: Deploy staging
+        working-directory: deploy
+        run: |
+          # Throwaway secrets, hidden from the log.
+          DB_PASSWORD=$(openssl rand -hex 24)
+          JWT_SECRET=$(openssl rand -base64 32)
+          ADMIN_PASSWORD=$(openssl rand -hex 24)
+          for value in "$DB_PASSWORD" "$JWT_SECRET" "$ADMIN_PASSWORD"; do echo "::add-mask::$value"; done
+          umask 077
+          cat > .env <<EOF
+          IMAGE_TAG=$IMAGE_TAG
+          SITE_ADDRESS=localhost
+          DB_URL=jdbc:mysql://db:3306/shop?sslMode=REQUIRED
+          DB_USERNAME=shop
+          DB_PASSWORD=$DB_PASSWORD
+          JWT_SECRET=$JWT_SECRET
+          ADMIN_EMAIL=admin@staging.test
+          ADMIN_PASSWORD=$ADMIN_PASSWORD
+          EOF
+          echo "E2E_ADMIN_EMAIL=admin@staging.test" >> "$GITHUB_ENV"
+          echo "E2E_ADMIN_PASSWORD=$ADMIN_PASSWORD" >> "$GITHUB_ENV"
+          # On master the images aren't here yet and are pulled from the registry.
+          docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
+          for _ in $(seq 60); do
+            if docker compose exec -T web wget -qO- http://api:8080/actuator/health/readiness 2>/dev/null | grep -q '"status":"UP"'; then
+              echo "Staging is ready."; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Staging did not become ready in 5 minutes."; exit 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: E2E tests
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: https://localhost
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run e2e
+
+      - if: failure()
+        name: Staging logs
+        working-directory: deploy
+        run: docker compose -f docker-compose.yml -f docker-compose.staging.yml logs --no-color --tail=200 api web
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+      - if: always()
+        name: Remove staging
+        working-directory: deploy
+        run: docker compose -f docker-compose.yml -f docker-compose.staging.yml down -v
+
+      # master: the images that just passed become `latest`, unless master has
+      # moved on meanwhile (a newer run will do it then).
+      - if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: github.event_name == 'push'
+        name: Tag the images `latest`
+        run: |
+          if [ "$(git ls-remote origin refs/heads/master | cut -f1)" != "$GITHUB_SHA" ]; then
+            echo "master has moved on; leaving latest to the newer run."; exit 0
+          fi
+          for image in "$API_IMAGE" "$WEB_IMAGE"; do
+            docker buildx imagetools create --tag "$image:latest" "$image:$GITHUB_SHA"
+          done
+
+  # Skipped until the repository variable PRODUCTION_URL is set; the rest of the
+  # setup (server, SSH key, environment secrets) is in deploy/README.md.
+  deploy-production:
+    name: Deploy production
+    needs: staging
+    if: github.event_name == 'push' && vars.PRODUCTION_URL != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    # One deployment at a time; a newer one waiting replaces an older one waiting.
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      TARGET: ${{ vars.PRODUCTION_SSH_TARGET }}
+      DIR: ${{ vars.PRODUCTION_DIR || '/opt/shop' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Only the newest commit on master
+        id: newest
+        run: |
+          if [ "$(git ls-remote origin refs/heads/master | cut -f1)" = "$GITHUB_SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::master has moved on since this build; its own run deploys the newer one."
+          fi
+      - if: steps.newest.outputs.deploy == 'true'
+        name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          # Pinned host key: never trust whatever answers on first connect.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf 'Host prod\n  HostName %s\n  User %s\n  IdentityFile ~/.ssh/id_deploy\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n' \
+            "${TARGET#*@}" "${TARGET%@*}" > ~/.ssh/config
+      - if: steps.newest.outputs.deploy == 'true'
+        name: Deploy
+        run: |
+          # $DIR and $GITHUB_SHA are meant to expand here, on the runner (SC2029).
+          # shellcheck disable=SC2029
+          ssh prod "mkdir -p '$DIR/release'"
+          scp deploy/docker-compose.yml deploy/Caddyfile deploy/deploy.sh "prod:$DIR/release/"
+          # shellcheck disable=SC2029
+          ssh prod "cd '$DIR' && bash release/deploy.sh '$GITHUB_SHA'"
+      - if: steps.newest.outputs.deploy == 'true'
+        name: Check it from outside
+        env:
+          URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          curl -fsS -o /dev/null "$URL/"
+          curl -fsS -o /dev/null "$URL/api/v1/products"
+          echo "Production serves $GITHUB_SHA."
+
+  # The "failed build" end of the pipeline: names the stages that failed.
+  failed-build:
+    name: Failed build
+    needs: [build, unit-tests, integration-tests, security-scan, quality-gate, build-artifact, staging, deploy-production]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report
+        env:
+          STAGES: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          stages = json.loads(os.environ["STAGES"])
+          failed = [name for name, s in stages.items() if s["result"] == "failure"]
+          lines = ["## Failed build", "", "| Stage | Result |", "|---|---|"]
+          lines += [f"| {name} | {s['result']} |" for name, s in stages.items()]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("\n".join(lines) + "\n")
+          for name in failed:
+              print(f"::error::Stage failed: {name}")
+          EOF
+          exit 1

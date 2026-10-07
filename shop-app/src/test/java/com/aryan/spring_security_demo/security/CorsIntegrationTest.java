@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.security;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * API from a browser; any other origin is refused, and the CORS headers stay off
  * everything but the API.
  */
+@Tag("integration")
 @SpringBootTest(properties = "app.cors.allowed-origins=" + CorsIntegrationTest.SHOP)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
