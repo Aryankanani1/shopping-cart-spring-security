@@ -18,24 +18,32 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EnvExampleTest {
 
     private static final Path ENV_EXAMPLE = Path.of(".env.example");
+    private static final Path DEPLOY_ENV_EXAMPLE = Path.of("deploy/.env.example");
 
     // Regression: JWT_SECRET shipped with a working key, so anyone could sign an
     // admin token for a stack started from the example.
     @ParameterizedTest
     @ValueSource(strings = {"JWT_SECRET", "PROMETHEUS_SCRAPE_PASSWORD", "GRAFANA_ADMIN_PASSWORD"})
     void secretsAreLeftEmpty(String key) throws IOException {
-        assertThat(valueOf(key)).as(key + " in .env.example").isEmpty();
+        assertThat(valueOf(ENV_EXAMPLE, key)).as(key + " in .env.example").isEmpty();
+    }
+
+    // The production example (deploy/) is just as public.
+    @ParameterizedTest
+    @ValueSource(strings = {"DB_PASSWORD", "JWT_SECRET", "ADMIN_PASSWORD"})
+    void productionSecretsAreLeftEmpty(String key) throws IOException {
+        assertThat(valueOf(DEPLOY_ENV_EXAMPLE, key)).as(key + " in deploy/.env.example").isEmpty();
     }
 
     /** The value of {@code key}, without a trailing {@code # comment}. */
-    private static String valueOf(String key) throws IOException {
-        for (String line : Files.readAllLines(ENV_EXAMPLE)) {
+    private static String valueOf(Path file, String key) throws IOException {
+        for (String line : Files.readAllLines(file)) {
             if (line.startsWith(key + "=")) {
                 String value = line.substring(key.length() + 1);
                 int comment = value.indexOf(" #");
                 return (comment >= 0 ? value.substring(0, comment) : value).trim();
             }
         }
-        throw new AssertionError(key + " is missing from .env.example");
+        throw new AssertionError(key + " is missing from " + file);
     }
 }

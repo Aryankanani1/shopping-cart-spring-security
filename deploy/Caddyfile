@@ -1,0 +1,41 @@
+# The production front door (see deploy/README.md). For SITE_ADDRESS, Caddy gets
+# and renews an HTTPS certificate by itself, serves the storefront, and proxies
+# /api to the API container. The actuator is not proxied: it stays internal.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# The API. Image uploads may be up to 25 MB per request (spring.servlet.multipart),
+	# so the proxy allows that much. Caddy passes the client's address and scheme in
+	# X-Forwarded-* headers; it ignores any the client sends itself.
+	handle /api/* {
+		request_body {
+			max_size 25MB
+		}
+		reverse_proxy api:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 10s
+		}
+	}
+
+	# The storefront: the built files, and index.html for any other path, because
+	# the app routes on the client (BrowserRouter): /orders/42 has no file of its own.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	# Vite puts a content hash in every asset's name, so they can be cached for good;
+	# index.html is not, so a new deploy is picked up on the next load.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}

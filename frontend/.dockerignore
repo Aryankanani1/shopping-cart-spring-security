@@ -1,0 +1,14 @@
+# Installed and built inside the image; never copy the host's.
+node_modules/
+dist/
+coverage/
+
+# Local env files may hold real values; only the image's own settings apply.
+.env
+.env.*
+
+# Not needed to build
+*.md
+.DS_Store
+Dockerfile
+.dockerignore
