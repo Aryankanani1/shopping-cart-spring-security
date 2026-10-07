@@ -19,6 +19,7 @@ import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -258,6 +259,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("409 Optimistic lock conflict", ex);
         return problem(HttpStatus.CONFLICT, "Concurrent modification",
                 "The resource was modified by another request; please retry");
+    }
+
+    /**
+     * 409 — the database gave up on a row lock: two transactions deadlocked (it
+     * rolls one back), or a lock wait timed out. The losing request changed
+     * nothing, so the client can retry it.
+     */
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ProblemDetail handleLockConflict(PessimisticLockingFailureException ex) {
+        log.warn("409 Lock conflict", ex);
+        return problem(HttpStatus.CONFLICT, "Concurrent modification",
+                "The resource was being changed by another request; please retry");
     }
 
     // -----------------------------------------------------------------------

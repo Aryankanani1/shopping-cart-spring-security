@@ -47,8 +47,10 @@ public class OrderService implements OrderServiceInterface{
     @Transactional
     public OrderDto placeOrder(PlaceOrderRequest shippingAddress) {
         // Always the caller's own cart: the user comes from the token, never the request.
+        // Locked first, so an item added while this runs is either ordered or
+        // waits for the cart to be gone, never cleared away without being ordered.
         Long userId = authUtils.currentUserId();
-        Cart cart = cartService.getCartByUserId(userId);
+        Cart cart = cartService.getCartByUserIdForUpdate(userId);
         // The cart is deleted after every order and recreated on the next
         // add-to-cart, so "no cart" and "empty cart" both mean nothing to buy.
         if (cart == null || cart.getCartItems().isEmpty()) {

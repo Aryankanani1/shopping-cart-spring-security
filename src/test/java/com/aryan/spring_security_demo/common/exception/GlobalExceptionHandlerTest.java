@@ -5,6 +5,7 @@ import com.aryan.spring_security_demo.identity.InvalidPasswordException;
 import com.aryan.spring_security_demo.identity.InvalidRefreshTokenException;
 import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ProblemDetail;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -49,6 +50,18 @@ class GlobalExceptionHandlerTest {
 
         assertThat(problem.getStatus()).isEqualTo(409);
         assertThat(problem.getDetail()).contains("retry").doesNotContain("Product");
+    }
+
+    // Regression: a deadlock (or a lock wait that timed out) fell through to the
+    // catch-all and came back as a 500, although retrying is all it needs.
+    @Test
+    void lockConflict_is409AskingToRetryWithoutTheSql() {
+        ProblemDetail problem = handler.handleLockConflict(new CannotAcquireLockException(
+                "could not execute batch [Deadlock found when trying to get lock; try restarting transaction] "
+                        + "[update cart set total_amount=? where id=?]"));
+
+        assertThat(problem.getStatus()).isEqualTo(409);
+        assertThat(problem.getDetail()).contains("retry").doesNotContain("cart");
     }
 
     @Test

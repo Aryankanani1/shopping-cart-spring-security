@@ -22,8 +22,8 @@ public class CartItemService implements CartItemServiceInterface {
     @Override
     @Transactional
     public void addItemToCart(Long cartId, Long productId, Integer quantity) {
-        // get the cart
-        Cart cart = cartService.getCart(cartId);
+        // Lock the cart before reading anything (see CartService#getCartForUpdate).
+        Cart cart = cartService.getCartForUpdate(cartId);
         // get the item
         Product product = productService.getProductById(productId);
         // check if the product already in the cart
@@ -56,7 +56,7 @@ public class CartItemService implements CartItemServiceInterface {
     @Transactional
     public void removeItemFromCart(Long cartId, Long productId) {
 
-        Cart cart = cartService.getCart(cartId);
+        Cart cart = cartService.getCartForUpdate(cartId);
         CartItem itemToRemove = getCartItem(cartId,productId);
         cart.removeItem(itemToRemove);
         cartRepository.save(cart);
@@ -66,7 +66,7 @@ public class CartItemService implements CartItemServiceInterface {
     @Transactional
     public void updateItemQuantity(Long cartId, Long itemId, int quantity) {
 
-        Cart cart = cartService.getCart(cartId);
+        Cart cart = cartService.getCartForUpdate(cartId);
         // Match on the cart line's own id — the id the API path carries — not the
         // product id.
         CartItem item = cart.getCartItems().stream()

@@ -123,7 +123,7 @@ class OrderServiceTest {
         cart.getCartItems().add(ci);
 
         when(authUtils.currentUserId()).thenReturn(OWNER_ID);
-        when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
+        when(cartService.getCartByUserIdForUpdate(OWNER_ID)).thenReturn(cart);
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
         when(modelMapper.map(any(Order.class), eq(OrderDto.class))).thenReturn(new OrderDto());
 
@@ -163,7 +163,7 @@ class OrderServiceTest {
     void placeOrder_withNoCart_isRejectedAsEmpty() {
         // The cart is deleted after each order, so a repeat checkout finds none.
         when(authUtils.currentUserId()).thenReturn(OWNER_ID);
-        when(cartService.getCartByUserId(OWNER_ID)).thenReturn(null);
+        when(cartService.getCartByUserIdForUpdate(OWNER_ID)).thenReturn(null);
 
         assertThatThrownBy(() -> orderService.placeOrder(new PlaceOrderRequest()))
                 .isInstanceOf(EmptyCartException.class);
@@ -176,7 +176,7 @@ class OrderServiceTest {
         Cart cart = new Cart();
         cart.setId(99L);
         when(authUtils.currentUserId()).thenReturn(OWNER_ID);
-        when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
+        when(cartService.getCartByUserIdForUpdate(OWNER_ID)).thenReturn(cart);
 
         assertThatThrownBy(() -> orderService.placeOrder(new PlaceOrderRequest()))
                 .isInstanceOf(EmptyCartException.class);
@@ -196,7 +196,7 @@ class OrderServiceTest {
         cart.setId(99L);
         cart.getCartItems().add(ci);
         when(authUtils.currentUserId()).thenReturn(OWNER_ID);
-        when(cartService.getCartByUserId(OWNER_ID)).thenReturn(cart);
+        when(cartService.getCartByUserIdForUpdate(OWNER_ID)).thenReturn(cart);
 
         assertThatThrownBy(() -> orderService.placeOrder(new PlaceOrderRequest()))
                 .isInstanceOf(InsufficientStockException.class);

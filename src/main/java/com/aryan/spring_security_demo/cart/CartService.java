@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.identity.security.AuthUtils;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -21,18 +22,41 @@ public class CartService implements CartServiceInterface{
     private final UserRepository userRepository;
 
     /**
-     * Sole entry point for loading a cart by id, so the ownership check lives in
-     * one place: every cart-scoped operation (view, clear, total, and each
-     * cart-item mutation in {@code CartItemService}) funnels through here, so a
-     * user can never touch another user's cart by guessing its id (IDOR).
+     * Loads a cart by id for reading. This and {@link #getCartForUpdate} are the
+     * only ways to load a cart by id, and both apply the same ownership check, so
+     * a user can never touch another user's cart by guessing its id (IDOR).
      */
     @Override
     @Transactional(readOnly = true)
     public Cart getCart(Long id) {
         Cart cart = cartRepository.findById(id)
                 .orElseThrow(() -> new CartNotFoundException("cart not found"));
-        authUtils.requireSelfOrAdmin(cart.getUser() == null ? null : cart.getUser().getId());
+        requireOwner(cart);
         return cart;
+    }
+
+    /**
+     * Loads a cart by id to change it: also locks the cart's row until the
+     * caller's transaction ends (see CartRepository#findByIdForUpdate), so it
+     * must run inside one. Every change a customer makes to a cart starts here,
+     * before anything else is read, so it sees what the previous change did.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Cart getCartForUpdate(Long id) {
+        Cart cart = cartRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new CartNotFoundException("cart not found"));
+        requireOwner(cart);
+        return cart;
+    }
+
+    /** The user's cart, locked like {@link #getCartForUpdate}; null when they have none. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Cart getCartByUserIdForUpdate(Long userId) {
+        return cartRepository.findByUserIdForUpdate(userId).orElse(null);
+    }
+
+    private void requireOwner(Cart cart) {
+        authUtils.requireSelfOrAdmin(cart.getUser() == null ? null : cart.getUser().getId());
     }
 
     /**
@@ -51,7 +75,7 @@ public class CartService implements CartServiceInterface{
     @Transactional
     public void clearCart(Long id) {
 
-        Cart cart = getCart(id);
+        Cart cart = getCartForUpdate(id);
         cartItemRepository.deleteAllByCartId(id);
         cart.getCartItems().clear();
         cartRepository.deleteById(id);
