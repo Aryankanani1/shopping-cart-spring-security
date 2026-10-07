@@ -12,6 +12,10 @@ on:
 
 jobs:
   claude-review:
+    # Not on Dependabot's pull requests: they run without the repository's secrets,
+    # so the review could not sign in and would fail. They change only versions,
+    # which CI's tests and dependency scan check.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||

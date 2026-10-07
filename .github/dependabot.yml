@@ -1,0 +1,51 @@
+# Dependabot opens pull requests that keep the dependencies current, each week:
+#   * Maven: the Spring Boot parent (its patch releases carry the security fixes
+#     for Spring, Tomcat, Jackson, Netty, Logback and the rest of its BOM) and the
+#     other versions in the parent pom.
+#   * npm: the frontend's packages.
+#   * GitHub Actions: the actions the workflows use.
+# Minor and patch updates come grouped, one pull request per ecosystem. A major
+# version comes in a pull request of its own, since it can break things.
+#
+# The Docker base images are not listed: their tags (17-jre-jammy, 2-alpine, ...)
+# already follow the patch releases, so every rebuild picks up the fixes, and
+# the only updates Dependabot could propose are new major versions of Java and
+# Node.
+#
+# Separately, Dependabot alerts (a repository setting) report a CVE in a
+# dependency as soon as it is published.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      maven-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Its update fails without an NVD API key; see the note in pom.xml.
+      - dependency-name: org.owasp:dependency-check-maven
+        versions: ['13.0.0']
+    commit-message:
+      prefix: build(deps)
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: build(deps)
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: ci(deps)

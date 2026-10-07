@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- False positives in the OWASP Dependency-Check scan (the plugin in pom.xml).
+
+     A suppression is only for a CVE that does not apply to the artifact it was
+     matched to: one filed against another product with a similar name, or against
+     code the application never loads. A real vulnerability is fixed by upgrading
+     (CLAUDE.md, "Dependencies and vulnerabilities"), never suppressed. Each
+     <suppress> matches one artifact (packageUrl) and one CVE, and its <notes> name
+     the CVE, why it does not apply, and when to look at it again. -->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+	<suppress>
+		<notes><![CDATA[
+		CVE-2022-31691 is in the Spring Tools IDE plugins (Spring Tools 4 for Eclipse
+		up to 4.16.0, the VS Code extensions up to 1.39.0): their YAML editor runs
+		SnakeYAML on untrusted files. It matches spring-boot-devtools only through the
+		shared vmware:spring_boot / spring_tools CPE names; DevTools has no such code,
+		and is also left out of the production jar (optional, excluded on repackage).
+		Look again if a CVE ever names spring-boot-devtools itself.
+		]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.springframework\.boot/spring-boot-devtools@.*$</packageUrl>
+		<cve>CVE-2022-31691</cve>
+	</suppress>
+</suppressions>

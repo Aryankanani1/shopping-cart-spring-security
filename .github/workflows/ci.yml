@@ -1,23 +1,36 @@
 name: CI
 
-# Runs the test suites on every pull request and on master. Make these jobs
-# required in the branch protection rule for master so a PR cannot merge while
-# tests fail. (The Claude review workflow only comments; this is the gate.)
+# Runs the test suites and the dependency scan on every pull request and on
+# master. Make these jobs required in the branch protection rule for master so a
+# PR cannot merge while tests fail or a dependency has a HIGH or CRITICAL CVE.
+# (The Claude review workflow only comments; this is the gate.) Publish images
+# runs only after all of them pass on a push.
+#
+# Once a day it also scans master's dependencies alone, so a CVE published for a
+# dependency that hasn't changed fails a run (and GitHub emails about it) without
+# waiting for the next push. Dependabot alerts don't cover this for the backend:
+# GitHub's dependency graph sees only the dependencies the poms list, without the
+# versions from Boot's BOM or anything they pull in.
 on:
   pull_request:
   push:
     branches: [master]
+  schedule:
+    - cron: '23 5 * * *'
 
 permissions:
   contents: read
 
+# Per event too, so the daily scan never cancels a push's run on master, which
+# Publish images waits for.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   backend-tests:
     name: Backend tests
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +44,7 @@ jobs:
 
   frontend-tests:
     name: Frontend tests and build
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -45,3 +59,64 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+
+  # Fails on a dependency with a known CVE of HIGH or CRITICAL severity; CLAUDE.md
+  # ("Dependencies and vulnerabilities") says how to fix one.
+  dependency-scan:
+    name: Dependency scan
+    runs-on: ubuntu-latest
+    # The first run downloads the whole NVD database: minutes with an API key,
+    # about an hour without one. Later runs start from the cached copy.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Backend: OWASP Dependency-Check, configured in pom.xml. Its NVD database is
+      # cached once a day; a run restores the newest copy and downloads only what
+      # changed since. The update is a step of its own so that the database is
+      # saved even when the scan then fails on a finding, and is not saved when
+      # the update itself fails part-way.
+      - id: today
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+      - id: nvd-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.dependency-check-data
+          key: dependency-check-data-${{ steps.today.outputs.date }}
+          restore-keys: dependency-check-data-
+      - name: Update the NVD database
+        env:
+          # Optional: without it the update works, only much more slowly. Forks
+          # and Dependabot's pull requests don't get the secret.
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: ./mvnw -B dependency-check:update-only -DdataDirectory="$HOME/.dependency-check-data"
+      - if: steps.nvd-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.dependency-check-data
+          key: dependency-check-data-${{ steps.today.outputs.date }}
+      # `package` first, so the scan finds the project's own modules as jars.
+      - name: OWASP Dependency-Check
+        run: >-
+          ./mvnw -B -Dmaven.test.skip=true package dependency-check:aggregate
+          -DautoUpdate=false -DdataDirectory="$HOME/.dependency-check-data"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: target/dependency-check-report.html
+          if-no-files-found: ignore
+
+      # Frontend: the packages that ship in the bundle, not the build and test tools.
+      - name: npm audit
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
