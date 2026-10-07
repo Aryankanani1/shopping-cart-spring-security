@@ -10,7 +10,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.0</version>
+		<version>4.1.1</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.aryan</groupId>
@@ -54,6 +54,19 @@
 		<shedlock.version>7.10.1</shedlock.version>
 		<springdoc-openapi.version>3.1.0</springdoc-openapi.version>
 		<modelmapper.version>3.2.4</modelmapper.version>
+
+		<!-- Overrides of versions the Spring Boot BOM manages, each for CVEs its
+		     version still has. Remove each one once Spring Boot's own version is at
+		     least the one set here. -->
+		<!-- Tomcat (spring-boot-starter-tomcat): Boot 4.1.1's 11.0.24 still has
+		     CVE-2026-65183, CVE-2026-66422, CVE-2026-68763, CVE-2026-65182,
+		     CVE-2026-65905, CVE-2026-65927, CVE-2026-68525, CVE-2026-68569 and
+		     CVE-2026-65637, all fixed in 11.0.25. -->
+		<tomcat.version>11.0.26</tomcat.version>
+		<!-- MySQL Connector/J (runtime driver): Boot's 9.7.0 has CVE-2026-60586 and
+		     CVE-2026-60623 (9.7.0-9.7.1). 26.7.0 is the release after 9.7; Oracle
+		     numbers releases by year and month since then. -->
+		<mysql.version>26.7.0</mysql.version>
 		<!-- spring-boot:run only starts shop-app; the library modules have no main
 		     class, so `./mvnw -pl shop-app -am spring-boot:run` skips them. -->
 		<spring-boot.run.skip>true</spring-boot.run.skip>
