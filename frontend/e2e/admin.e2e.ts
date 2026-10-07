@@ -1,5 +1,4 @@
-import { expect, test } from '@playwright/test'
-import { admin, adminToken, unique } from './support'
+import { admin, adminToken, expect, test, unique } from './support'
 
 // The admin's path: sign in, add a product to the catalogue, and see customers
 // find it in the storefront.
@@ -41,14 +40,16 @@ test('the admin adds a product that customers can then find', async ({ page }) =
     await page.getByLabel('Category').selectOption(category)
     await page.getByLabel('Description').fill('Added by the end-to-end tests.')
     await page.getByRole('button', { name: 'Create product' }).click()
-    await expect(page.getByText(name)).toBeVisible()
+    // The new row in the products table. Not getByText(name): the form then opens
+    // the product for editing, and its "Edit <name>" heading contains the name too.
+    await expect(page.getByRole('cell', { name, exact: true })).toBeVisible()
   })
 
   await test.step('a customer finds it in the storefront', async () => {
     await page.getByRole('button', { name: 'Log out' }).click()
     await page.goto('/products')
     await page.getByLabel('Search products').fill(name)
-    await expect(page.getByText(name)).toBeVisible()
+    await expect(page.getByText(name, { exact: true })).toBeVisible()
   })
 })
 
