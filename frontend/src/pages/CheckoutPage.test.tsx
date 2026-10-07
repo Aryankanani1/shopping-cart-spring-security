@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { CheckoutPage } from './CheckoutPage'
@@ -84,6 +85,37 @@ describe('CheckoutPage', () => {
       country: 'UK',
     })
     expect(refresh).toHaveBeenCalled() // the server emptied the cart
+  })
+
+  it('stays on checkout while the placed order empties the bag, then opens the order', async () => {
+    // Placing the order removes the cart on the server, so the refresh after it
+    // re-renders this page with no items before the page navigates to the order.
+    // In the browser the router applies that navigation as a transition, after
+    // the re-render: the page used to send the "empty" bag to /cart, replacing
+    // the order page.
+    let setCart: (cart: CartDto | null) => void = () => {}
+    vi.mocked(useCart).mockImplementation(() => {
+      const [cart, set] = useState<CartDto | null>(() => cartWith([[10, 1, 2, 24]]))
+      setCart = set
+      return { cart, loading: false, itemCount: 0, refresh, addItem: vi.fn(), setQuantity: vi.fn(), removeItem: vi.fn(), clear: vi.fn() }
+    })
+    let finishRefresh = () => {}
+    refresh.mockImplementation(() => {
+      setCart(null) // GET /carts/mine now answers 404
+      return new Promise<void>((resolve) => (finishRefresh = resolve))
+    })
+    vi.mocked(ordersApi.place).mockResolvedValue(order({ id: 55 }))
+    renderPage(<CheckoutPage />, { path: '/checkout' })
+
+    fillAddress()
+    fireEvent.click(screen.getByRole('button', { name: 'Place order' }))
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
+    expect(screen.getByTestId('location')).toHaveTextContent('/checkout')
+    expect(screen.getByText('Placing your order…')).toBeInTheDocument()
+
+    finishRefresh()
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/orders/55'))
   })
 
   it('marks the order history, catalogue stock and wishlist as stale', async () => {
