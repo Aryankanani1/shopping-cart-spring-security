@@ -404,6 +404,7 @@ app.startup.seed.categories=Electronics,Books,Clothing,Home & Kitchen,Toys,Sport
 
 # SampleProductRunner — seed demo products (with a generated placeholder image),
 # gated by seed.enabled above; the download URL is served by the images endpoint.
+# The prod profile turns this off, so a real catalogue never gets the demo products.
 app.startup.seed.products-enabled=true
 
 # ConnectivityCheckRunner — DB is always checked; external endpoints are optional (comma-separated)

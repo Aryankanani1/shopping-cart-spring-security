@@ -38,3 +38,10 @@ logging:
     org.hibernate.SQL: WARN
     org.hibernate.orm.jdbc.bind: WARN
     org.hibernate.orm.query: WARN
+
+# The sample products (with generated placeholder images) are for trying the app
+# out, not for a real shop's catalogue. The default categories still seed.
+app:
+  startup:
+    seed:
+      products-enabled: false
