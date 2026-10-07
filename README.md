@@ -393,7 +393,8 @@ are left intentionally so new runners can be inserted (e.g. `@Order(25)`).
 | 40    | `CacheWarmupRunner`       | `ApplicationRunner` | Warm the `categories` cache                           |
 
 All runners execute **before** `ApplicationReadyEvent`, after which
-`DataInitializer` seeds the default roles and users (5 customers, 2 admins).
+`DataInitializer` seeds the default roles (in every profile) and, under the `dev`
+profile only, `DevDataSeeder` seeds the test accounts (5 customers, 2 admins).
 
 ### Startup configuration
 
