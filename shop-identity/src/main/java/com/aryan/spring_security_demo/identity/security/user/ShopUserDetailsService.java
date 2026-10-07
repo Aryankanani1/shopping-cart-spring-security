@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-public class UserDetailsService implements org.springframework.security.core.userdetails.UserDetailsService {
+public class ShopUserDetailsService implements org.springframework.security.core.userdetails.UserDetailsService {
 
     private final UserRepository userRepository;
 
@@ -24,6 +24,6 @@ public class UserDetailsService implements org.springframework.security.core.use
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user =  userRepository.findByEmailWithRoles(email).orElseThrow(() ->
                 new UsernameNotFoundException("User not found"));
-        return com.aryan.spring_security_demo.identity.security.user.UserDetails.buildUserDetails(user);
+        return ShopUserDetails.buildUserDetails(user);
     }
 }

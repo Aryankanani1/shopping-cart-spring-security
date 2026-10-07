@@ -1,7 +1,6 @@
 package com.aryan.spring_security_demo.identity;
 
 
-import java.util.Optional;
 
 public interface UserServiceInterface {
     User getUserById(Long userId);

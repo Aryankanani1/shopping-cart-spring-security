@@ -138,7 +138,8 @@ public class SampleProductRunner implements ApplicationRunner {
                     RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
             // Stable, pleasant background from the name's hue; white text on top.
-            float hue = (Math.abs(label.hashCode()) % 360) / 360f;
+            // floorMod, not abs(): abs(Integer.MIN_VALUE) is still negative.
+            float hue = Math.floorMod(label.hashCode(), 360) / 360f;
             g.setColor(Color.getHSBColor(hue, 0.55f, 0.75f));
             g.fillRect(0, 0, size, size);
 

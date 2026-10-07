@@ -17,20 +17,20 @@ import java.util.stream.Collectors;
 @NoArgsConstructor
 @Getter
 @Setter
-public class UserDetails implements org.springframework.security.core.userdetails.UserDetails {
+public class ShopUserDetails implements org.springframework.security.core.userdetails.UserDetails {
 
     private Long id;
     private String email;
     private String passwords;
     private Collection<GrantedAuthority> authorities;
 
-    public static UserDetails buildUserDetails(User user){
+    public static ShopUserDetails buildUserDetails(User user){
             List<GrantedAuthority> authorities = user.getRoles()
                     .stream()
                     .map(role -> new SimpleGrantedAuthority(role.getName()))
                     .collect(Collectors.toList());
 
-            return new UserDetails(
+            return new ShopUserDetails(
                     user.getId(),
                     user.getEmail(),
                     user.getPassword(),

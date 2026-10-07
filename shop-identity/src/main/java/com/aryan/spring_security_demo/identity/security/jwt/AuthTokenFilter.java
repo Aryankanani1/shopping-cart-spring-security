@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.identity.security.jwt;
 
-import com.aryan.spring_security_demo.identity.security.user.UserDetailsService;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetailsService;
 import io.jsonwebtoken.JwtException;
 import jakarta.annotation.Nonnull;
 import jakarta.servlet.FilterChain;
@@ -22,7 +22,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     @Autowired
     private JwtUtils jwtUtils;
     @Autowired
-    private UserDetailsService userDetailsService;
+    private ShopUserDetailsService userDetailsService;
 
 
     @Override

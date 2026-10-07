@@ -61,6 +61,11 @@
 		<jacoco.version>0.8.15</jacoco.version>
 		<!-- Not used, but part of Maven's default lifecycles, so pinned like every
 		     other plugin (the Enforcer's requirePluginVersions). -->
+		<!-- Static analysis: SpotBugs with the FindSecBugs plugin (security), PMD with
+		     CPD (copy-paste). The PMD plugin's version fixes the PMD it runs. -->
+		<spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
+		<findsecbugs.version>1.14.0</findsecbugs.version>
+		<maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
 		<maven-site-plugin.version>3.22.0</maven-site-plugin.version>
 
 		<!-- Overrides of versions the Spring Boot BOM manages, each for CVEs its
@@ -251,6 +256,36 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!-- Static analysis on `verify`, for every module's main code; a finding
+			     fails the build. In CI it is the Static analysis stage. What SpotBugs
+			     leaves out, and why, is in spotbugs-exclude.xml. -->
+			<plugin>
+				<groupId>com.github.spotbugs</groupId>
+				<artifactId>spotbugs-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>spotbugs</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-pmd-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>pmd</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+							<goal>cpd-check</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
 		</plugins>
 		<pluginManagement>
 			<plugins>
@@ -274,6 +309,30 @@
 					<groupId>org.jacoco</groupId>
 					<artifactId>jacoco-maven-plugin</artifactId>
 					<version>${jacoco.version}</version>
+				</plugin>
+				<plugin>
+					<groupId>com.github.spotbugs</groupId>
+					<artifactId>spotbugs-maven-plugin</artifactId>
+					<version>${spotbugs-maven-plugin.version}</version>
+					<configuration>
+						<excludeFilterFile>${maven.multiModuleProjectDirectory}/spotbugs-exclude.xml</excludeFilterFile>
+						<plugins>
+							<plugin>
+								<groupId>com.h3xstream.findsecbugs</groupId>
+								<artifactId>findsecbugs-plugin</artifactId>
+								<version>${findsecbugs.version}</version>
+							</plugin>
+						</plugins>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-pmd-plugin</artifactId>
+					<version>${maven-pmd-plugin.version}</version>
+					<configuration>
+						<printFailingErrors>true</printFailingErrors>
+						<linkXRef>false</linkXRef>
+					</configuration>
 				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>

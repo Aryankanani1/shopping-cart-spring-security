@@ -1,6 +1,6 @@
 package com.aryan.spring_security_demo.identity;
 
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +35,7 @@ public class RefreshTokenService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /** Result of a rotation: a principal ready to sign a new access token, plus the new raw refresh token. */
-    public record RotatedToken(UserDetails principal, String rawRefreshToken) {}
+    public record RotatedToken(ShopUserDetails principal, String rawRefreshToken) {}
 
     /**
      * Mint and persist a fresh refresh token for a user; returns the raw value for
@@ -82,7 +82,7 @@ public class RefreshTokenService {
         // Build the principal here, inside the transaction, so the user's lazy
         // roles load while the session is open — the access-token minting that
         // follows in the controller needs the authorities.
-        return new RotatedToken(UserDetails.buildUserDetails(user), newRaw);
+        return new RotatedToken(ShopUserDetails.buildUserDetails(user), newRaw);
     }
 
     /**

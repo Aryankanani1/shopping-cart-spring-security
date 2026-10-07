@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What SpotBugs (static analysis, on `verify` and in the pipeline) leaves out, each
+     with the reason. A pattern goes here only when it is wrong for this code base as
+     a whole; a real bug is fixed, never excluded. -->
+<FindBugsFilter
+        xmlns="https://github.com/spotbugs/filter/3.0.0"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/3.1.0/spotbugs/etc/findbugsfilter.xsd">
+
+    <!-- "May expose internal representation": a getter that returns, or a constructor
+         that keeps, a mutable object such as a list. The DTOs, entities and response
+         wrappers here hand their collections to Jackson and Hibernate by design, mostly
+         through Lombok's accessors, and Hibernate tracks an entity's collection by its
+         instance, so copying them would break it rather than protect anything. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

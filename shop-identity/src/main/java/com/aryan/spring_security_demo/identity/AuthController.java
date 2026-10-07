@@ -2,7 +2,7 @@ package com.aryan.spring_security_demo.identity;
 
 import com.aryan.spring_security_demo.common.web.ApiResponse;
 import com.aryan.spring_security_demo.identity.security.jwt.JwtUtils;
-import com.aryan.spring_security_demo.identity.security.user.UserDetails;
+import com.aryan.spring_security_demo.identity.security.user.ShopUserDetails;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -37,7 +37,11 @@ public class AuthController {
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+        // authenticate() puts the signed-in user in as the principal; getPrincipal()
+        // is declared nullable, and the pattern covers that too.
+        if (!(authentication.getPrincipal() instanceof ShopUserDetails userDetails)) {
+            throw new IllegalStateException("Authentication returned no ShopUserDetails principal");
+        }
         String accessToken = jwtUtils.generateUserTokenFromUser(authentication);
         String refreshToken = refreshTokenService.issueFor(userDetails.getId());
 
@@ -83,7 +87,7 @@ public class AuthController {
      */
     @PutMapping("/password")
     public ResponseEntity<ApiResponse<?>> changePassword(@Valid @RequestBody ChangePasswordRequest request,
-                                                         @AuthenticationPrincipal UserDetails principal) {
+                                                         @AuthenticationPrincipal ShopUserDetails principal) {
         userService.changePassword(request);
 
         // Issued after the change has committed. If this step fails, the caller is
