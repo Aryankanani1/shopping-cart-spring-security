@@ -80,7 +80,7 @@ public class WishlistItem {
         this.product = product;
         this.createdAt = now;
         this.priceWhenAdded = product.getPrice();
-        resetAlertBaseline();
+        setAlertBaseline();
     }
 
     /**
@@ -89,6 +89,12 @@ public class WishlistItem {
      * alerts are switched back on (nothing that happened while off is replayed).
      */
     public void resetAlertBaseline() {
+        setAlertBaseline();
+    }
+
+    // Private, so the constructor doesn't call a method a subclass (a Hibernate
+    // proxy, say) could override before the object is complete.
+    private void setAlertBaseline() {
         this.alertPrice = product.getPrice();
         this.wasInStock = product.getInventory() > 0;
     }
