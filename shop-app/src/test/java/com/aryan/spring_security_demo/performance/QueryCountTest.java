@@ -10,6 +10,7 @@ import com.aryan.spring_security_demo.catalog.ProductDto;
 import com.aryan.spring_security_demo.catalog.ProductRepository;
 import com.aryan.spring_security_demo.catalog.ProductServiceInterface;
 import com.aryan.spring_security_demo.common.web.SlicedResponse;
+import com.aryan.spring_security_demo.identity.RefreshTokenRepository;
 import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
@@ -68,6 +69,7 @@ class QueryCountTest {
     @Autowired private OrderServiceInterface orderService;
 
     @Autowired private UserRepository userRepository;
+    @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private CartRepository cartRepository;
     @Autowired private RoleRepository roleRepository;
     @Autowired private CategoryRepository categoryRepository;
@@ -84,6 +86,7 @@ class QueryCountTest {
         imageRepository.deleteAll();
         productRepository.deleteAll();
         categoryRepository.deleteAll();
+        refreshTokenRepository.deleteAll();  // FK on users; other tests' sign-ins leave tokens
         userRepository.deleteAll();
 
         Role customer = roleRepository.findByName("ROLE_CUSTOMER")
