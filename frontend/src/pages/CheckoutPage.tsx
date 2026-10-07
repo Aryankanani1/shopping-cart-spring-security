@@ -50,6 +50,18 @@ export function CheckoutPage() {
     )
   }
 
+  // Placing the order empties the bag on the server, and refreshing the cart
+  // re-renders this page with no items before the router has moved on to the
+  // order (it applies navigations as transitions, after this render). That bag
+  // is empty because of the order: wait for the order page instead of leaving.
+  if (items.length === 0 && (place.isPending || place.isSuccess)) {
+    return (
+      <div className="container section">
+        <Loader label="Placing your order…" />
+      </div>
+    )
+  }
+
   // Nothing to check out — send them back to the (empty) bag.
   if (items.length === 0) {
     return <Navigate to="/cart" replace />
