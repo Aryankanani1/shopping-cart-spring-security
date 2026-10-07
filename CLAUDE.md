@@ -9,28 +9,42 @@ a PR adds or changes; older code may predate some of them.
 ## Commands
 
 ```bash
-./mvnw test                          # backend tests (H2, `test` profile — no MySQL needed)
-./mvnw test -Dtest=WishlistIntegrationTest
+./mvnw test                          # every module's tests (H2, `test` profile — no MySQL needed)
+./mvnw test -pl shop-cart -am        # one module, with the modules it depends on
+./mvnw test -pl shop-app -am -Dtest=WishlistIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 cd frontend && npm test              # Vitest
 cd frontend && npm run build         # type-check + production build
 ```
 
-Running locally: start the API with `SPRING_PROFILES_ACTIVE=dev` (the default is
-`prod`), and with `--server.port=8082`, because the Vite dev server proxies `/api`
-to **port 8082** (see README for the database settings).
+Running locally: the Vite dev server proxies `/api` to **port 8082**, and the
+default profile is `prod`, so start the API with
+`SPRING_PROFILES_ACTIVE=dev ./mvnw -pl shop-app -am spring-boot:run -Dspring-boot.run.arguments=--server.port=8082`
+(see README for the database settings). Without `-am` Maven looks for the other
+modules in the local repository, where they are never installed.
 
 ## Layout
 
-Backend code is organised by feature module under `com.aryan.spring_security_demo`:
-`common` (config, aspects, error handler, response wrappers), `identity` (users,
-auth, security), `catalog`, `cart`, `order`, `notification`, `wishlist`. There is
-no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s one
+The backend is a multi-module Maven build, one Maven module per feature module.
+`shop-<name>` holds the package `com.aryan.spring_security_demo.<name>`:
+`shop-common` (config, aspects, error handler, response wrappers), `shop-identity`
+(users, auth, security), `shop-catalog`, `shop-cart`, `shop-order`,
+`shop-notification`, `shop-wishlist`. `shop-app` holds the main class,
+`application*.yml`, the Flyway migrations and the tests that need the application
+context; it depends on all the others and builds the runnable jar. The parent
+`pom.xml` holds the module list and every version.
+
+Dependencies point one way, and Maven enforces it (a module sees only the modules
+it declares): every module may use `shop-common`; `shop-identity` and
+`shop-catalog` ← `shop-cart` ← `shop-order`; `shop-identity` and `shop-catalog` ←
+`shop-notification` ← `shop-wishlist`.
+
+There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s one
 `XxxModule` class per module, and each scans only its own package.
 
 ## Rules
 
 ### Database and migrations
-- Never edit a Flyway migration that is already on `master`; every schema change goes in a new `src/main/resources/db/migration/V<next>__<description>.sql`.
+- Never edit a Flyway migration that is already on `master`; every schema change goes in a new `shop-app/src/main/resources/db/migration/V<next>__<description>.sql`.
 - A change to a JPA entity's tables or columns must come with a matching migration in the same PR, because dev and prod run `ddl-auto: validate` and refuse to start on a mismatch (the H2 tests build the schema from the entities and will not catch it).
 - A new foreign key to `users` or `product` must declare what happens on delete (`on delete cascade` or `on delete set null` in the migration, with the matching `@OnDelete` on the entity field), otherwise deleting a user or product fails.
 - Associations are `FetchType.LAZY`; load what a query needs with `join fetch` or `@BatchSize`, never by switching to `EAGER`.
@@ -56,13 +70,16 @@ no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s one
 - Endpoints that list data which grows without bound (products, orders, notifications) must be paginated.
 
 ### Modules and wiring
-- New backend classes go in the package of the feature module they belong to.
-- A new top-level module package needs its own `XxxModule` class annotated `@ModuleConfiguration`, added to `@Import` in `SpringSecurityDemoApplication`; otherwise none of its beans are loaded.
+- New backend classes go in the feature module (Maven module and package) they belong to.
+- A module depends only on the modules shown in the Layout graph. Never add a dependency the other way, which Maven would reject as a cycle: move the shared piece into `shop-common`, or have the lower module publish an event the higher one listens to (as `UserDeletingEvent` and `ProductDeletingEvent` do).
+- A new feature module is a new Maven module `shop-<name>`: listed in the parent pom's `<modules>` and `<dependencyManagement>`, and a dependency of `shop-app`. It needs its own `XxxModule` class annotated `@ModuleConfiguration`, added to `@Import` in `SpringSecurityDemoApplication`; otherwise none of its beans are loaded.
+- Versions live only in the parent pom (a property applied through `<dependencyManagement>`, or a BOM); a module pom never declares a `<version>`.
 - Do not add `@SpringBootApplication`, `@ComponentScan`, `@EnableJpaRepositories` or `@EntityScan` anywhere.
 - Aspects select layers with the named pointcuts in `common/aop/Layers`, not with package-based `execution(...)` expressions.
 
 ### Tests
 - Unit tests are the default: service and domain logic is tested with plain JUnit and Mockito (no Spring context), and request validation with a `@WebMvcTest` slice.
+- Unit tests live in the module whose code they test. Tests that start a Spring context from the application (`@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`) or read `application*.yml` live in `shop-app`, the only module with the main class and the config files.
 - Integration tests (`@SpringBootTest` + MockMvc against H2) are only for security-sensitive and business-critical paths: authentication and sessions (login, tokens, passwords), access rules and ownership checks, money and stock (checkout, prices, inventory), and behavior a mock can't show (transactions, database constraints and cascades, cross-module events, security and actuator configuration).
 - A new or changed access rule or ownership check has an integration test of its failure case (401, 403 or 404).
 - Every bug fix comes with a test that fails without the fix: a unit test, unless the bug is in one of the integration-test areas above.

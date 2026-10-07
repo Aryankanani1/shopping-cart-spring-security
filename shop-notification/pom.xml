@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.aryan</groupId>
+		<artifactId>shopping-cart</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<artifactId>shop-notification</artifactId>
+	<description>The in-app notification inbox.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.aryan</groupId>
+			<artifactId>shop-common</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.aryan</groupId>
+			<artifactId>shop-identity</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.aryan</groupId>
+			<artifactId>shop-catalog</artifactId>
+		</dependency>
+	</dependencies>
+
+</project>

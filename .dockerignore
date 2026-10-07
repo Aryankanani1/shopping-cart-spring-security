@@ -1,8 +1,8 @@
 # Keep the build context small and — most importantly — keep secrets, local
 # config, and cruft OUT of the image entirely.
 
-# Build output (the image builds the jar itself)
-target/
+# Build output, in any module (the image builds the jar itself)
+**/target/
 
 # Version control
 .git/

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.aryan</groupId>
+		<artifactId>shopping-cart</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<artifactId>shop-identity</artifactId>
+	<description>Users, roles, sign-up and login, JWT access and refresh tokens, the security filter chain, rate limiting, ownership checks.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.aryan</groupId>
+			<artifactId>shop-common</artifactId>
+		</dependency>
+		<!-- ShopConfig and PrometheusScrapeSecurityConfig match actuator endpoints (EndpointRequest). -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<!-- JWT signing and parsing: the code compiles against jjwt-api only (from shop-common);
+		     the implementation and its Jackson serializer are runtime-only, as JJWT recommends. -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+	</dependencies>
+
+</project>
