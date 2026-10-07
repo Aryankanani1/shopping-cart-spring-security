@@ -533,7 +533,7 @@ single-flight token refresh), and a Vitest test suite are covered in
 [`deploy/`](deploy/) runs the shop on one server with Docker Compose: Caddy in
 front (automatic HTTPS, the storefront, `/api` proxied to the API) and a managed
 MySQL. CI publishes both images to GitHub Container Registry after the tests pass
-on `master`. Steps, updates and limits: [`deploy/README.md`](deploy/README.md).
+on `master`, public and for both amd64 and arm64. Steps, updates and limits: [`deploy/README.md`](deploy/README.md).
 
 ## Docker
 

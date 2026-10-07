@@ -4,9 +4,11 @@ name: Publish images
 # CI has passed on master, so a server only ever pulls a tested build:
 #   ghcr.io/<owner>/shopping-cart-api   the Spring Boot API (Dockerfile)
 #   ghcr.io/<owner>/shopping-cart-web   the storefront on Caddy (frontend/Dockerfile)
-# Each is tagged with the commit SHA and `latest`. deploy/docker-compose.yml runs
-# them (IMAGE_TAG picks the tag). New GHCR packages are private by default; the
-# server logs in to pull them (deploy/README.md).
+# Each is tagged with the commit SHA and `latest`, for linux/amd64 and linux/arm64,
+# so x86 and ARM servers (Graviton, Ampere, ...) both run them natively.
+# deploy/docker-compose.yml runs them (IMAGE_TAG picks the tag). The packages are
+# public, like the repository, so a server pulls them without logging in; they
+# hold the same code as the repository and no secrets.
 on:
   workflow_run:
     workflows: [CI]
@@ -50,6 +52,10 @@ jobs:
         id: name
         run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
 
+      # Emulates arm64 on the amd64 runner, for the few steps of each image's final
+      # stage; the jar and the storefront are built natively ($BUILDPLATFORM).
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -70,6 +76,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -6,8 +6,10 @@
 # ===========================================================================
 
 # --- Stage 1: build the static files ----------------------------------------
-# Node 22, the version CI tests with.
-FROM node:22-alpine AS build
+# Node 22, the version CI tests with. Runs on the building machine's own platform
+# even when the image is built for another: the output is static files, the same
+# on every platform, so it is built once instead of under emulation per target.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 WORKDIR /app
 
 # Dependencies first, so this layer is reused until the lockfile changes.

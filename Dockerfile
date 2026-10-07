@@ -15,7 +15,10 @@
 # --- Stage 1: build the jar with a full JDK -------------------------------
 # Pinned to the 17 (jammy) line to match <java.version>17</java.version>. For
 # fully reproducible builds, pin to a digest (eclipse-temurin:17-jdk-jammy@sha256:…).
-FROM eclipse-temurin:17-jdk-jammy AS build
+# Runs on the building machine's own platform even when the image is built for
+# another (amd64 and arm64 in CI): the jar is the same on every platform, so it is
+# built once, natively, instead of under emulation for each target.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk-jammy AS build
 WORKDIR /workspace
 
 # Copy only what's needed to resolve dependencies first, so this layer is cached
