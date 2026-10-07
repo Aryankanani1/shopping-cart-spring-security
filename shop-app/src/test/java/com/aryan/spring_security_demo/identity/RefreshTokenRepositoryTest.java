@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.identity;
 
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -39,10 +40,13 @@ class RefreshTokenRepositoryTest {
 
     @BeforeEach
     void setUp() {
+        // The integration tests share one database: start from no tokens (other tests'
+        // sign-ins leave some). Undone with the rest of the test's transaction.
+        em.getEntityManager().createQuery("delete from RefreshToken").executeUpdate();
         User u = new User();
         u.setFirstName("Ada");
         u.setLastName("Lovelace");
-        u.setEmail("shopper@example.com");
+        u.setEmail("shopper-" + UUID.randomUUID() + "@example.com");
         u.setPassword("irrelevant");
         user = em.persist(u);
     }
