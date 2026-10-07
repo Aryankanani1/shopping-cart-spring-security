@@ -156,7 +156,7 @@ jobs:
       - id: today
         run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - id: nvd-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.dependency-check-data
           key: dependency-check-data-${{ steps.today.outputs.date }}
@@ -168,7 +168,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: ./mvnw -B dependency-check:update-only -DdataDirectory="$HOME/.dependency-check-data"
       - if: steps.nvd-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/.dependency-check-data
           key: dependency-check-data-${{ steps.today.outputs.date }}
