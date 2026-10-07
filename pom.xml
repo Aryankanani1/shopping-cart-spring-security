@@ -2,6 +2,11 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
+
+	<!-- The parent of every module: Spring Boot's dependency and plugin management,
+	     the versions of the libraries Boot doesn't manage, and the module list.
+	     One Maven module per feature module (see the README's Architecture), plus
+	     shop-app, which assembles them into the runnable application. -->
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
@@ -9,9 +14,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.aryan</groupId>
-	<artifactId>shoppingCartWithSpringSecurity</artifactId>
+	<artifactId>shopping-cart</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
+	<packaging>pom</packaging>
+	<name>shopping-cart</name>
 	<description/>
 	<url/>
 	<licenses>
@@ -26,15 +32,31 @@
 		<tag/>
 		<url/>
 	</scm>
+
+	<!-- Dependencies point one way, so this is also a valid build order. -->
+	<modules>
+		<module>shop-common</module>
+		<module>shop-identity</module>
+		<module>shop-catalog</module>
+		<module>shop-cart</module>
+		<module>shop-order</module>
+		<module>shop-notification</module>
+		<module>shop-wishlist</module>
+		<module>shop-app</module>
+	</modules>
+
 	<properties>
 		<java.version>17</java.version>
 		<!-- Versions of the libraries the Spring Boot BOM (from the parent) doesn't
 		     manage. Each is set once here and applied by dependencyManagement below;
-		     no <dependency> in this file declares a version of its own. -->
+		     no <dependency> in any module declares a version of its own. -->
 		<jjwt.version>0.12.5</jjwt.version>
 		<shedlock.version>7.10.1</shedlock.version>
 		<springdoc-openapi.version>3.1.0</springdoc-openapi.version>
 		<modelmapper.version>3.2.4</modelmapper.version>
+		<!-- spring-boot:run only starts shop-app; the library modules have no main
+		     class, so `./mvnw -pl shop-app -am spring-boot:run` skips them. -->
+		<spring-boot.run.skip>true</spring-boot.run.skip>
 	</properties>
 
 	<!-- A library's own BOM keeps all of its modules on one version, the way the
@@ -45,6 +67,43 @@
 	     after; only the intended artifacts should move. -->
 	<dependencyManagement>
 		<dependencies>
+			<!-- This project's modules -->
+			<dependency>
+				<groupId>com.aryan</groupId>
+				<artifactId>shop-common</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.aryan</groupId>
+				<artifactId>shop-identity</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.aryan</groupId>
+				<artifactId>shop-catalog</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.aryan</groupId>
+				<artifactId>shop-cart</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.aryan</groupId>
+				<artifactId>shop-order</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.aryan</groupId>
+				<artifactId>shop-notification</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.aryan</groupId>
+				<artifactId>shop-wishlist</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+
 			<dependency>
 				<groupId>net.javacrumbs.shedlock</groupId>
 				<artifactId>shedlock-bom</artifactId>
@@ -89,98 +148,14 @@
 		</dependencies>
 	</dependencyManagement>
 
+	<!-- Inherited by every module: build-time helpers that are not passed on to
+	     dependents (optional), and the unit-test stack. -->
 	<dependencies>
-
 		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa</artifactId>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
 		</dependency>
-
-		<!-- TransactionAwareCacheManagerProxy (CacheConfig): cache evictions apply on commit. -->
-		<dependency>
-			<groupId>org.springframework</groupId>
-			<artifactId>spring-context-support</artifactId>
-		</dependency>
-
-		<dependency>
-			<groupId>com.mysql</groupId>
-			<artifactId>mysql-connector-j</artifactId>
-			<scope>runtime</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-security</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-webmvc</artifactId>
-		</dependency>
-
-		<!-- Health/readiness/liveness probes, build info and metrics for ops. Only
-		     /actuator/health is public; the rest is admin-only (see ShopConfig). -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-actuator</artifactId>
-		</dependency>
-
-		<!-- Prometheus format for the metrics, served at /actuator/prometheus. Who may
-		     scrape it: see PrometheusScrapeSecurityConfig. Version from the Boot BOM. -->
-		<dependency>
-			<groupId>io.micrometer</groupId>
-			<artifactId>micrometer-registry-prometheus</artifactId>
-		</dependency>
-
-		<!-- Versioned, repeatable schema migrations own the DDL in prod (ddl-auto:
-		     validate). Boot 4 modularised the autoconfiguration: the starter pulls
-		     both flyway-core AND the spring-boot-flyway autoconfig module (raw
-		     flyway-core alone leaves Flyway inert — it never runs at startup).
-		     flyway-mysql adds the MySQL 8 database type. Versions from the BOM. -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-flyway</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-mysql</artifactId>
-		</dependency>
-
-		<!-- Distributed lock for @Scheduled tasks: guarantees the critical
-		     refresh-token purge runs on only one node at a time (see
-		     RefreshTokenCleanupService + SchedulingConfig). The JDBC provider
-		     stores the lock in a `shedlock` table (created by Flyway V2). -->
-		<dependency>
-			<groupId>net.javacrumbs.shedlock</groupId>
-			<artifactId>shedlock-spring</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>net.javacrumbs.shedlock</groupId>
-			<artifactId>shedlock-provider-jdbc-template</artifactId>
-		</dependency>
-
-		<!-- Bean Validation (JSR-380) — powers @Validated on @ConfigurationProperties. -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-validation</artifactId>
-		</dependency>
-
-		<!-- AspectJ weaver — supplies the @Aspect/@Around annotations for the
-		     service-layer logging aspect (LoggingAspect). spring-aop itself is
-		     already on the classpath via spring-context; Boot 4's BOM manages the
-		     aspectjweaver version (Boot 4 no longer ships spring-boot-starter-aop).
-		     Auto-proxying is switched on explicitly by AopConfig. -->
-		<dependency>
-			<groupId>org.aspectj</groupId>
-			<artifactId>aspectjweaver</artifactId>
-		</dependency>
-
-		<!-- YAML config support (application.yml). Spring Boot 4 no longer pulls
-		     SnakeYAML transitively, so declare it explicitly; version from the BOM. -->
-		<dependency>
-			<groupId>org.yaml</groupId>
-			<artifactId>snakeyaml</artifactId>
-		</dependency>
-
 		<!-- Generates config metadata so @ConfigurationProperties keys get IDE
 		     autocomplete/docs. Compile-time only; not shipped in the jar. -->
 		<dependency>
@@ -188,95 +163,13 @@
 			<artifactId>spring-boot-configuration-processor</artifactId>
 			<optional>true</optional>
 		</dependency>
-
-		<dependency>
-			<groupId>org.projectlombok</groupId>
-			<artifactId>lombok</artifactId>
-			<optional>true</optional>
-		</dependency>
-
+		<!-- JUnit, Mockito, AssertJ and Spring's test support for each module's unit
+		     tests. Tests that need the application context live in shop-app. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-devtools</artifactId>
-			<scope>runtime</scope>
-			<optional>true</optional>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-security-test</artifactId>
+			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-webmvc-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-
-		<!-- @DataJpaTest slice: repository/JPA-only tests (TestEntityManager,
-		     AutoConfigureTestDatabase). Boot 4 splits the test slices into
-		     per-module artifacts; this starter aggregates the data-jpa ones. -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
-			<scope>test</scope>
-		</dependency>
-
-		<!-- In-memory database for the end-to-end journey tests, so they run in CI
-		     without a live MySQL. Version managed by the Spring Boot BOM. -->
-		<dependency>
-			<groupId>com.h2database</groupId>
-			<artifactId>h2</artifactId>
-			<scope>test</scope>
-		</dependency>
-
-		<dependency>
-			<groupId>org.modelmapper</groupId>
-			<artifactId>modelmapper</artifactId>
-		</dependency>
-
-		<!-- OpenAPI 3 + Swagger UI (springdoc). The 3.x line targets Spring Boot 4 /
-		     Spring Framework 7. Serves the spec at /v3/api-docs and the UI at
-		     /swagger-ui.html. -->
-		<dependency>
-			<groupId>org.springdoc</groupId>
-			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-		</dependency>
-
-		<!-- JWT signing and parsing. The code compiles against jjwt-api only; the
-		     implementation and its Jackson serializer are runtime-only, as JJWT
-		     recommends, so nothing can come to depend on their internals. -->
-		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-api</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-impl</artifactId>
-			<scope>runtime</scope>
-		</dependency>
-		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-jackson</artifactId>
-			<scope>runtime</scope>
 		</dependency>
 	</dependencies>
-
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.springframework.boot</groupId>
-				<artifactId>spring-boot-maven-plugin</artifactId>
-				<executions>
-					<!-- Writes META-INF/build-info.properties, which /actuator/info
-					     shows as the app's version and build time. -->
-					<execution>
-						<goals>
-							<goal>build-info</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
-		</plugins>
-	</build>
 
 </project>

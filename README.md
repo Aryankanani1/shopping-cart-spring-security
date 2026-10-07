@@ -85,39 +85,51 @@ overridden by exporting the matching env var.
 
 ```bash
 # dev
-SPRING_PROFILES_ACTIVE=dev JWT_SECRET=$(openssl rand -base64 32) ./mvnw spring-boot:run
+SPRING_PROFILES_ACTIVE=dev JWT_SECRET=$(openssl rand -base64 32) ./mvnw -pl shop-app -am spring-boot:run
 
 # prod (the default profile)
 DB_URL=... DB_USERNAME=... DB_PASSWORD=... \
-  JWT_SECRET=... ./mvnw spring-boot:run
+  JWT_SECRET=... ./mvnw -pl shop-app -am spring-boot:run
 ```
+
+`-pl shop-app -am` runs the application module and builds the modules it uses
+first (see [Architecture](#architecture)).
 
 The API is served under the `api.prefix` (default `/api/v1`).
 
 ## Architecture
 
-The code is organised **by feature module**, not by layer: each module package
-holds its own controllers, services, repositories, entities, DTOs and
-exceptions.
+The code is organised **by feature module**, not by layer: each module holds its
+own controllers, services, repositories, entities, DTOs and exceptions. Each
+feature module is a Maven module of its own (`shop-<name>`, package
+`com.aryan.spring_security_demo.<name>`), under a parent `pom.xml` that holds the
+module list and every dependency version:
 
 ```
-common/        Shared infrastructure: config (cache, scheduling, AOP, clock, OpenAPI),
-               aop/ (logging + security-audit aspects), exception/ (global handler),
-               web/ (ApiResponse, paging envelopes), validation/, bootstrap/ (startup diagnostics)
-identity/      Users, roles, auth (login/refresh/logout/password), refresh tokens, role
-               + dev-user seeding; security/ (filter chain, JWT, rate limiting, ownership checks)
-catalog/       Products, categories, images, the category cache, catalog seeding + cache warm-up
-cart/          Carts and cart items
-order/         Checkout, order lifecycle, keyset-paged history
-notification/  In-app inbox
-wishlist/      Wishlist, dated reminders, price/stock alert job   (optional module)
-resources/     application*.yml + db/migration/ (Flyway migrations: V1__baseline.sql, …)
+pom.xml              Parent (packaging pom): Spring Boot parent, versions and BOMs, modules
+shop-common/         Shared infrastructure: config (cache, scheduling, AOP, clock, OpenAPI,
+                     ModelMapper), aop/ (logging + security-audit aspects), exception/ (base
+                     exception types + global handler), web/ (ApiResponse, paging envelopes),
+                     validation/, bootstrap/ (startup diagnostics)
+shop-identity/       Users, roles, auth (login/refresh/logout/password), refresh tokens, role,
+                     dev-user and first-admin seeding; security/ (filter chain, JWT, CORS, rate
+                     limiting, ownership checks)
+shop-catalog/        Products, categories, images, the category cache, catalog seeding + warm-up
+shop-cart/           Carts and cart items
+shop-order/          Checkout, order lifecycle, keyset-paged history
+shop-notification/   In-app inbox
+shop-wishlist/       Wishlist, dated reminders, price/stock alert job   (optional module)
+shop-app/            The runnable application: SpringSecurityDemoApplication, application*.yml,
+                     db/migration/ (Flyway: V1__baseline.sql, …), and the tests that need the
+                     whole application; builds the jar and the Docker image
 ```
 
-Dependencies point one way, with no cycles: every module may use `common`;
-`identity` and `catalog` ← `cart` ← `order`; `identity` and `catalog` ←
-`notification` ← `wishlist`. `common` uses no module, and `identity` and
-`catalog` use only `common`.
+Dependencies point one way, with no cycles, and Maven enforces it, since a module
+sees only the modules it declares: every module may use `shop-common`;
+`shop-identity` and `shop-catalog` ← `shop-cart` ← `shop-order`; `shop-identity`
+and `shop-catalog` ← `shop-notification` ← `shop-wishlist`. Modules further down
+react to changes higher up through events (`UserDeletingEvent`,
+`ProductDeletingEvent`), never by importing the module that depends on them.
 
 ### Modular component scanning
 
@@ -157,7 +169,7 @@ files happen to sit, and a module can be conditional as a unit:
   so test users/admins exist only in dev; production never creates them. Roles
   (needed everywhere) are seeded unconditionally by `DataInitializer`.
 - **Flyway owns the schema** in every environment: versioned SQL migrations under
-  `resources/db/migration` build the DDL, and Hibernate runs `ddl-auto: validate`
+  `shop-app/src/main/resources/db/migration` build the DDL, and Hibernate runs `ddl-auto: validate`
   in **both dev and prod** — it only checks the entities match the schema, never
   mutates it. Tests use H2 with `create-drop` and disable Flyway.
 
@@ -484,10 +496,15 @@ accounts are never created in production.
 ## Build & test
 
 ```bash
-./mvnw clean compile   # compile
-./mvnw test            # run tests
-./mvnw clean package   # build the jar
+./mvnw clean compile                 # compile every module
+./mvnw test                          # every module's tests
+./mvnw test -pl shop-cart -am        # one module, with the modules it uses
+./mvnw clean package                 # build; the runnable jar is shop-app/target/shop-app-*.jar
 ```
+
+Unit tests live in the module whose code they test; the tests that need the
+application context (`@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`) are in
+`shop-app`.
 
 ## Frontend
 

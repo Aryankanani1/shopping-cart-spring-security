@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.aryan</groupId>
+		<artifactId>shopping-cart</artifactId>
+		<version>0.0.1-SNAPSHOT</version>
+	</parent>
+	<artifactId>shop-catalog</artifactId>
+	<description>Products, categories, product images, the category cache and the catalogue seed data.</description>
+
+	<dependencies>
+		<dependency>
+			<groupId>com.aryan</groupId>
+			<artifactId>shop-common</artifactId>
+		</dependency>
+	</dependencies>
+
+</project>
