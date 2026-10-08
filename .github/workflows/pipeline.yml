@@ -95,14 +95,14 @@ jobs:
         run: |
           npm ci
           npm run test:coverage
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-unit
           path: |
             */target/jacoco-unit.exec
             frontend/coverage/coverage-summary.json
       - if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unit-test-reports
           path: '*/target/surefire-reports/'
@@ -122,12 +122,12 @@ jobs:
           cache: maven
       # The @Tag("integration") tests: the whole application on H2 (`test` profile).
       - run: ./mvnw -B -pl shop-app -am test -Dgroups=integration -Djacoco.destFile=target/jacoco-it.exec
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-it
           path: '*/target/jacoco-it.exec'
       - if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: integration-test-reports
           path: shop-app/target/surefire-reports/
@@ -185,7 +185,7 @@ jobs:
           ./mvnw -B -Dmaven.test.skip=true package dependency-check:aggregate
           -DautoUpdate=false -DdataDirectory="$HOME/.dependency-check-data"
       - if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dependency-check-report
           path: target/dependency-check-report.html
@@ -316,7 +316,7 @@ jobs:
           outputs: type=docker,dest=${{ runner.temp }}/${{ matrix.name }}.tar
           cache-from: type=gha,scope=shopping-cart-${{ matrix.name }}
       - if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: image-${{ matrix.name }}
           path: ${{ runner.temp }}/${{ matrix.name }}.tar
@@ -476,7 +476,7 @@ jobs:
         working-directory: deploy
         run: docker compose -f docker-compose.yml -f docker-compose.staging.yml logs --no-color --tail=200 api web
       - if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: e2e-report
           path: |
