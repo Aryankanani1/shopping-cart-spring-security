@@ -46,7 +46,7 @@ public final class ProductSpecs {
      * <ul>
      *   <li>No {@code lower(name)}: a function on the column stops MySQL using the
      *       index. The match is case-insensitive through the column's collation
-     *       (MySQL's default is; the H2 test database is set to IGNORECASE).</li>
+     *       (MySQL's default is, and the integration tests run on MySQL).</li>
      *   <li>{@code %} and {@code _} typed by the user match literally, so a search
      *       for {@code %lamp} can't become a leading-wildcard scan.</li>
      * </ul>
