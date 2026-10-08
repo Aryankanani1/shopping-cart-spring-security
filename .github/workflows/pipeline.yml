@@ -175,7 +175,7 @@ jobs:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: ./mvnw -B dependency-check:update-only -DdataDirectory="$HOME/.dependency-check-data"
       - if: steps.nvd-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.dependency-check-data
           key: dependency-check-data-${{ steps.today.outputs.date }}
@@ -372,7 +372,7 @@ jobs:
           "$RUNNER_TEMP/trivy" image --download-db-only
           "$RUNNER_TEMP/trivy" image --download-java-db-only
       - if: steps.trivy-cache.outputs.cache-hit != 'true' && matrix.name == 'api'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/trivy
           key: trivy-db-${{ steps.image.outputs.date }}
