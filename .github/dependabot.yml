@@ -5,7 +5,8 @@
 #   * npm: the frontend's packages.
 #   * GitHub Actions: the actions the workflows use.
 # Minor and patch updates come grouped, one pull request per ecosystem. A major
-# version comes in a pull request of its own, since it can break things.
+# version comes in a pull request of its own, since it can break things; React and
+# its type packages are the exception and always come together (see npm below).
 #
 #   * Docker: the base images in the Dockerfiles, which are pinned to digests.
 #     When a tag moves (17-jre-jammy, 2-alpine, ... get OS security fixes),
@@ -35,6 +36,13 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # React and its type packages move together, majors included: split up, each
+      # half leaves the other on the old version and `npm ci` refuses the
+      # mismatched peers (React 19 came as two PRs, #131 and #136, neither of
+      # which could pass; #153 did it in one). A dependency goes to the first
+      # group that matches, so this one comes first.
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
       npm-minor-and-patch:
         update-types: [minor, patch]
     commit-message:
