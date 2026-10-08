@@ -20,6 +20,9 @@ import org.springframework.data.jpa.domain.Specification;
  */
 public final class ProductSpecs {
 
+    /** Escape character for LIKE patterns: '!' rather than a backslash, which MySQL also treats as a string escape. */
+    private static final char LIKE_ESCAPE = '!';
+
     private ProductSpecs() {
     }
 
@@ -37,13 +40,28 @@ public final class ProductSpecs {
     }
 
     /**
-     * Case-insensitive prefix match. A trailing-only wildcard ({@code name%}) keeps
-     * the {@code name} index usable — a leading wildcard ({@code %name%}) would force
-     * a full scan.
+     * Prefix match on {@code name}, served by its index: a trailing-only wildcard
+     * ({@code name%}) on the bare column lets MySQL seek the index. Two things keep
+     * it that way:
+     * <ul>
+     *   <li>No {@code lower(name)}: a function on the column stops MySQL using the
+     *       index. The match is case-insensitive through the column's collation
+     *       (MySQL's default is, and the integration tests run on MySQL).</li>
+     *   <li>{@code %} and {@code _} typed by the user match literally, so a search
+     *       for {@code %lamp} can't become a leading-wildcard scan.</li>
+     * </ul>
      */
     private static Specification<Product> nameStartsWith(String name) {
         return isBlank(name) ? Specification.unrestricted()
-                : (root, query, cb) -> cb.like(cb.lower(root.get("name")), name.toLowerCase() + "%");
+                : (root, query, cb) -> cb.like(root.get("name"), escapeLike(name) + "%", LIKE_ESCAPE);
+    }
+
+    /** {@code text} with LIKE's wildcards (and the escape character itself) escaped, so it matches literally. */
+    static String escapeLike(String text) {
+        String escape = String.valueOf(LIKE_ESCAPE);
+        return text.replace(escape, escape + escape)
+                .replace("%", escape + "%")
+                .replace("_", escape + "_");
     }
 
     /** Filter by category name via the to-one join (no row multiplication). */
