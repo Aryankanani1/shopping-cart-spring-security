@@ -126,6 +126,7 @@ export function AccountPage() {
                   id="firstName"
                   className="field"
                   value={firstName}
+                  maxLength={255}
                   onChange={(e) => {
                     setFirstName(e.target.value)
                     setSaved(false)
@@ -142,6 +143,7 @@ export function AccountPage() {
                   id="lastName"
                   className="field"
                   value={lastName}
+                  maxLength={255}
                   onChange={(e) => {
                     setLastName(e.target.value)
                     setSaved(false)

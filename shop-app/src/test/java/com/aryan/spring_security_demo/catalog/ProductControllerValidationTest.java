@@ -8,6 +8,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -83,8 +86,9 @@ class ProductControllerValidationTest {
                 .andExpect(jsonPath("$.errors.price").value("Price must be greater than zero"));
     }
 
-    // Regression: the columns are varchar(255), so a longer value got past
-    // validation and came back from the database as a 409 "Data conflict".
+    // Regression: text longer than its column got past validation and came back from
+    // the database as a 409 "Data conflict". The columns are varchar(255), except the
+    // description (varchar(2000), V10).
     @Test
     void addProduct_withTextLongerThanItsColumn_returns400() throws Exception {
         String body = """
@@ -92,11 +96,11 @@ class ProductControllerValidationTest {
                   "name": "%1$s",
                   "price": 10.00,
                   "brand": "%1$s",
-                  "description": "%1$s",
+                  "description": "%2$s",
                   "inventory": 5,
                   "category": { "name": "%1$s" }
                 }
-                """.formatted("a".repeat(256));
+                """.formatted("a".repeat(256), "d".repeat(Product.DESCRIPTION_MAX + 1));
 
         mockMvc.perform(post("/api/v1/products")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -104,7 +108,7 @@ class ProductControllerValidationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.name").value("Product name must be at most 255 characters"))
                 .andExpect(jsonPath("$.errors.brand").value("Brand must be at most 255 characters"))
-                .andExpect(jsonPath("$.errors.description").value("Description must be at most 255 characters"))
+                .andExpect(jsonPath("$.errors.description").value("Description must be at most 2000 characters"))
                 .andExpect(jsonPath("$.errors['category.name']").value("Category name must be at most 255 characters"));
     }
 
@@ -115,10 +119,10 @@ class ProductControllerValidationTest {
                   "name": "%1$s",
                   "price": 10.00,
                   "brand": "%1$s",
-                  "description": "%1$s",
+                  "description": "%2$s",
                   "inventory": 5
                 }
-                """.formatted("a".repeat(256));
+                """.formatted("a".repeat(256), "d".repeat(Product.DESCRIPTION_MAX + 1));
 
         mockMvc.perform(put("/api/v1/products/1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -126,6 +130,31 @@ class ProductControllerValidationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors.name").value("Product name must be at most 255 characters"))
                 .andExpect(jsonPath("$.errors.brand").value("Brand must be at most 255 characters"))
-                .andExpect(jsonPath("$.errors.description").value("Description must be at most 255 characters"));
+                .andExpect(jsonPath("$.errors.description").value("Description must be at most 2000 characters"));
+    }
+
+    @Test
+    void addProduct_atTheLengthLimits_isAccepted() throws Exception {
+        ProductDto created = new ProductDto();
+        created.setId(1L);
+        when(productService.addProductAndConvert(any())).thenReturn(created);
+
+        mockMvc.perform(post("/api/v1/products")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(productBody("n".repeat(255), "b".repeat(255), "d".repeat(Product.DESCRIPTION_MAX))))
+                .andExpect(status().isCreated());
+    }
+
+    private static String productBody(String name, String brand, String description) {
+        return """
+                {
+                  "name": "%s",
+                  "price": 10.00,
+                  "brand": "%s",
+                  "description": "%s",
+                  "inventory": 5,
+                  "category": { "name": "Electronics" }
+                }
+                """.formatted(name, brand, description);
     }
 }

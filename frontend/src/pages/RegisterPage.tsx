@@ -59,6 +59,7 @@ export function RegisterPage() {
                 id="firstName"
                 className="field"
                 value={form.firstName}
+                maxLength={255}
                 onChange={(e) => set('firstName', e.target.value)}
                 required
               />
@@ -72,6 +73,7 @@ export function RegisterPage() {
                 id="lastName"
                 className="field"
                 value={form.lastName}
+                maxLength={255}
                 onChange={(e) => set('lastName', e.target.value)}
                 required
               />
@@ -89,6 +91,7 @@ export function RegisterPage() {
               type="email"
               autoComplete="email"
               value={form.email}
+              maxLength={255}
               onChange={(e) => set('email', e.target.value)}
               required
             />

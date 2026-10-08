@@ -48,11 +48,11 @@ export function ProductForm({ initial, categories, onSubmit, onCancel, busy, err
       <div className="admin-form__grid">
         <label className="admin-field">
           <span className="admin-field__label">Name</span>
-          <input className="field" value={name} onChange={(e) => setName(e.target.value)} required />
+          <input className="field" value={name} onChange={(e) => setName(e.target.value)} maxLength={255} required />
         </label>
         <label className="admin-field">
           <span className="admin-field__label">Brand</span>
-          <input className="field" value={brand} onChange={(e) => setBrand(e.target.value)} required />
+          <input className="field" value={brand} onChange={(e) => setBrand(e.target.value)} maxLength={255} required />
         </label>
         <label className="admin-field">
           <span className="admin-field__label">Price</span>
@@ -95,6 +95,7 @@ export function ProductForm({ initial, categories, onSubmit, onCancel, busy, err
           className="field"
           rows={3}
           value={description}
+          maxLength={2000}
           onChange={(e) => setDescription(e.target.value)}
         />
       </label>
