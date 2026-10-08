@@ -11,9 +11,11 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -39,6 +41,7 @@ class ProductSpecsFilterTest {
     // this test's categories and brand are its own, and counts are relative.
     private final String electronicsName = "Electronics " + UUID.randomUUID();
     private final String googleBrand = "Google " + UUID.randomUUID();
+    private final String lumenBrand = "Lumen " + UUID.randomUUID();
     private long productsBefore;
 
     @BeforeEach
@@ -78,5 +81,34 @@ class ProductSpecsFilterTest {
                 ProductSpecs.filter(null, "pixel ph", electronicsName), PageRequest.of(0, 20));
 
         assertThat(page.getContent()).extracting(Product::getName).containsExactly("Pixel Phone");
+    }
+
+    @Test
+    @DisplayName("the name search ignores case")
+    void filter_byName_ignoresCase() {
+        assertThat(names(ProductSpecs.filter(googleBrand, "PIXEL", null)))
+                .containsExactlyInAnyOrder("Pixel Phone", "Pixel Buds");
+    }
+
+    // Regression: % and _ in the search text were LIKE wildcards, so "%phone" ran
+    // as a contains search (a full scan) and "_ixel" matched "Pixel". Each search is
+    // within this test's own brand, which holds the products that used to match.
+    @Test
+    @DisplayName("wildcards typed into the name search match literally")
+    void filter_byName_treatsWildcardsLiterally() {
+        em.persist(new Product("50% Off Lamp", new BigDecimal("20.00"), "lamp", lumenBrand, 3, null));
+        em.persist(new Product("500 Watt Bulb", new BigDecimal("5.00"), "bulb", lumenBrand, 3, null));
+        em.persist(new Product("Wow! Speaker", new BigDecimal("49.00"), "speaker", lumenBrand, 3, null));
+        em.flush();
+
+        assertThat(names(ProductSpecs.filter(googleBrand, "%phone", null))).isEmpty();
+        assertThat(names(ProductSpecs.filter(googleBrand, "_ixel", null))).isEmpty();
+        assertThat(names(ProductSpecs.filter(lumenBrand, "50%", null))).containsExactly("50% Off Lamp");
+        // The escape character itself is matched literally too.
+        assertThat(names(ProductSpecs.filter(lumenBrand, "wow!", null))).containsExactly("Wow! Speaker");
+    }
+
+    private List<String> names(Specification<Product> spec) {
+        return productRepository.findAll(spec, PageRequest.of(0, 20)).map(Product::getName).getContent();
     }
 }
