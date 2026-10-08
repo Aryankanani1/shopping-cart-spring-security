@@ -1,7 +1,9 @@
 package com.aryan.spring_security_demo.identity;
 
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -25,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * unexpired token in place (a revoked-but-unexpired token is kept so a replay of
  * it can still be caught as reuse).
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
@@ -37,10 +40,13 @@ class RefreshTokenRepositoryTest {
 
     @BeforeEach
     void setUp() {
+        // The integration tests share one database: start from no tokens (other tests'
+        // sign-ins leave some). Undone with the rest of the test's transaction.
+        em.getEntityManager().createQuery("delete from RefreshToken").executeUpdate();
         User u = new User();
         u.setFirstName("Ada");
         u.setLastName("Lovelace");
-        u.setEmail("shopper@example.com");
+        u.setEmail("shopper-" + UUID.randomUUID() + "@example.com");
         u.setPassword("irrelevant");
         user = em.persist(u);
     }

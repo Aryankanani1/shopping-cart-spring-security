@@ -1,7 +1,9 @@
 package com.aryan.spring_security_demo.catalog;
 
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -24,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * idiom). The unfiltered case must return every product; individual filters must
  * still narrow the result.
  */
+@Tag("integration")
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
@@ -32,12 +35,19 @@ class ProductSpecsFilterTest {
     @Autowired private ProductRepository productRepository;
     @Autowired private TestEntityManager em;
 
+    // The integration tests share one database, so other tests' products may be there:
+    // this test's categories and brand are its own, and counts are relative.
+    private final String electronicsName = "Electronics " + UUID.randomUUID();
+    private final String googleBrand = "Google " + UUID.randomUUID();
+    private long productsBefore;
+
     @BeforeEach
     void setUp() {
-        Category electronics = em.persist(new Category("Electronics"));
-        Category books = em.persist(new Category("Books"));
-        em.persist(new Product("Pixel Phone", new BigDecimal("699.00"), "phone", "Google", 5, electronics));
-        em.persist(new Product("Pixel Buds", new BigDecimal("199.00"), "earbuds", "Google", 8, electronics));
+        productsBefore = productRepository.count();
+        Category electronics = em.persist(new Category(electronicsName));
+        Category books = em.persist(new Category("Books " + UUID.randomUUID()));
+        em.persist(new Product("Pixel Phone", new BigDecimal("699.00"), "phone", googleBrand, 5, electronics));
+        em.persist(new Product("Pixel Buds", new BigDecimal("199.00"), "earbuds", googleBrand, 8, electronics));
         em.persist(new Product("Clean Code", new BigDecimal("35.00"), "book", "Prentice", 12, books));
         em.flush();
     }
@@ -48,16 +58,16 @@ class ProductSpecsFilterTest {
         Page<Product> page = productRepository.findAll(
                 ProductSpecs.filter(null, "  ", ""), PageRequest.of(0, 20));
 
-        assertThat(page.getTotalElements()).isEqualTo(3);
+        assertThat(page.getTotalElements()).isEqualTo(productsBefore + 3);
     }
 
     @Test
     @DisplayName("brand filter narrows to matching products")
     void filter_byBrand_narrows() {
         Page<Product> page = productRepository.findAll(
-                ProductSpecs.filter("Google", null, null), PageRequest.of(0, 20));
+                ProductSpecs.filter(googleBrand, null, null), PageRequest.of(0, 20));
 
-        assertThat(page.getContent()).extracting(Product::getBrand).containsOnly("Google");
+        assertThat(page.getContent()).extracting(Product::getBrand).containsOnly(googleBrand);
         assertThat(page.getTotalElements()).isEqualTo(2);
     }
 
@@ -65,7 +75,7 @@ class ProductSpecsFilterTest {
     @DisplayName("name prefix + category filters combine (AND)")
     void filter_byNamePrefixAndCategory_combines() {
         Page<Product> page = productRepository.findAll(
-                ProductSpecs.filter(null, "pixel ph", "Electronics"), PageRequest.of(0, 20));
+                ProductSpecs.filter(null, "pixel ph", electronicsName), PageRequest.of(0, 20));
 
         assertThat(page.getContent()).extracting(Product::getName).containsExactly("Pixel Phone");
     }

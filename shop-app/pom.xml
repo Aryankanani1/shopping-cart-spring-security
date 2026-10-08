@@ -98,10 +98,11 @@
 			<artifactId>spring-boot-starter-data-jpa-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- In-memory database for the tests that need the whole application (test profile). -->
+		<!-- MySQL in a container for the integration tests (test profile): the same
+		     database, driver and Flyway migrations as dev and production. Needs Docker. -->
 		<dependency>
-			<groupId>com.h2database</groupId>
-			<artifactId>h2</artifactId>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-mysql</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

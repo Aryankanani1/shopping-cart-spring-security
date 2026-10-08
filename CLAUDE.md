@@ -9,7 +9,7 @@ a PR adds or changes; older code may predate some of them.
 ## Commands
 
 ```bash
-./mvnw test                          # every module's tests (H2, `test` profile — no MySQL needed)
+./mvnw test                          # every module's tests; the integration tests need Docker (MySQL via Testcontainers)
 ./mvnw test -pl shop-cart -am        # one module, with the modules it depends on
 ./mvnw test -pl shop-app -am -Dtest=WishlistIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
 ./mvnw test -DexcludedGroups=integration              # unit tests only (the pipeline's "Unit tests")
@@ -64,7 +64,7 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 
 ### Database and migrations
 - Never edit a Flyway migration that is already on `master`; every schema change goes in a new `shop-app/src/main/resources/db/migration/V<next>__<description>.sql`.
-- A change to a JPA entity's tables or columns must come with a matching migration in the same PR, because dev and prod run `ddl-auto: validate` and refuse to start on a mismatch (the H2 tests build the schema from the entities and will not catch it).
+- A change to a JPA entity's tables or columns must come with a matching migration in the same PR, because dev, prod and the integration tests run `ddl-auto: validate` against the Flyway schema and fail on a mismatch.
 - A new foreign key to `users` or `product` must declare what happens on delete (`on delete cascade` or `on delete set null` in the migration, with the matching `@OnDelete` on the entity field), otherwise deleting a user or product fails.
 - Associations are `FetchType.LAZY`; load what a query needs with `join fetch` or `@BatchSize`, never by switching to `EAGER`.
 
@@ -98,7 +98,7 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 
 ### Dependencies and vulnerabilities (CVEs)
 - The pipeline scans for vulnerabilities on every push and pull request (the dependency scans also daily on `master`): the Security scan stage runs OWASP Dependency-Check (configured in the parent pom) for the backend, `npm audit --omit=dev --audit-level=high` for the frontend and gitleaks over the git history for secrets; the Build artifact stage scans each image with Trivy (OS packages and the libraries inside). The vulnerability scans fail on a HIGH or CRITICAL finding (CVSS 7 or above); Trivy only on one that has a fix. Dependabot alerts also report new CVEs in the frontend's packages (GitHub's dependency graph doesn't see the backend's resolved versions), and Dependabot (`.github/dependabot.yml`) opens weekly update pull requests. A finding is fixed by moving to a fixed version, never by raising the threshold, skipping the scan or dismissing the alert; Critical and High CVEs in what ships (the backend's runtime dependencies, the frontend's `dependencies`, the base images) are fixed before the next deploy.
-- Keep the BOMs current: Spring Boot's patch releases carry the security fixes for most of the stack (Spring, Tomcat, Jackson, Netty, Logback, MySQL Connector/J, H2, ...), so `spring-boot-starter-parent` moves to each new patch release of its line, and the other BOMs and version properties in the parent pom (ShedLock, springdoc, JJWT, ModelMapper) are kept current the same way.
+- Keep the BOMs current: Spring Boot's patch releases carry the security fixes for most of the stack (Spring, Tomcat, Jackson, Netty, Logback, MySQL Connector/J, ...), so `spring-boot-starter-parent` moves to each new patch release of its line, and the other BOMs and version properties in the parent pom (ShedLock, springdoc, JJWT, ModelMapper) are kept current the same way.
 - A CVE in a library the Boot BOM manages: upgrade Boot to the release with the fix. If Boot has none yet, override Boot's version property in the parent pom's `<properties>` (the names are in `spring-boot-dependencies`: `tomcat.version`, `jackson-bom.version` for Jackson 3, `jackson-2-bom.version` for Jackson 2, ...).
 - A CVE in a library Boot doesn't manage: raise its version property in the parent pom; in a transitive dependency: pin the fixed version in the parent's `<dependencyManagement>`. Never fix it in a module pom (no `<version>`, no `<exclusions>` that swap in another artifact).
 - Every forced override is documented with its CVE: a Boot version property, a `<dependencyManagement>` pin, an npm `overrides` entry and a Dependency-Check suppression each name the CVE ids, the dependency that brings in the vulnerable version, and when to remove the override (the release that will include the fix). That is an XML comment beside it in the poms, a line in the `"//"` array beside `overrides` in `package.json`, and the suppression's `<notes>` in `dependency-check-suppressions.xml`. Suppressions are only for false positives (the CVE is for another product, or for code the app never loads); the same goes for `.trivyignore` (a comment with the reason above each CVE id) and `.gitleaksignore` (a leaked secret is rotated first, then listed with that noted).
@@ -111,10 +111,10 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 ### Tests
 - Unit tests are the default: service and domain logic is tested with plain JUnit and Mockito (no Spring context), and request validation with a `@WebMvcTest` slice.
 - Unit tests live in the module whose code they test. Tests that start a Spring context from the application (`@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`) or read `application*.yml` live in `shop-app`, the only module with the main class and the config files.
-- Integration tests (`@SpringBootTest` + MockMvc against H2) are only for security-sensitive and business-critical paths: authentication and sessions (login, tokens, passwords), access rules and ownership checks, money and stock (checkout, prices, inventory), and behavior a mock can't show (transactions, database constraints and cascades, cross-module events, security and actuator configuration).
+- Integration tests (`@SpringBootTest` + MockMvc against MySQL in Testcontainers, with the real migrations) are only for security-sensitive and business-critical paths: authentication and sessions (login, tokens, passwords), access rules and ownership checks, money and stock (checkout, prices, inventory), and behavior a mock can't show (transactions, database constraints and cascades, cross-module events, security and actuator configuration).
 - A new or changed access rule or ownership check has an integration test of its failure case (401, 403 or 404).
 - Every bug fix comes with a test that fails without the fix: a unit test, unless the bug is in one of the integration-test areas above.
-- `@SpringBootTest` tests use `@ActiveProfiles("test")` and `@Tag("integration")`; the tag puts them in the pipeline's Integration tests stage, and everything without it runs as a unit test.
+- `@SpringBootTest` tests use `@ActiveProfiles("test")` and `@Tag("integration")`, and so do `@DataJpaTest` tests (they use the test profile's MySQL); the tag puts them in the pipeline's Integration tests stage, and everything without it runs as a unit test, which must not need Docker. All of them share one MySQL for the run, so each test sets up and clears the data it relies on.
 - Tests never `Thread.sleep` or depend on the wall clock; time-dependent code is tested with an explicit `Instant` or a fixed `Clock`.
 
 ### Pipeline and deployment
