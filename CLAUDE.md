@@ -39,7 +39,9 @@ production needs a reviewer's approval. Staging is the production setup from
 `deploy/` started on the CI runner from the new images, with
 `deploy/docker-compose.staging.yml` adding a MySQL container; the Playwright tests in
 `frontend/e2e/` run against it. The quality gate's coverage floors are in
-`.github/scripts/quality_gate.py`.
+`.github/scripts/quality_gate.py`. "Quality gate" and "Staging (deploy + E2E)" are
+required checks for merging into `master`; production deploys need a reviewer's
+approval in the `production` environment.
 
 ## Layout
 
