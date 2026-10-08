@@ -26,6 +26,9 @@ import java.util.List;
 })
 public class Product {
 
+    /** Longest description accepted (V10 migration); the request classes validate against it. */
+    public static final int DESCRIPTION_MAX = 2000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -37,7 +40,7 @@ public class Product {
     private String name;
     @Column(name = "price")
     private BigDecimal price;
-    @Column(name= "description")
+    @Column(name= "description", length = DESCRIPTION_MAX)
     private String description;
     @Column(name = "brand")
     private String brand;

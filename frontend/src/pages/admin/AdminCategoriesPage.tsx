@@ -61,6 +61,7 @@ export function AdminCategoriesPage() {
           className="field"
           placeholder="New category name"
           value={newName}
+          maxLength={255}
           onChange={(e) => setNewName(e.target.value)}
         />
         <button className="btn btn--accent" disabled={create.isPending || !newName.trim()}>
@@ -87,6 +88,7 @@ export function AdminCategoriesPage() {
                   <input
                     className="field"
                     value={editingName}
+                    maxLength={255}
                     onChange={(e) => setEditingName(e.target.value)}
                     autoFocus
                   />

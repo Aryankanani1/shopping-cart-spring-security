@@ -58,6 +58,15 @@ describe('AdminProductsPage', () => {
     expect(productsApi.list).toHaveBeenCalledTimes(2)
   })
 
+  it('limits text fields to what the API accepts', async () => {
+    renderPage(<AdminProductsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: '+ New product' }))
+
+    expect(screen.getByLabelText('Name')).toHaveAttribute('maxLength', '255')
+    expect(screen.getByLabelText('Brand')).toHaveAttribute('maxLength', '255')
+    expect(screen.getByLabelText('Description')).toHaveAttribute('maxLength', '2000')
+  })
+
   it('creates a product, then keeps it open for images', async () => {
     vi.mocked(productsApi.create).mockResolvedValue(product({ id: 9, name: 'Novel', categoryName: 'Books' }))
     renderPage(<AdminProductsPage />)
