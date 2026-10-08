@@ -50,10 +50,10 @@
 		<!-- Versions of the libraries the Spring Boot BOM (from the parent) doesn't
 		     manage. Each is set once here and applied by dependencyManagement below;
 		     no <dependency> in any module declares a version of its own. -->
-		<jjwt.version>0.12.5</jjwt.version>
+		<jjwt.version>0.13.0</jjwt.version>
 		<shedlock.version>7.10.1</shedlock.version>
-		<springdoc-openapi.version>3.1.0</springdoc-openapi.version>
-		<modelmapper.version>3.2.4</modelmapper.version>
+		<springdoc-openapi.version>3.1.1</springdoc-openapi.version>
+		<modelmapper.version>3.2.6</modelmapper.version>
 		<!-- Not 13.0.0: it sends an empty NVD API key when none is set, so its
 		     update fails without a key (dependency-check/DependencyCheck#8715, fixed
 		     after 13.0.0). Dependabot skips 13.0.0 and will offer the next 13.x. -->
