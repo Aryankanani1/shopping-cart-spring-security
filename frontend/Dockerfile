@@ -6,7 +6,7 @@
 # ===========================================================================
 
 # --- Stage 1: build the static files ----------------------------------------
-# Node 22, the version CI tests with. Both base images are pinned to a digest, which
+# Node 22, the version CI tests with. Every base image is pinned to a digest, which
 # Dependabot updates when the tag moves. Runs on the building machine's own platform
 # even when the image is built for another: the output is static files, the same
 # on every platform, so it is built once instead of under emulation per target.
@@ -23,6 +23,41 @@ COPY . .
 ENV VITE_API_BASE_URL=
 RUN npm run build
 
-# --- Stage 2: Caddy with the built files ----------------------------------
+# --- Stage 2: Caddy, built with a fixed Go (temporary) ----------------------
+# The Caddy in caddy:2-alpine (v2.11.7) was built with Go 1.26.8 and
+# golang.org/x/net v0.59.0, which have HIGH CVEs with fixes released:
+#   CVE-2026-78667, CVE-2026-97031  Go standard library, fixed in Go 1.26.9
+#   CVE-2026-78669                  Go standard library and x/net, fixed in
+#                                   Go 1.26.9 and x/net v0.60.0
+# No Caddy release includes the fixes yet, so this builds the same Caddy version
+# the same way (standard modules, the official build tags and flags) with Go
+# 1.26.9 and x/net v0.60.0. Every other dependency stays at the version Caddy
+# v2.11.7 requires.
+# Remove this stage, and the COPY and RUN after the last FROM, once caddy:2-alpine
+# ships a Caddy built with Go 1.26.9 or later and x/net v0.60.0 or later (a
+# release after v2.11.7): `caddy build-info` in the image shows both.
+# Cross-compiled on the building machine's platform, so no emulation is needed.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine@sha256:3082400e369fa24d5fc60bca20edab3f6d604e0c5a690ec66b295eff4dd87ade AS caddy
+ARG TARGETOS
+ARG TARGETARCH
+WORKDIR /src
+# Caddy's own cmd/caddy/main.go: the standard modules, nothing added.
+RUN printf '%s\n' \
+        'package main' \
+        'import (' \
+        '    caddycmd "github.com/caddyserver/caddy/v2/cmd"' \
+        '    _ "github.com/caddyserver/caddy/v2/modules/standard"' \
+        ')' \
+        'func main() { caddycmd.Main() }' > main.go \
+    && go mod init caddy \
+    && go get github.com/caddyserver/caddy/v2@v2.11.7 golang.org/x/net@v0.60.0 \
+    && go mod tidy \
+    && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+       go build -trimpath -tags nobadger,nomysql,nopgx -ldflags '-s -w' -o /out/caddy .
+
+# --- Stage 3: Caddy with the built files ------------------------------------
 FROM caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+COPY --from=caddy /out/caddy /usr/bin/caddy
+# As the official image does: lets Caddy bind ports 80 and 443 without root.
+RUN setcap cap_net_bind_service=+ep /usr/bin/caddy && caddy version
 COPY --from=build /app/dist /srv
