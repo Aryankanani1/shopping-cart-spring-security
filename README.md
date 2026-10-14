@@ -384,9 +384,11 @@ path carries a user id.
   minute by default) under **ShedLock**, so only one instance runs each tick. It
   *polls* price and stock rather than hooking every place they change (admin
   edits, orders, cancellation restocks), so no code path can forget to raise an
-  alert. Each notification is written in the same transaction that advances the
-  item's baseline, so every event is announced exactly once, and a failed run is
-  simply retried on the next tick.
+  alert. Each item gets a transaction of its own (a `TransactionTemplate`, as a
+  loop can't be split into transactions with `@Transactional`), which writes the
+  notification and advances the item's baseline together, so every event is
+  announced exactly once. An item that fails is rolled back alone and retried on
+  the next tick, without holding back anyone else's alerts.
 - **Deletes never get blocked.** The new foreign keys cascade in the database
   (Flyway `V5`): deleting a user removes their wishlist and inbox; deleting a
   product removes it from wishlists and keeps past notifications (the product

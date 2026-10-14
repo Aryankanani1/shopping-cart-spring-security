@@ -21,9 +21,11 @@ import java.util.function.IntSupplier;
  * the same event twice. {@link SchedulerLock @SchedulerLock} makes only one
  * instance run each tick; {@code lockAtLeastFor} covers clock skew between nodes.
  *
- * <p>Each phase runs in its own transaction, and a failure in one (for example an
- * optimistic-lock conflict with a user editing their wishlist) is logged and
- * retried next tick without holding up the other phases.
+ * <p>The service handles each item in its own transaction, so an item that fails
+ * (for example an optimistic-lock conflict with a user editing their wishlist) is
+ * logged and retried next tick without holding up the rest. A phase that fails as
+ * a whole, say because its scan query can't reach the database, is logged here
+ * and doesn't stop the other phases.
  */
 @Component
 @RequiredArgsConstructor
