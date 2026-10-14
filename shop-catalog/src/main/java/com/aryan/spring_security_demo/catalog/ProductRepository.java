@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.catalog;
 
+import jakarta.persistence.LockModeType;
 import org.jspecify.annotations.NonNull;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -7,7 +8,13 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import java.util.Collection;
+import java.util.List;
 
 /**
  * {@link JpaSpecificationExecutor} adds {@code findAll(Specification, Pageable)},
@@ -30,4 +37,14 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     Long countByBrandAndName(String brand, String name);
 
     boolean existsByNameAndBrand(String name, String brand);
+
+    /**
+     * Load these products and lock their rows (SELECT ... FOR UPDATE) until the
+     * transaction ends. The rows are locked in id order, so two transactions
+     * locking some of the same products take the locks in the same order and
+     * can't deadlock. Checkout takes this before reading stock (OrderService).
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Product p where p.id in :ids order by p.id")
+    List<Product> findAllByIdForUpdate(@Param("ids") Collection<Long> ids);
 }
