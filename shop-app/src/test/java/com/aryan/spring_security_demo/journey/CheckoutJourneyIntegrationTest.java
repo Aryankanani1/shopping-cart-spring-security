@@ -32,6 +32,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -87,6 +88,8 @@ class CheckoutJourneyIntegrationTest {
 
     private Long userId;
     private Long productId;
+    private Role customer;
+    private String passwordHash;
 
     @BeforeEach
     void setUp() {
@@ -98,25 +101,11 @@ class CheckoutJourneyIntegrationTest {
         userRepository.deleteAll();
         productRepository.deleteAll();
 
-        Role customer = roleRepository.findByName("ROLE_CUSTOMER")
+        customer = roleRepository.findByName("ROLE_CUSTOMER")
                 .orElseGet(() -> roleRepository.save(new Role("ROLE_CUSTOMER")));
-
-        User user = new User();
-        user.setFirstName("Ada");
-        user.setLastName("Lovelace");
-        user.setEmail("shopper@example.com");
-        user.setPassword(passwordEncoder.encode(PASSWORD));
-        user.setRoles(Set.of(customer));
-        userId = userRepository.save(user).getId();
-
-        Category category = categoryRepository.existsByName("Electronics")
-                ? categoryRepository.findByName("Electronics")
-                : categoryRepository.save(new Category("Electronics"));
-
-        Product product = new Product(
-                "Wireless Mouse", UNIT_PRICE, "Ergonomic mouse", "Acme",
-                INITIAL_INVENTORY, category);
-        productId = productRepository.save(product).getId();
+        passwordHash = passwordEncoder.encode(PASSWORD);  // once: BCrypt is slow on purpose
+        userId = saveShopper("shopper@example.com");
+        productId = saveProduct("Wireless Mouse");
     }
 
     @Test
@@ -261,26 +250,12 @@ class CheckoutJourneyIntegrationTest {
         Long cartId = cartRepository.findByUserId(userId).getId();
 
         int requests = 8;
-        ExecutorService threads = Executors.newFixedThreadPool(requests);
-        CountDownLatch start = new CountDownLatch(1);
-        List<Future<Integer>> responses = new ArrayList<>();
-        List<Integer> statuses = new ArrayList<>();
-        try {
-            for (int i = 0; i < requests; i++) {
-                responses.add(threads.submit(() -> {
-                    start.await();  // release every request at once
-                    return addToCart(token, 1).andReturn().getResponse().getStatus();
-                }));
-            }
-            start.countDown();
-            for (Future<Integer> response : responses) {
-                statuses.add(response.get(30, TimeUnit.SECONDS));
-            }
-        } finally {
-            threads.shutdownNow();
+        List<Callable<MvcResult>> adds = new ArrayList<>();
+        for (int i = 0; i < requests; i++) {
+            adds.add(() -> addToCart(token, 1).andReturn());
         }
 
-        assertThat(statuses).as("status of each simultaneous add").containsOnly(201);
+        assertThat(statusesOf(allAtOnce(adds))).as("status of each simultaneous add").containsOnly(201);
         mockMvc.perform(get("/api/v1/carts/{cartId}", cartId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
@@ -342,6 +317,68 @@ class CheckoutJourneyIntegrationTest {
         assertThat(orderRepository.count()).isZero();
         assertThat(productRepository.findById(productId).orElseThrow().getInventory()).isEqualTo(1);
         assertThat(cartItemRepository.count()).as("cart kept so the shopper can adjust it").isEqualTo(1);
+    }
+
+    // Regression: checkouts that share a product all read the same stock and version.
+    // The first to commit won, and every other one failed Product's version check
+    // with a 409 "Concurrent modification", however much stock was left.
+    @Test
+    @DisplayName("simultaneous checkouts of the same products all succeed, and the stock adds up")
+    void checkout_simultaneouslyByManyShoppers_allSucceed() throws Exception {
+        Long hubId = saveProduct("USB Hub");
+        int shoppers = 6;
+        List<Callable<MvcResult>> checkouts = new ArrayList<>();
+        for (int i = 0; i < shoppers; i++) {
+            String email = "racer" + i + "@example.com";
+            saveShopper(email);
+            String token = login(email, PASSWORD);
+            // Half the carts list the two products the other way round: checkouts
+            // that lock shared rows in opposite orders can deadlock.
+            for (Long product : i % 2 == 0 ? List.of(productId, hubId) : List.of(hubId, productId)) {
+                addToCart(token, product, 1).andExpect(status().isCreated());
+            }
+            checkouts.add(() -> placeOrder(token).andReturn());
+        }
+
+        List<MvcResult> results = allAtOnce(checkouts);
+
+        assertThat(statusesOf(results)).as("status of each checkout").containsOnly(201);
+        assertThat(orderRepository.count()).isEqualTo(shoppers);
+        assertThat(inventoryOf(productId)).isEqualTo(INITIAL_INVENTORY - shoppers);
+        assertThat(inventoryOf(hubId)).isEqualTo(INITIAL_INVENTORY - shoppers);
+    }
+
+    @Test
+    @DisplayName("shoppers racing for the last unit: one buys it, the others are told it's out of stock")
+    void checkout_simultaneouslyForTheLastUnit_sellsItOnce() throws Exception {
+        int shoppers = 4;
+        List<Callable<MvcResult>> checkouts = new ArrayList<>();
+        for (int i = 0; i < shoppers; i++) {
+            String email = "racer" + i + "@example.com";
+            saveShopper(email);
+            String token = login(email, PASSWORD);
+            addToCart(token, 1).andExpect(status().isCreated());
+            checkouts.add(() -> placeOrder(token).andReturn());
+        }
+        Product product = productRepository.findById(productId).orElseThrow();
+        product.setInventory(1);  // all but one unit sold since they filled their carts
+        productRepository.save(product);
+
+        List<MvcResult> results = allAtOnce(checkouts);
+
+        assertThat(statusesOf(results)).as("status of each checkout")
+                .containsOnlyOnce(201)
+                .containsOnly(201, 409);
+        for (MvcResult result : results) {
+            if (result.getResponse().getStatus() == 409) {
+                assertThat(objectMapper.readTree(result.getResponse().getContentAsString()).path("title").asText())
+                        .as("why a losing checkout was refused")
+                        .isEqualTo("Insufficient stock");
+            }
+        }
+        assertThat(inventoryOf(productId)).isZero();
+        assertThat(orderRepository.count()).isEqualTo(1);
+        assertThat(cartItemRepository.count()).as("the others keep their carts").isEqualTo(shoppers - 1);
     }
 
     @Test
@@ -452,6 +489,57 @@ class CheckoutJourneyIntegrationTest {
 
     // --- helpers -----------------------------------------------------------
 
+    /** A customer with {@link #PASSWORD}; returns their id. */
+    private Long saveShopper(String email) {
+        User user = new User();
+        user.setFirstName("Ada");
+        user.setLastName("Lovelace");
+        user.setEmail(email);
+        user.setPassword(passwordHash);
+        user.setRoles(Set.of(customer));
+        return userRepository.save(user).getId();
+    }
+
+    /** A product at {@link #UNIT_PRICE} with {@link #INITIAL_INVENTORY} in stock; returns its id. */
+    private Long saveProduct(String name) {
+        Category category = categoryRepository.existsByName("Electronics")
+                ? categoryRepository.findByName("Electronics")
+                : categoryRepository.save(new Category("Electronics"));
+        return productRepository.save(
+                new Product(name, UNIT_PRICE, "", "Acme", INITIAL_INVENTORY, category)).getId();
+    }
+
+    private int inventoryOf(Long id) {
+        return productRepository.findById(id).orElseThrow().getInventory();
+    }
+
+    /** Runs every call at the same moment, each on its own thread; returns the results in order. */
+    private static <T> List<T> allAtOnce(List<Callable<T>> calls) throws Exception {
+        ExecutorService threads = Executors.newFixedThreadPool(calls.size());
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<T>> futures = new ArrayList<>();
+        try {
+            for (Callable<T> call : calls) {
+                futures.add(threads.submit(() -> {
+                    start.await();  // release every call at once
+                    return call.call();
+                }));
+            }
+            start.countDown();
+            List<T> results = new ArrayList<>();
+            for (Future<T> future : futures) {
+                results.add(future.get(30, TimeUnit.SECONDS));
+            }
+            return results;
+        } finally {
+            threads.shutdownNow();
+        }
+    }
+
+    private static List<Integer> statusesOf(List<MvcResult> results) {
+        return results.stream().map(result -> result.getResponse().getStatus()).toList();
+    }
+
     private String login(String email, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -464,9 +552,13 @@ class CheckoutJourneyIntegrationTest {
     }
 
     private ResultActions addToCart(String token, int quantity) throws Exception {
+        return addToCart(token, productId, quantity);
+    }
+
+    private ResultActions addToCart(String token, Long product, int quantity) throws Exception {
         return mockMvc.perform(post("/api/v1/cartItems")
                 .header("Authorization", "Bearer " + token)
-                .param("productId", String.valueOf(productId))
+                .param("productId", String.valueOf(product))
                 .param("quantity", String.valueOf(quantity)));
     }
 

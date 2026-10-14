@@ -37,6 +37,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
@@ -204,6 +205,29 @@ class OrderServiceTest {
         assertThat(product.getInventory()).isEqualTo(5);
         verify(orderRepository, never()).save(any());
         verify(cartService, never()).clearCart(any());
+    }
+
+    // Regression: checkouts sharing a product read its stock unlocked, so all but
+    // one of them failed at commit (deadlock or version conflict) with a 409.
+    // Concurrent checkouts are in CheckoutJourneyIntegrationTest.
+    @Test
+    void placeOrder_locksEveryProductInTheCart_beforeCheckingStock() {
+        Product hub = new Product();
+        hub.setId(8L);
+        hub.setInventory(3);
+        Cart cart = new Cart();
+        cart.setId(99L);
+        cart.getCartItems().add(cartItem(product, 6));  // more than the 5 in stock
+        cart.getCartItems().add(cartItem(hub, 1));
+        when(authUtils.currentUserId()).thenReturn(OWNER_ID);
+        when(cartService.getCartByUserIdForUpdate(OWNER_ID)).thenReturn(cart);
+
+        assertThatThrownBy(() -> orderService.placeOrder(new PlaceOrderRequest()))
+                .isInstanceOf(InsufficientStockException.class);
+
+        // Locked even though the stock check then failed: the lock comes first.
+        verify(productRepository).findAllByIdForUpdate(argThat(ids ->
+                ids.size() == 2 && ids.containsAll(List.of(7L, 8L))));
     }
 
     @Test
@@ -381,5 +405,13 @@ class OrderServiceTest {
         doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(OWNER_ID);
 
         assertThatThrownBy(() -> orderService.getOrder(ORDER_ID)).isInstanceOf(AccessDeniedException.class);
+    }
+
+    private static CartItem cartItem(Product product, int quantity) {
+        CartItem item = new CartItem();
+        item.setProduct(product);
+        item.setQuantity(quantity);
+        item.setUnitPrice(BigDecimal.TEN);
+        return item;
     }
 }

@@ -56,6 +56,7 @@ public class OrderService implements OrderServiceInterface{
         if (cart == null || cart.getCartItems().isEmpty()) {
             throw new EmptyCartException("Your cart is empty");
         }
+        lockProducts(cart);
         requireStock(cart);
         Order order = careatOrder(cart);
         applyShippingAddress(order, shippingAddress);
@@ -182,11 +183,31 @@ public class OrderService implements OrderServiceInterface{
     }
 
     /**
+     * Lock the rows of the products in the cart until this checkout commits.
+     * Checkouts that share a product then run one after the other: the next one
+     * waits, reads the stock the previous one left, and buys from it or is told
+     * there isn't enough. Without the lock they all read the same stock, and all
+     * but one failed at commit with a 409 (a deadlock or Product's version
+     * check), however much stock was left.
+     *
+     * <p>Must run before anything reads the products: a locking query returns a
+     * product already loaded in this transaction as it was loaded, not re-read.
+     * The cart items' products are still unloaded here; taking their ids doesn't
+     * load them.
+     */
+    private void lockProducts(Cart cart) {
+        List<Long> productIds = cart.getCartItems().stream()
+                .map(item -> item.getProduct().getId())
+                .toList();
+        productRepository.findAllByIdForUpdate(productIds);
+    }
+
+    /**
      * Reject the order if any line asks for more than is in stock now — inventory
      * may have dropped since the item went into the cart. Every line is checked
-     * before any is decremented. The decrement itself is guarded by Product's
-     * {@code @Version}, so two checkouts racing for the last unit cannot both
-     * succeed: the loser fails at commit and gets a 409 via the global handler.
+     * before any is decremented, against the stock read under the lock taken by
+     * {@link #lockProducts}, so two checkouts racing for the last unit cannot both
+     * succeed: the later one sees it gone.
      */
     private void requireStock(Cart cart){
         for (CartItem item : cart.getCartItems()) {
