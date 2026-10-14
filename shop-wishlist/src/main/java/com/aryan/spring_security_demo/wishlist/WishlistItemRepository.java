@@ -18,21 +18,27 @@ public interface WishlistItemRepository extends JpaRepository<WishlistItem, Long
     Optional<WishlistItem> findByUserIdAndProductId(Long userId, Long productId);
 
     // --- alert scan (WishlistAlertService) ------------------------------------
-    // Each query returns only the rows that need action on this tick, with the
-    // product fetched, so the scan never walks the whole table in memory.
+    // Each query returns the ids of only the rows that need action on this tick,
+    // so the scan never walks the whole table in memory. Each id is then handled
+    // in a transaction of its own, which loads the row with findByIdWithProduct
+    // and checks the same condition again on it (WishlistItem#isReminderDue and
+    // the methods beside it), as the row may have changed since the scan.
 
-    @Query("select w from WishlistItem w join fetch w.product where w.remindAt <= :now")
-    List<WishlistItem> findDueReminders(@Param("now") Instant now);
+    @Query("select w.id from WishlistItem w where w.remindAt <= :now")
+    List<Long> findDueReminderIds(@Param("now") Instant now);
 
-    @Query("select w from WishlistItem w join fetch w.product p " +
+    @Query("select w.id from WishlistItem w join w.product p " +
             "where w.alertsEnabled = true and p.price < w.alertPrice")
-    List<WishlistItem> findPriceDrops();
+    List<Long> findPriceDropIds();
 
-    @Query("select w from WishlistItem w join fetch w.product p " +
+    @Query("select w.id from WishlistItem w join w.product p " +
             "where w.alertsEnabled = true and w.wasInStock = false and p.inventory > 0")
-    List<WishlistItem> findRestocked();
+    List<Long> findRestockedIds();
 
-    @Query("select w from WishlistItem w join fetch w.product p " +
+    @Query("select w.id from WishlistItem w join w.product p " +
             "where w.alertsEnabled = true and w.wasInStock = true and p.inventory <= 0")
-    List<WishlistItem> findNewlySoldOut();
+    List<Long> findNewlySoldOutIds();
+
+    @Query("select w from WishlistItem w join fetch w.product where w.id = :id")
+    Optional<WishlistItem> findByIdWithProduct(@Param("id") Long id);
 }

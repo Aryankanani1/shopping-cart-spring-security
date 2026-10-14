@@ -99,6 +99,31 @@ public class WishlistItem {
         this.wasInStock = product.getInventory() > 0;
     }
 
+    // The conditions the alert scan's queries select on (WishlistItemRepository),
+    // checked again on the loaded row before acting: the scan and the handling of
+    // each item are separate transactions, so the row can change in between.
+
+    /** A reminder is set for {@code now} or earlier. */
+    public boolean isReminderDue(Instant now) {
+        return remindAt != null && !remindAt.isAfter(now);
+    }
+
+    /** Alerts are on and the product costs less than the lowest price announced. A missing price is no drop, as in SQL. */
+    public boolean hasPriceDrop() {
+        BigDecimal price = product.getPrice();
+        return alertsEnabled && price != null && price.compareTo(alertPrice) < 0;
+    }
+
+    /** Alerts are on and the product, last seen sold out, is in stock again. */
+    public boolean isRestocked() {
+        return alertsEnabled && !wasInStock && product.getInventory() > 0;
+    }
+
+    /** Alerts are on and the product, last seen in stock, has sold out. */
+    public boolean isNewlySoldOut() {
+        return alertsEnabled && wasInStock && product.getInventory() <= 0;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

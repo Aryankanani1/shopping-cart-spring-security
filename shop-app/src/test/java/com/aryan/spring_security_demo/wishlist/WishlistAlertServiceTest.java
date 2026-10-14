@@ -28,9 +28,10 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The alert scan against a real (H2) database: each reminder, price drop and
- * restock is announced exactly once, and nothing is announced while alerts are
- * off. Time is passed in explicitly, so no test depends on the wall clock.
+ * The alert scan against a real (MySQL) database: each reminder, price drop and
+ * restock is announced exactly once, nothing is announced while alerts are off,
+ * and an item that fails is rolled back on its own without holding back the
+ * others. Time is passed in explicitly, so no test depends on the wall clock.
  */
 @Tag("integration")
 @SpringBootTest
@@ -93,6 +94,26 @@ class WishlistAlertServiceTest {
         });
         assertThat(reload(due).getRemindAt()).isNull();
         assertThat(reload(later).getRemindAt()).isEqualTo(NOW.plusSeconds(3600));
+    }
+
+    // Regression: a whole phase ran in one transaction, so one item that couldn't be
+    // announced rolled back every user's alerts, on every run.
+    @Test
+    @DisplayName("an item that can't be announced is rolled back alone; the others still go out")
+    void failingItem_doesNotHoldBackTheOthers() {
+        // The product table allows a product without a name (the API refuses one, the
+        // column doesn't), but the notification table doesn't, so this one's
+        // notification fails to insert.
+        WishlistItem unnamed = saveItem(saveProduct(null, "100.00", 5), NOW.minusSeconds(60));
+        WishlistItem lamp = saveItem(saveProduct("Lamp", "100.00", 5), NOW.minusSeconds(60));
+
+        assertThat(alertService.fireDueReminders(NOW)).isEqualTo(1);
+
+        assertThat(notificationRepository.findAll()).singleElement()
+                .satisfies(n -> assertThat(n.getProductName()).isEqualTo("Lamp"));
+        assertThat(reload(lamp).getRemindAt()).isNull();
+        assertThat(reload(unnamed).getRemindAt()).as("still due, so the next run retries it")
+                .isEqualTo(NOW.minusSeconds(60));
     }
 
     @Test
