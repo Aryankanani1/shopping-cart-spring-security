@@ -31,8 +31,8 @@ RUN npm run build
 #                                   Go 1.26.9 and x/net v0.60.0
 # No Caddy release includes the fixes yet, so this builds the same Caddy version
 # the same way (standard modules, the official build tags and flags) with Go
-# 1.26.9 and x/net v0.60.0. Every other dependency stays at the version Caddy
-# v2.11.7 requires.
+# 1.27 (the fixes are in 1.27.2 and later) and x/net v0.60.0. Every other
+# dependency stays at the version Caddy v2.11.7 requires.
 # Remove this stage, and the COPY and RUN after the last FROM, once caddy:2-alpine
 # ships a Caddy built with Go 1.26.9 or later and x/net v0.60.0 or later (a
 # release after v2.11.7): `caddy build-info` in the image shows both.
