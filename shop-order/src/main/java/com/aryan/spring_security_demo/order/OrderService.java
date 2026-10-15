@@ -9,6 +9,8 @@ import com.aryan.spring_security_demo.catalog.ProductRepository;
 import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.common.web.SlicedResponse;
 import com.aryan.spring_security_demo.identity.security.AuthUtils;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
@@ -21,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -35,6 +38,7 @@ public class OrderService implements OrderServiceInterface{
     private final CartService cartService;
     private final AuthUtils authUtils;
     private final Clock clock;
+    private final EntityManager entityManager;
 
     private final ModelMapper modelMapper;
 
@@ -119,32 +123,58 @@ public class OrderService implements OrderServiceInterface{
     public void prepareForAccountDeletion(Long userId) {
         // No ownership check: the caller is deleting the account, which
         // UserService has already authorized.
-        orderRepository.findWithItemsByUserIdAndStatusIn(userId, CANCELLABLE).forEach(order -> {
-            applyTransition(order, OrderStatus.CANCELLED);
-            // The account is deleted later in this transaction, and Hibernate won't
-            // flush a loaded order that still points at it. The database unlinks
-            // the orders that were never loaded (V8, on delete set null).
-            order.setUser(null);
-        });
+        List<Order> open = orderRepository.findWithItemsByUserIdAndStatusIn(userId, CANCELLABLE);
+        applyTransition(open, OrderStatus.CANCELLED);
+        // The account is deleted later in this transaction, and Hibernate won't
+        // flush a loaded order that still points at it. The database unlinks
+        // the orders that were never loaded (V8, on delete set null).
+        open.forEach(order -> order.setUser(null));
+    }
+
+    private void applyTransition(Order order, OrderStatus target) {
+        applyTransition(List.of(order), target);
     }
 
     /**
-     * Apply a single lifecycle transition to a managed order: validate it against
-     * the state machine, restock inventory when cancelling, then set the new
-     * status. The order is already managed, so the status change (and any restock)
-     * flushes at the transaction boundary; {@code @Version} guards concurrent
-     * changes, surfacing as a 409 via the global handler.
+     * Apply one lifecycle transition to managed orders: validate it for each
+     * against the state machine, restock inventory when cancelling, then set the
+     * new status. The orders are already managed, so the status change (and any
+     * restock) flushes at the transaction boundary; {@code @Version} guards
+     * concurrent changes to an order, surfacing as a 409 via the global handler.
      */
-    private void applyTransition(Order order, OrderStatus target) {
-        OrderStatus current = order.getOrderStatus();
-        if (!current.canTransitionTo(target)) {
-            throw new InvalidOrderStateException(
-                    "Cannot change order status from " + current + " to " + target);
+    private void applyTransition(List<Order> orders, OrderStatus target) {
+        for (Order order : orders) {
+            OrderStatus current = order.getOrderStatus();
+            if (!current.canTransitionTo(target)) {
+                throw new InvalidOrderStateException(
+                        "Cannot change order status from " + current + " to " + target);
+            }
         }
         if (target == OrderStatus.CANCELLED) {
-            restock(order);
+            lockProductsForRestock(orders);
+            orders.forEach(this::restock);
         }
-        order.setOrderStatus(target);
+        orders.forEach(order -> order.setOrderStatus(target));
+    }
+
+    /**
+     * Lock the products the orders return stock to, and re-read them under the
+     * lock, before restocking. The orders were loaded with their products, unlocked,
+     * so a checkout of the same product could commit in between; restocking from
+     * that stale read failed Product's version check with a 409. With the lock, a
+     * checkout and a cancellation of the same product run one after the other.
+     *
+     * <p>Each product once, in id order as checkout locks them, so the two can't
+     * deadlock; and before any is restocked, since re-reading a product discards
+     * changes made to it in this transaction.
+     */
+    private void lockProductsForRestock(List<Order> orders) {
+        orders.stream()
+                .flatMap(order -> order.getOrderItems().stream())
+                .map(OrderItem::getProduct)
+                .distinct()
+                .sorted(Comparator.comparing(Product::getId))
+                .forEach(product -> entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE));
     }
 
     /** Return each item's quantity to product inventory when an order is cancelled. */
