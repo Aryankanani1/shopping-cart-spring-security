@@ -81,6 +81,9 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 ### Persistence and transactions
 - `open-in-view` is off: convert entities to DTOs inside the `@Transactional` service method, and never let a controller accept or return a JPA entity in a new endpoint.
 - Code that needs the current time uses the injected `java.time.Clock` bean, not `Instant.now()`, `LocalDate.now()` or `System.currentTimeMillis()`.
+- A transaction holds one of the pool's 10 connections until it ends, so nothing slow runs inside one: no external API calls, password hashing (BCrypt) or file reads. Do that work before the transaction opens, as `UserService` and `ImageService` do.
+- `@Transactional` applies only to a public method called from another bean, through Spring's proxy. On a call from inside the same class, or on a private or final method, it is silently ignored, `REQUIRES_NEW` and rollback rules included. A step that needs its own transaction goes in a separate bean (as `UserAccountWriter` and `ImagePersistenceService`) or a `TransactionTemplate` (as `WishlistAlertService`); never put `@Transactional` on a method only called from inside its class.
+- `readOnly = true` is a performance hint, not write protection: use it only on methods that don't write, directly or through anything they call. A write in a read-only transaction is either silently not saved or fails.
 
 ### API and errors
 - Success responses are wrapped in `ApiResponse` (`{message, data}`).
