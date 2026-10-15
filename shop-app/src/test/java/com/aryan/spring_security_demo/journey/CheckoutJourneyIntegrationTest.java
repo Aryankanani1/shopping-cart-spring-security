@@ -381,6 +381,36 @@ class CheckoutJourneyIntegrationTest {
         assertThat(cartItemRepository.count()).as("the others keep their carts").isEqualTo(shoppers - 1);
     }
 
+    // Regression: a cancellation read its products without a lock, so a checkout of
+    // the same product committing meanwhile failed the cancellation's version check:
+    // a 409, and the customer had to cancel again.
+    @Test
+    @DisplayName("a cancellation during checkouts of the same product succeeds, and the stock adds up")
+    void cancel_duringCheckoutsOfTheSameProduct_succeeds() throws Exception {
+        String canceller = login("shopper@example.com", PASSWORD);
+        addToCart(canceller, ORDER_QUANTITY).andExpect(status().isCreated());
+        long orderId = dataOf(placeOrder(canceller).andExpect(status().isCreated()).andReturn()).path("id").asLong();
+
+        int shoppers = 5;
+        List<Callable<MvcResult>> requests = new ArrayList<>();
+        requests.add(() -> mockMvc.perform(post("/api/v1/orders/{orderId}/cancel", orderId)
+                .header("Authorization", "Bearer " + canceller)).andReturn());
+        for (int i = 0; i < shoppers; i++) {
+            String email = "racer" + i + "@example.com";
+            saveShopper(email);
+            String token = login(email, PASSWORD);
+            addToCart(token, 1).andExpect(status().isCreated());
+            requests.add(() -> placeOrder(token).andReturn());
+        }
+
+        List<MvcResult> results = allAtOnce(requests);
+
+        assertThat(statusesOf(results)).as("the cancellation, then each checkout")
+                .containsExactly(200, 201, 201, 201, 201, 201);
+        assertThat(inventoryOf(productId)).as("the cancelled units are back, the bought ones gone")
+                .isEqualTo(INITIAL_INVENTORY - shoppers);
+    }
+
     @Test
     @DisplayName("adding to the cart without a token is rejected (guard holds)")
     void addToCart_withoutToken_isUnauthorized() throws Exception {

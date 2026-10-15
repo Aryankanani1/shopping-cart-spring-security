@@ -10,10 +10,13 @@ import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException
 import com.aryan.spring_security_demo.common.web.SlicedResponse;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.security.AuthUtils;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -40,10 +43,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -64,6 +70,7 @@ class OrderServiceTest {
     @Mock private CartService cartService;
     @Mock private AuthUtils authUtils;
     @Mock private ModelMapper modelMapper;
+    @Mock private EntityManager entityManager;
     @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-14T12:00:00Z"), ZoneOffset.UTC);
 
     @InjectMocks private OrderService orderService;
@@ -252,6 +259,47 @@ class OrderServiceTest {
 
         assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.SHIPPED);
         assertThat(product.getInventory()).isEqualTo(5); // no restock on a rejected cancel
+        verify(entityManager, never()).refresh(any(), any(LockModeType.class));  // nor a lock
+    }
+
+    // Regression: the restock used the stock as loaded with the order, unlocked, so a
+    // checkout of the same product committing meanwhile made the cancellation fail
+    // Product's version check (a 409). The race itself is in CheckoutJourneyIntegrationTest.
+    @Test
+    void cancelOrder_restocksFromTheStockReReadUnderALock() {
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+        doAnswer(inv -> {
+            product.setInventory(3);  // what the database holds now: 2 more were sold
+            return null;
+        }).when(entityManager).refresh(product, LockModeType.PESSIMISTIC_WRITE);
+
+        orderService.cancelOrder(ORDER_ID);
+
+        assertThat(product.getInventory()).isEqualTo(5); // 3 + the 2 cancelled units
+    }
+
+    @Test
+    void prepareForAccountDeletion_locksEachProductOnce_inIdOrder_beforeAnyRestock() {
+        Product lamp = new Product();
+        lamp.setId(3L);
+        lamp.setInventory(1);
+        Order second = new Order();
+        second.setUser(order.getUser());
+        second.setOrderStatus(OrderStatus.PENDING);
+        second.addOrderItem(new OrderItem(product, 1, BigDecimal.TEN));  // product 7 again
+        second.addOrderItem(new OrderItem(lamp, 4, BigDecimal.TEN));
+        when(orderRepository.findWithItemsByUserIdAndStatusIn(
+                OWNER_ID, List.of(OrderStatus.PENDING, OrderStatus.PROCESSING)))
+                .thenReturn(List.of(order, second));
+
+        orderService.prepareForAccountDeletion(OWNER_ID);
+
+        InOrder locks = inOrder(entityManager);
+        locks.verify(entityManager).refresh(lamp, LockModeType.PESSIMISTIC_WRITE);
+        locks.verify(entityManager).refresh(product, LockModeType.PESSIMISTIC_WRITE);
+        locks.verifyNoMoreInteractions();
+        assertThat(product.getInventory()).isEqualTo(8); // 5 + 2 + 1, both restocks kept
+        assertThat(lamp.getInventory()).isEqualTo(5);    // 1 + 4
     }
 
     @Test
@@ -295,6 +343,7 @@ class OrderServiceTest {
 
         assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.SHIPPED);
         assertThat(product.getInventory()).isEqualTo(5); // only cancellation restocks
+        verifyNoInteractions(entityManager);              // and locks
     }
 
     @Test
