@@ -28,17 +28,15 @@ public class UserService implements UserServiceInterface{
     private final ApplicationEventPublisher events;
     private final UserAccountWriter accountWriter;
 
-    @Override
-    @Transactional(readOnly = true)
-    public User getUserById(Long userId) {
+    // getUserById and updateUser are called only from this class (the *Dto and
+    // *AndConvert methods), so no @Transactional: it would never apply.
+    private User getUserById(Long userId) {
         // Accounts are private: only the owner (or an admin) may read one.
         authUtils.requireSelfOrAdmin(userId);
         return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException("failed to find user"));
     }
 
-    @Override
-    @Transactional
-    public User updateUser(UserUpdateRequest request, Long userId) {
+    private User updateUser(UserUpdateRequest request, Long userId) {
         authUtils.requireSelfOrAdmin(userId);
         return userRepository.findById(userId).map(existingUser -> {
             existingUser.setFirstName(request.getFirstName());

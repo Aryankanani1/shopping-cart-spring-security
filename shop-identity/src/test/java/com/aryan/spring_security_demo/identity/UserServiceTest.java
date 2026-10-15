@@ -183,7 +183,7 @@ class UserServiceTest {
     }
 
     @Test
-    void updateUser_changesOnlyTheName() {
+    void updateUserAndConvert_changesOnlyTheName() {
         User user = new User();
         user.setEmail("ada@example.com");
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
@@ -192,7 +192,7 @@ class UserServiceTest {
         request.setFirstName("Grace");
         request.setLastName("Hopper");
 
-        userService.updateUser(request, USER_ID);
+        userService.updateUserAndConvert(request, USER_ID);
 
         verify(authUtils).requireSelfOrAdmin(USER_ID);
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
@@ -202,10 +202,10 @@ class UserServiceTest {
     }
 
     @Test
-    void getUserById_someoneElse_isDenied() {
+    void getUserDtoById_someoneElse_isDenied() {
         doThrow(new AccessDeniedException("nope")).when(authUtils).requireSelfOrAdmin(USER_ID);
 
-        assertThatThrownBy(() -> userService.getUserById(USER_ID)).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> userService.getUserDtoById(USER_ID)).isInstanceOf(AccessDeniedException.class);
         verify(userRepository, never()).findById(any());
     }
 

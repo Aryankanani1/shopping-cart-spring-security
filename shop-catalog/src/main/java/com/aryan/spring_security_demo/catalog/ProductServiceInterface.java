@@ -4,10 +4,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 public interface ProductServiceInterface {
-    Product addProduct(AddProductRequest product);
     Product getProductById(Long id);
     void deleteProductById(Long productId);
-    Product updateProductById(ProductUpdateRequest product, Long productId);
     Long countProductsByBrandAndName(String brand,String name);
 
     ProductDto convertToDto(Product product);

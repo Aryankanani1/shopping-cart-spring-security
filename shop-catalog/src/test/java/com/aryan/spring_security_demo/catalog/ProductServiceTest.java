@@ -57,7 +57,7 @@ class ProductServiceTest {
         when(productRepository.existsByNameAndBrand("Desk Lamp", "Acme")).thenReturn(true);
 
         // Regression: the message read "Acme Desk Lampalready exists".
-        assertThatThrownBy(() -> productService.addProduct(addRequest("Lighting")))
+        assertThatThrownBy(() -> productService.addProductAndConvert(addRequest("Lighting")))
                 .isInstanceOf(AlreadyExistsException.class)
                 .hasMessage("Acme Desk Lamp already exists");
         verify(productRepository, never()).save(any());
@@ -68,9 +68,9 @@ class ProductServiceTest {
     void addProduct_resolvesTheCategoryByName() {
         when(categoryService.findOrCreate("Lighting")).thenReturn(lighting);
 
-        Product added = productService.addProduct(addRequest("Lighting"));
+        ProductDto added = productService.addProductAndConvert(addRequest("Lighting"));
 
-        assertThat(added.getCategory()).isSameAs(lighting);
+        assertThat(added.getCategoryName()).isEqualTo(lighting.getName());
         assertThat(added.getPrice()).isEqualByComparingTo("12.50");
     }
 
@@ -80,7 +80,7 @@ class ProductServiceTest {
     void update_missingProduct_is404() {
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> productService.updateProductById(updateRequest("12.00", null), PRODUCT_ID))
+        assertThatThrownBy(() -> productService.updateProductAndConvert(updateRequest("12.00", null), PRODUCT_ID))
                 .isInstanceOf(ProductNotFoundException.class);
     }
 
@@ -88,7 +88,7 @@ class ProductServiceTest {
     void update_newPrice_tellsCartsToReprice() {
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(lamp));
 
-        productService.updateProductById(updateRequest("12.00", null), PRODUCT_ID);
+        productService.updateProductAndConvert(updateRequest("12.00", null), PRODUCT_ID);
 
         verify(events).publishEvent(new ProductPriceChangedEvent(PRODUCT_ID, new BigDecimal("12.00")));
         assertThat(lamp.getPrice()).isEqualByComparingTo("12.00");
@@ -98,7 +98,7 @@ class ProductServiceTest {
     void update_samePriceWithDifferentScale_isNotAPriceChange() {
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(lamp));
 
-        productService.updateProductById(updateRequest("10.0", null), PRODUCT_ID);  // was 10.00
+        productService.updateProductAndConvert(updateRequest("10.0", null), PRODUCT_ID);  // was 10.00
 
         verify(events, never()).publishEvent(any(Object.class));
     }
@@ -107,7 +107,7 @@ class ProductServiceTest {
     void update_withoutCategory_keepsTheCurrentOne() {
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(lamp));
 
-        productService.updateProductById(updateRequest("10.00", null), PRODUCT_ID);
+        productService.updateProductAndConvert(updateRequest("10.00", null), PRODUCT_ID);
 
         assertThat(lamp.getCategory()).isSameAs(lighting);
         verify(categoryService, never()).findOrCreate(any());
@@ -119,7 +119,7 @@ class ProductServiceTest {
         when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(lamp));
         when(categoryService.findOrCreate("Outdoor")).thenReturn(outdoor);
 
-        productService.updateProductById(updateRequest("10.00", "Outdoor"), PRODUCT_ID);
+        productService.updateProductAndConvert(updateRequest("10.00", "Outdoor"), PRODUCT_ID);
 
         assertThat(lamp.getCategory()).isSameAs(outdoor);
     }

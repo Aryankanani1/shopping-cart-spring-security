@@ -18,9 +18,9 @@ public class ProductService implements ProductServiceInterface{
     private final ProductRepository productRepository;
     private final CategoryServiceInterface categoryService;
     private final ApplicationEventPublisher events;
-    @Override
-    @Transactional
-    public Product addProduct(AddProductRequest request) {
+    // addProduct and updateProductById are called only from this class (the
+    // *AndConvert methods below), so no @Transactional: it would never apply.
+    private Product addProduct(AddProductRequest request) {
 
 
         if(productExists(request.getName(),request.getBrand())){
@@ -71,9 +71,7 @@ public class ProductService implements ProductServiceInterface{
         }
     }
 
-    @Override
-    @Transactional
-    public Product updateProductById(ProductUpdateRequest request, Long productId) {
+    private Product updateProductById(ProductUpdateRequest request, Long productId) {
           return productRepository.findById(productId)
                   .map(existingproduct -> updateExistingProduct(existingproduct,request))
                   .map(productRepository::save).orElseThrow(() -> new ProductNotFoundException("product not found exception"));
