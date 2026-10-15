@@ -45,8 +45,11 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD:-shop}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
     ports:
-      # Exposed to the host so you can connect a GUI client during dev.
-      - "${DB_PORT:-3306}:3306"
+      # Exposed to the host so you can connect a GUI client during dev, on
+      # localhost only: on all interfaces, anyone on the same network could reach
+      # it, and its defaults (shop/shop, root/root) are not secret. The app
+      # container reaches it over the Compose network, not this port.
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
