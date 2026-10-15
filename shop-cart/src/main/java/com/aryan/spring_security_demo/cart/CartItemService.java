@@ -89,9 +89,8 @@ public class CartItemService implements CartItemServiceInterface {
     }
 
 
-    @Override
-    @Transactional(readOnly = true)
-    public CartItem getCartItem(Long cartId, Long productId){
+    // Called only from this class, so no @Transactional: it would never apply.
+    private CartItem getCartItem(Long cartId, Long productId){
         Cart cart = cartService.getCart(cartId);
         return cart.getCartItems()
                 .stream()

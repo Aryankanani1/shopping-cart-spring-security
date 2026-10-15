@@ -3,9 +3,7 @@ package com.aryan.spring_security_demo.identity;
 
 
 public interface UserServiceInterface {
-    User getUserById(Long userId);
 
-    User updateUser(UserUpdateRequest request, Long userId);
     void deleteUser(Long userId);
 
     UserDto convertUserToDto(User user);

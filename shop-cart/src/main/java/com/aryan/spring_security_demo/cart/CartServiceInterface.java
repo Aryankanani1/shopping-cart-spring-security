@@ -18,5 +18,4 @@ public interface CartServiceInterface {
 
     Cart initializeNewCart(User user);
 
-    Cart getCartByUserId(Long userId);
 }

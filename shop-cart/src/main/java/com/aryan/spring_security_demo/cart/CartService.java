@@ -108,18 +108,12 @@ public class CartService implements CartServiceInterface{
         // Two first add-to-carts at once must not both create a cart (the second
         // would fail the unique user_id): the second waits here, then finds it.
         userRepository.lockById(user.getId());
-        return Optional.ofNullable(getCartByUserId(user.getId()))
+        return Optional.ofNullable(cartRepository.findByUserId(user.getId()))
                 .orElseGet(() -> {
                     Cart cart = new Cart();
                     cart.setUser(user);
                     return cartRepository.save(cart);
                 });
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public Cart getCartByUserId(Long userId) {
-        return cartRepository.findByUserId(userId);
     }
 
 }
