@@ -5,7 +5,6 @@ package com.aryan.spring_security_demo.identity;
 public interface UserServiceInterface {
     User getUserById(Long userId);
 
-    User createUser(CreateUserRequest request);
     User updateUser(UserUpdateRequest request, Long userId);
     void deleteUser(Long userId);
 
@@ -21,7 +20,7 @@ public interface UserServiceInterface {
 
     /**
      * Change the authenticated caller's password after re-verifying the current
-     * one, and end every existing session in the same transaction.
+     * one, and end every existing session in the same transaction as the update.
      */
     void changePassword(ChangePasswordRequest request);
 }

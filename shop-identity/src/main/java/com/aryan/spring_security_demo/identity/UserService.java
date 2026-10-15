@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -20,36 +19,21 @@ public class UserService implements UserServiceInterface{
     /** BCrypt hashes only this many bytes; the encoder throws on longer input. */
     private static final int MAX_PASSWORD_BYTES = 72;
     /** Self-registration only ever creates customers. */
-    private static final String CUSTOMER_ROLE = "ROLE_CUSTOMER";
 
     private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
     private final ModelMapper modelMapper;
     private final PasswordEncoder passwordEncoder;
     private final AuthUtils authUtils;
     private final RefreshTokenService refreshTokenService;
     private final ApplicationEventPublisher events;
+    private final UserAccountWriter accountWriter;
+
     @Override
     @Transactional(readOnly = true)
     public User getUserById(Long userId) {
         // Accounts are private: only the owner (or an admin) may read one.
         authUtils.requireSelfOrAdmin(userId);
         return userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException("failed to find user"));
-    }
-
-    @Override
-    @Transactional
-    public User createUser(CreateUserRequest request) {
-        return Optional.of(request).filter(user -> !userRepository.existsByEmail(request.getEmail()))
-                .map(req -> {
-                    User user = new User();
-                    user.setEmail(request.getEmail());
-                    user.setFirstName(request.getFirstName());
-                    user.setLastName(request.getLastName());
-                    user.setPassword(encodePassword("password", request.getPassword()));
-                    user.getRoles().add(customerRole());
-                    return userRepository.save(user);
-                }).orElseThrow(() -> new AlreadyExistsException( request.getEmail()+ " already exists"));
     }
 
     @Override
@@ -84,12 +68,6 @@ public class UserService implements UserServiceInterface{
         });
     }
 
-    /** DataInitializer creates the role at startup, so it is always there. */
-    private Role customerRole() {
-        return roleRepository.findByName(CUSTOMER_ROLE)
-                .orElseThrow(() -> new IllegalStateException(CUSTOMER_ROLE + " is missing"));
-    }
-
     /**
      * Hash a new password, rejecting one too long for BCrypt as a 400 on
      * {@code field}. The request's 72-character limit isn't enough on its own: a
@@ -119,10 +97,20 @@ public class UserService implements UserServiceInterface{
         return convertUserToDto(getUserById(userId));
     }
 
+    /**
+     * Sign up. Not {@code @Transactional}: the password is hashed first, with no
+     * transaction (and so no pooled connection) held, since BCrypt is slow on
+     * purpose; only the insert runs in a transaction, in {@link UserAccountWriter}.
+     */
     @Override
-    @Transactional
     public UserDto createUserAndConvert(CreateUserRequest request) {
-        return convertUserToDto(createUser(request));
+        // Checked before hashing, so a taken email is refused without the cost of
+        // a hash; UserAccountWriter checks again in the transaction that inserts.
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new AlreadyExistsException(request.getEmail() + " already exists");
+        }
+        String passwordHash = encodePassword("password", request.getPassword());
+        return accountWriter.createAccount(request, passwordHash);
     }
 
     @Override
@@ -145,27 +133,31 @@ public class UserService implements UserServiceInterface{
                 .orElseThrow(() -> new UserNotFoundException("failed to find user"));
     }
 
+    /**
+     * Not {@code @Transactional}: both BCrypt steps (checking the current password,
+     * hashing the new one) run with no transaction held. The current hash is read
+     * on its own, and the update, with ending every session, is one short
+     * transaction in {@link UserAccountWriter}.
+     */
     @Override
-    @Transactional
     public void changePassword(ChangePasswordRequest request) {
         // Always the caller's own account: an admin can't use this to set someone
         // else's password, since it hinges on knowing the current one.
         Long userId = authUtils.currentUserId();
-        User user = userRepository.findById(userId)
+        String currentHash = userRepository.findById(userId)
+                .map(User::getPassword)
                 .orElseThrow(() -> new UserNotFoundException("failed to find user"));
 
         // Re-verify even though the caller holds a valid token — a stolen or
         // left-open session alone must not be enough to take over the account.
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+        if (!passwordEncoder.matches(request.getCurrentPassword(), currentHash)) {
             throw new InvalidPasswordException("currentPassword", "Current password is incorrect");
         }
         if (request.getNewPassword().equals(request.getCurrentPassword())) {
             throw new InvalidPasswordException("newPassword", "New password must be different from the current one");
         }
-        user.setPassword(encodePassword("newPassword", request.getNewPassword()));
-
-        // Same transaction as the password update, so the change can never commit
-        // while a stolen refresh token stays usable.
-        refreshTokenService.endAllSessions(userId);
+        String newHash = encodePassword("newPassword", request.getNewPassword());
+        // Only replaces the hash if it is still the one checked above.
+        accountWriter.replacePassword(userId, currentHash, newHash);
     }
 }

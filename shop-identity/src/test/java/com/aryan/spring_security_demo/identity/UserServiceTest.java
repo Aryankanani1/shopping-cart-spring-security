@@ -37,62 +37,53 @@ class UserServiceTest {
     private static final Long USER_ID = 7L;
 
     @Mock private UserRepository userRepository;
-    @Mock private RoleRepository roleRepository;
     @Mock private ModelMapper modelMapper;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private AuthUtils authUtils;
     @Mock private RefreshTokenService refreshTokenService;
     @Mock private ApplicationEventPublisher events;
+    @Mock private UserAccountWriter accountWriter;
 
     @InjectMocks private UserService userService;
 
     // ---- registration -----------------------------------------------------
 
+    // The hash is made before UserAccountWriter opens the transaction that saves
+    // the account: hashing inside it held a pooled connection for the whole hash.
     @Test
-    void createUser_storesTheHashNotThePassword() {
+    void createUserAndConvert_hashesFirst_thenSavesTheHashNotThePassword() {
+        CreateUserRequest request = registration("secret123");
+        UserDto saved = new UserDto();
         when(userRepository.existsByEmail("ada@example.com")).thenReturn(false);
         when(passwordEncoder.encode("secret123")).thenReturn("hashed");
-        when(roleRepository.findByName("ROLE_CUSTOMER")).thenReturn(Optional.of(new Role("ROLE_CUSTOMER")));
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(accountWriter.createAccount(request, "hashed")).thenReturn(saved);
 
-        User created = userService.createUser(registration("secret123"));
+        assertThat(userService.createUserAndConvert(request)).isSameAs(saved);
 
-        assertThat(created.getPassword()).isEqualTo("hashed");
-        assertThat(created.getEmail()).isEqualTo("ada@example.com");
-    }
-
-    // Regression: accounts were created with no role at all.
-    @Test
-    void createUser_makesTheAccountACustomer() {
-        Role customer = new Role("ROLE_CUSTOMER");
-        when(userRepository.existsByEmail("ada@example.com")).thenReturn(false);
-        when(passwordEncoder.encode("secret123")).thenReturn("hashed");
-        when(roleRepository.findByName("ROLE_CUSTOMER")).thenReturn(Optional.of(customer));
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        User created = userService.createUser(registration("secret123"));
-
-        assertThat(created.getRoles()).containsExactly(customer);
+        InOrder order = inOrder(passwordEncoder, accountWriter);
+        order.verify(passwordEncoder).encode("secret123");
+        order.verify(accountWriter).createAccount(request, "hashed");
     }
 
     @Test
-    void createUser_takenEmail_isRejected() {
+    void createUserAndConvert_takenEmail_isRejectedWithoutHashing() {
         when(userRepository.existsByEmail("ada@example.com")).thenReturn(true);
 
-        assertThatThrownBy(() -> userService.createUser(registration("secret123")))
+        assertThatThrownBy(() -> userService.createUserAndConvert(registration("secret123")))
                 .isInstanceOf(AlreadyExistsException.class);
-        verify(userRepository, never()).save(any());
+        verify(passwordEncoder, never()).encode(any());
+        verify(accountWriter, never()).createAccount(any(), any());
     }
 
     @Test
-    void createUser_passwordOver72Bytes_isAFieldErrorNotAnEncoderCrash() {
+    void createUserAndConvert_passwordOver72Bytes_isAFieldErrorNotAnEncoderCrash() {
         when(userRepository.existsByEmail("ada@example.com")).thenReturn(false);
 
-        assertThatThrownBy(() -> userService.createUser(registration("é".repeat(40))))  // 80 bytes
+        assertThatThrownBy(() -> userService.createUserAndConvert(registration("é".repeat(40))))  // 80 bytes
                 .isInstanceOfSatisfying(InvalidPasswordException.class,
                         e -> assertThat(e.getField()).isEqualTo("password"));
         verify(passwordEncoder, never()).encode(any());
-        verify(userRepository, never()).save(any());
+        verify(accountWriter, never()).createAccount(any(), any());
     }
 
     // ---- password change --------------------------------------------------
@@ -106,7 +97,7 @@ class UserServiceTest {
                 .isInstanceOfSatisfying(InvalidPasswordException.class,
                         e -> assertThat(e.getField()).isEqualTo("currentPassword"));
         assertThat(user.getPassword()).isEqualTo("old-hash");
-        verify(refreshTokenService, never()).endAllSessions(any());
+        verify(accountWriter, never()).replacePassword(any(), any(), any());
     }
 
     @Test
@@ -117,7 +108,7 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.changePassword(passwordChange("same-pass", "same-pass")))
                 .isInstanceOfSatisfying(InvalidPasswordException.class,
                         e -> assertThat(e.getField()).isEqualTo("newPassword"));
-        verify(refreshTokenService, never()).endAllSessions(any());
+        verify(accountWriter, never()).replacePassword(any(), any(), any());
     }
 
     @Test
@@ -128,19 +119,23 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.changePassword(passwordChange("old-pass", "é".repeat(40))))
                 .isInstanceOfSatisfying(InvalidPasswordException.class,
                         e -> assertThat(e.getField()).isEqualTo("newPassword"));
-        verify(refreshTokenService, never()).endAllSessions(any());
+        verify(accountWriter, never()).replacePassword(any(), any(), any());
     }
 
+    // Both BCrypt steps run before UserAccountWriter opens the transaction that
+    // stores the new hash (and ends every session); they used to run inside it.
     @Test
-    void changePassword_success_storesNewHashAndEndsEverySession() {
-        User user = signedInUserWithHash("old-hash");
+    void changePassword_success_hashesFirst_thenReplacesTheVerifiedHash() {
+        signedInUserWithHash("old-hash");
         when(passwordEncoder.matches("old-pass", "old-hash")).thenReturn(true);
         when(passwordEncoder.encode("n3w-secret")).thenReturn("new-hash");
 
         userService.changePassword(passwordChange("old-pass", "n3w-secret"));
 
-        assertThat(user.getPassword()).isEqualTo("new-hash");
-        verify(refreshTokenService).endAllSessions(USER_ID);
+        InOrder order = inOrder(passwordEncoder, accountWriter);
+        order.verify(passwordEncoder).matches("old-pass", "old-hash");
+        order.verify(passwordEncoder).encode("n3w-secret");
+        order.verify(accountWriter).replacePassword(USER_ID, "old-hash", "new-hash");
     }
 
     // ---- deletion and updates ---------------------------------------------
