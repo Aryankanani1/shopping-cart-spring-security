@@ -419,12 +419,41 @@ never received; a real provider remembers.
 No new columns: the job's query (`status = 'PROCESSING' and created_at < ?`) uses
 the `status`-led index from `V12`.
 
-## 6. Roadmap
+## 6. Phase 2: unpaid order expiry
+
+Checkout takes the items out of stock straight away, so an order nobody pays for
+holds them forever. An order still `PENDING` 30 minutes after it was placed
+(`app.orders.unpaid-expiry`) is cancelled, and its items go back on sale.
+
+- **The order module owns it.** `UnpaidOrderExpiryJob` (ShedLock, every minute)
+  finds the unpaid orders placed before the cutoff, and cancels each through
+  `OrderService.expireIfUnpaid`: the same cancellation as the customer's (restock
+  under product locks, `OrderCancellingEvent`), without the ownership check.
+- **One transaction per order.** The job calls a public `@Transactional` method on
+  another bean, so each order goes through Spring's proxy and commits or rolls back
+  alone, and holds its product locks only as long as its own cancellation. The
+  order's status and age are checked again inside that transaction: it may have
+  been paid since the scan.
+- **Payments still have a say.** An order with a payment `PROCESSING` may still be
+  charged, so the payment module refuses its cancellation (`409`). The job leaves
+  that order and tries again on a later run, after reconciliation (section 5) has
+  settled the payment.
+- **Paying at the last second is safe.** A new payment attempt raises the order's
+  version, so an expiry that read the order before fails its version check; an
+  expiry that commits first leaves the order `CANCELLED`, and the payment request
+  gets a `409`. Either way the order is never cancelled with money taken.
+- **The customer is told.** While an order is unpaid, the API returns `payBy` (when
+  it was placed plus the window), and the order page says "Pay by ...".
+
+`V13__orders_status_created_index.sql` adds `(order_status, created_at)` for the
+job's query; the existing index leads with `user_id`.
+
+## 7. Roadmap
 
 - **Phase 1:** everything in sections 1 to 3, the pay step on the storefront's
   order page, and tests (unit, integration against MySQL, end-to-end).
 - **Phase 2:** refunds when a paid order is cancelled (section 4), reconciliation of
-  payments stuck in `PROCESSING` (section 5), then expiry of orders left unpaid for
-  30 minutes.
+  payments stuck in `PROCESSING` (section 5), and expiry of orders left unpaid
+  (section 6).
 - **Phase 3:** provider webhooks with a signature check, and an adapter for a real
   provider's test mode.
