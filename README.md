@@ -566,6 +566,27 @@ application context (`@SpringBootTest`, `@WebMvcTest`, `@DataJpaTest`) are in
 `shop-app`. The `@SpringBootTest` and `@DataJpaTest` ones are tagged `integration` and
 run against MySQL in a container, so they need Docker.
 
+**The API contract.** [`docs/openapi.json`](docs/openapi.json) is the OpenAPI spec the
+app generates, committed: a change to an endpoint or a DTO shows up in its pull request
+as a diff there, and `OpenApiContractTest` fails until it is regenerated:
+
+```bash
+./mvnw test -pl shop-app -am -Dtest=OpenApiContractTest -Dsurefire.failIfNoSpecifiedTests=false -Dopenapi.update=true
+```
+
+**Fuzzing.** The staging stage runs Schemathesis against the deployed API with that
+contract: thousands of generated requests, valid and malformed, signed in as a customer,
+and any 5xx fails the build. Its first run found five kinds of malformed request that
+crashed with a 500 (a multipart body with no boundary, an undecodable query string, a
+parameter name the firewall rejects, a `page` so large its offset overflowed, a `%` in
+`sort`); they are 400s now. To fuzz a local API (dev profile on :8082):
+
+```bash
+docker run --rm -v "$PWD/docs:/spec:ro" schemathesis/schemathesis:4.31.1 run /spec/openapi.json \
+  --url http://host.docker.internal:8082 --header "Authorization: Bearer <a customer's token>" \
+  --checks not_a_server_error --exclude-operation-id deleteUser
+```
+
 ## CI/CD pipeline
 
 [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml) takes every change
@@ -599,8 +620,9 @@ commit ─▶ Build ─┬─▶ Unit tests ─▶ Integration tests ─┬─�
   with the commit SHA.
 - **Staging (deploy + E2E)**: the production setup from [`deploy/`](deploy/), started
   on the CI runner from those images with a MySQL container, then the Playwright
-  tests in [`frontend/e2e/`](frontend/e2e/) against it over HTTPS. On `master` the
-  images that pass become `latest`.
+  tests in [`frontend/e2e/`](frontend/e2e/) against it over HTTPS, and
+  [Schemathesis](https://schemathesis.readthedocs.io/) fuzzing the API against its
+  contract (see Build & test). On `master` the images that pass become `latest`.
 - **Deploy production**: on `master`, after a reviewer approves, over SSH with
   [`deploy/deploy.sh`](deploy/deploy.sh), which rolls back if the new build doesn't
   become ready. Setup: [`deploy/README.md`](deploy/README.md).

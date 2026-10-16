@@ -28,6 +28,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import org.apache.tomcat.util.http.InvalidParameterException;
+import org.junit.jupiter.api.Test;
+import org.springframework.security.web.firewall.RequestRejectedException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -69,7 +76,24 @@ class ExceptionMappingTest {
                 arguments(new InvalidImageException("a.txt is empty"), 400, "Invalid image", "a.txt is empty", null),
                 arguments(new InvalidPasswordException("currentPassword", "Current password is incorrect"), 400,
                         "Validation failed", "Current password is incorrect",
-                        Map.of("currentPassword", "Current password is incorrect")));
+                        Map.of("currentPassword", "Current password is incorrect")),
+                // 400, requests too malformed to reach a controller: each was a 500 until the API was fuzzed
+                arguments(new MultipartException("Failed to parse multipart servlet request"), 400,
+                        "Malformed request", "The multipart request body could not be read", null),
+                arguments(new InvalidParameterException("Invalid chunk ignored"), 400,
+                        "Malformed request", "The request parameters could not be decoded", null),
+                arguments(new RequestRejectedException("The parameter name \"x\" is not allowed"), 400,
+                        "Malformed request", "The request was rejected", null));
+    }
+
+    // MaxUploadSizeExceededException is a MultipartException too: it must keep the
+    // base class's 413, not become the malformed-multipart 400.
+    @Test
+    void anOversizedUpload_staysWithTheBaseClassHandler() {
+        Method method = RESOLVER.resolveMethod(new MaxUploadSizeExceededException(1024));
+
+        assertThat(method).isNotNull();
+        assertThat(method.getDeclaringClass()).isEqualTo(ResponseEntityExceptionHandler.class);
     }
 
     @ParameterizedTest(name = "{0}")

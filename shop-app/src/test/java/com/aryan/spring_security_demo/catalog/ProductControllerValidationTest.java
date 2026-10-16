@@ -9,8 +9,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -156,5 +159,23 @@ class ProductControllerValidationTest {
                   "category": { "name": "Electronics" }
                 }
                 """.formatted(name, brand, description);
+    }
+
+    // Found by fuzzing: an offset past Integer.MAX_VALUE overflowed in Spring Data,
+    // and a % in sort failed its second decoding. Both were 500s.
+    @Test
+    void listProducts_withAPageTooFarOut_returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/products").param("page", "2147483647"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid page"));
+
+        verify(productService, never()).findProducts(any(), any(), any(), any());
+    }
+
+    @Test
+    void listProducts_withASortThatIsntAProperty_returns400() throws Exception {
+        mockMvc.perform(get("/api/v1/products").param("sort", "%"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Invalid sort parameter"));
     }
 }

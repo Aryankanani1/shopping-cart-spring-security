@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.common.exception;
 import io.jsonwebtoken.JwtException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
+import org.apache.tomcat.util.http.InvalidParameterException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,11 +16,13 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import java.util.LinkedHashMap;
@@ -106,6 +109,41 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
      * emit the same body. Handled explicitly so the {@link #handleUnexpected(Exception)
      * Exception} catch-all can never turn a legitimate 403 into a 500.
      */
+    // -----------------------------------------------------------------------
+    // 400 — requests too malformed to reach a controller. Each was a 500 from the
+    // catch-all below until the API was fuzzed (Schemathesis, in the staging stage).
+    // -----------------------------------------------------------------------
+
+    /**
+     * 400 — a multipart body that can't be parsed: {@code Content-Type:
+     * multipart/form-data} with no boundary, or a malformed part. Spring parses it
+     * before choosing a controller, for any endpoint. One that is too large is
+     * still a 413 (the base class handles that subtype).
+     */
+    @ExceptionHandler(MultipartException.class)
+    public ProblemDetail handleMalformedMultipart(MultipartException ex) {
+        log.debug("400 Malformed multipart request: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, "Malformed request", "The multipart request body could not be read");
+    }
+
+    /** 400 — the query string or form parameters couldn't be decoded (bad percent-encoding, invalid UTF-8). */
+    @ExceptionHandler(InvalidParameterException.class)
+    public ProblemDetail handleUndecodableParameters(InvalidParameterException ex) {
+        log.debug("400 Undecodable request parameters: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, "Malformed request", "The request parameters could not be decoded");
+    }
+
+    /**
+     * 400 — Spring Security's firewall rejected the request, for a parameter name it
+     * doesn't allow, say. It checks parameter names only when they are first read,
+     * which can be after its filter, while the request is matched to a controller.
+     */
+    @ExceptionHandler(RequestRejectedException.class)
+    public ProblemDetail handleRejectedRequest(RequestRejectedException ex) {
+        log.debug("400 Request rejected by the firewall: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_REQUEST, "Malformed request", "The request was rejected");
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ProblemDetail handleAccessDenied(AccessDeniedException ex) {
         log.debug("403 Access denied: {}", ex.getMessage());

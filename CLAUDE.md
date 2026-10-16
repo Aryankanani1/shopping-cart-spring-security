@@ -17,6 +17,7 @@ a PR adds or changes; older code may predate some of them.
 ./mvnw verify                        # all tests, coverage report (shop-app/target/site/jacoco-aggregate/) and static analysis
 ./mvnw -Dmaven.test.skip=true verify # static analysis only: SpotBugs + FindSecBugs, PMD, CPD (the pipeline's "Static analysis")
 ./mvnw -DskipTests package dependency-check:aggregate   # OWASP CVE scan; report in target/ (set NVD_API_KEY to speed up the download)
+./mvnw test -pl shop-app -am -Dtest=OpenApiContractTest -Dsurefire.failIfNoSpecifiedTests=false -Dopenapi.update=true   # regenerate docs/openapi.json after an API change
 cd frontend && npm test              # Vitest
 cd frontend && npm run test:coverage # Vitest with coverage (coverage/index.html)
 cd frontend && npm run build         # type-check + production build
@@ -38,7 +39,8 @@ Staging (deploy + E2E) → Deploy production; pull requests stop after staging, 
 production needs a reviewer's approval. Staging is the production setup from
 `deploy/` started on the CI runner from the new images, with
 `deploy/docker-compose.staging.yml` adding a MySQL container; the Playwright tests in
-`frontend/e2e/` run against it. The quality gate's coverage floors are in
+`frontend/e2e/` run against it, then Schemathesis fuzzes the API against
+`docs/openapi.json` and fails the stage on any 5xx. The quality gate's coverage floors are in
 `.github/scripts/quality_gate.py`. "Quality gate" and "Staging (deploy + E2E)" are
 required checks for merging into `master`; production deploys need a reviewer's
 approval in the `production` environment.
@@ -96,6 +98,8 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 - Request bodies are dedicated request classes validated with `@Valid` and Bean Validation annotations.
 - Use `201 Created` with a `Location` header for creates, `204 No Content` for deletes, `404` for missing records, `409` for conflicts and `400` for invalid input.
 - Endpoints that list data which grows without bound (products, orders, notifications) must be paginated.
+- `docs/openapi.json` is the API's committed contract: a change to an endpoint, a request or a response regenerates it in the same PR (the command is under Commands; `OpenApiContractTest` fails otherwise), and `frontend/src/api/types.ts` changes with it.
+- Malformed input is a 4xx, never a 5xx: a request the staging fuzzing (Schemathesis) crashes with a 500 is fixed in the API, never by excluding the operation from the fuzzing.
 
 ### Modules and wiring
 - New backend classes go in the feature module (Maven module and package) they belong to.

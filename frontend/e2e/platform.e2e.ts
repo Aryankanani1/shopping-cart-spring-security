@@ -57,3 +57,10 @@ test('serves the API under /api and keeps private data behind sign-in', async ({
   expect(orders.status()).toBe(401)
   expect(orders.headers()['content-type']).toContain('application/problem+json')
 })
+
+test('refuses TRACE at the edge, without passing it to the API', async ({ request }) => {
+  const res = await request.fetch('/api/v1/products', { method: 'TRACE' })
+  expect(res.status()).toBe(405)
+  // Answered by Caddy itself: a proxied response would carry its Via header.
+  expect(res.headers()['via']).toBeUndefined()
+})
