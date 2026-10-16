@@ -19,6 +19,7 @@ import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
 import com.aryan.spring_security_demo.payment.PaymentRepository;
 import com.aryan.spring_security_demo.payment.PaymentStatus;
+import com.aryan.spring_security_demo.payment.RefundProcessor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -40,6 +41,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,6 +56,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.startsWith;
@@ -61,6 +64,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -69,11 +73,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Paying for an order, through HTTP and against MySQL: what a payment changes,
- * what a repeated request gets, and the races a payment has to win (the same
- * request twice at once, two different payments at once, paying while
- * cancelling). The provider is the real {@link FakePaymentGateway}, spied on to
- * count charges and to see whether a transaction was open during each call.
+ * Paying for an order and refunding it, through HTTP and against MySQL: what a
+ * payment changes, what a repeated request gets, the races a payment has to win
+ * (the same request twice at once, two different payments at once, paying while
+ * cancelling), and the refund a cancellation owes, made after it commits. The
+ * provider is the real {@link FakePaymentGateway}, spied on to count calls and to
+ * see whether a transaction was open during each one.
  */
 @Tag("integration")
 @SpringBootTest
@@ -90,7 +95,13 @@ class PaymentIntegrationTest {
             """;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+    /** A refund after a commit can take a moment: it runs on a background thread. */
+    private static final Duration REFUND_WAIT = Duration.ofSeconds(10);
+    private static final Instant FAR_FUTURE = Instant.parse("2100-01-01T00:00:00Z");
+
     private final List<Boolean> providerCalledInATransaction = new CopyOnWriteArrayList<>();
+    private final List<Boolean> refundCalledInATransaction = new CopyOnWriteArrayList<>();
+    private final List<String> refundThreads = new CopyOnWriteArrayList<>();
 
     @Autowired private MockMvc mockMvc;
     @Autowired private PaymentRepository paymentRepository;
@@ -103,9 +114,11 @@ class PaymentIntegrationTest {
     @Autowired private ProductRepository productRepository;
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private RefundProcessor refundProcessor;
     @MockitoSpyBean private FakePaymentGateway gateway;
 
     private String passwordHash;
+    private Long payerId;
     private Long productId;
     private String shopperToken;
 
@@ -114,7 +127,7 @@ class PaymentIntegrationTest {
         clearData();
         Role customer = role("ROLE_CUSTOMER");
         passwordHash = passwordEncoder.encode(PASSWORD);  // once: BCrypt is slow on purpose
-        saveUser("payer@example.com", customer);
+        payerId = saveUser("payer@example.com", customer);
         saveUser("other@example.com", customer);
         saveUser("admin@example.com", role("ROLE_ADMIN"));
         productId = saveProduct();
@@ -124,6 +137,11 @@ class PaymentIntegrationTest {
             providerCalledInATransaction.add(TransactionSynchronizationManager.isActualTransactionActive());
             return inv.callRealMethod();
         }).when(gateway).charge(any());
+        doAnswer(inv -> {
+            refundCalledInATransaction.add(TransactionSynchronizationManager.isActualTransactionActive());
+            refundThreads.add(Thread.currentThread().getName());
+            return inv.callRealMethod();
+        }).when(gateway).refund(any());
     }
 
     // Other test classes delete orders, which a leftover payment would stop.
@@ -354,8 +372,8 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    @DisplayName("paying and cancelling at once: one wins, and a paid order is never cancelled")
-    void payAndCancelAtOnce_neverLeaveACancelledOrderPaid() throws Exception {
+    @DisplayName("paying and cancelling at once never leave a cancelled order charged")
+    void payAndCancelAtOnce_neverLeaveACancelledOrderCharged() throws Exception {
         for (int round = 0; round < 5; round++) {
             Long orderId = placeOrder(1);
 
@@ -367,8 +385,15 @@ class PaymentIntegrationTest {
             OrderStatus status = orderStatus(orderId);
             List<PaymentStatus> payments = paymentRepository.findAllByOrder(orderId).stream()
                     .map(Payment::getStatus).toList();
-            if (statuses.get(0) == 201) {
-                // The payment won: the cancellation was refused, by the listener or its version check.
+            if (statuses.get(0) == 201 && statuses.get(1) == 200) {
+                // The payment finished first and the cancellation came after it: the
+                // refund was owed in the same commit as the cancellation.
+                assertThat(status).isEqualTo(OrderStatus.CANCELLED);
+                assertThat(payments).as("round %d", round)
+                        .singleElement().isIn(PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED);
+                awaitPayment(orderId, PaymentStatus.REFUNDED);
+            } else if (statuses.get(0) == 201) {
+                // Refused while the payment was in progress, by the listener or its version check.
                 assertThat(statuses.get(1)).as("round %d", round).isEqualTo(409);
                 assertThat(status).isEqualTo(OrderStatus.PAID);
                 assertThat(payments).containsExactly(PaymentStatus.SUCCEEDED);
@@ -394,6 +419,84 @@ class PaymentIntegrationTest {
                     .andExpect(status().isConflict());
         }
         assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("cancelling a paid order refunds it after the commit, on another thread, with no transaction open")
+    void cancel_aPaidOrder_refundsIt() throws Exception {
+        Long orderId = placeOrder(2);
+        String key = newKey();
+        pay(orderId, key, FakePaymentGateway.VISA).andExpect(status().isCreated());
+        assertThat(inventoryOf(productId)).isEqualTo(98);
+
+        mockMvc.perform(post("/api/v1/orders/{orderId}/cancel", orderId).header("Authorization", bearer(shopperToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+
+        Payment refunded = awaitPayment(orderId, PaymentStatus.REFUNDED);
+        assertThat(refunded.getRefundReference()).startsWith("re_");
+        assertThat(refunded.getRefundedAt()).isNotNull();
+        assertThat(inventoryOf(productId)).isEqualTo(100);
+        assertThat(refundCalledInATransaction).containsExactly(false);
+        assertThat(refundThreads).singleElement().isNotEqualTo(Thread.currentThread().getName());
+
+        // Repeating the original payment request now finds it refunded.
+        pay(orderId, key, FakePaymentGateway.VISA)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Payment refunded"))
+                .andExpect(jsonPath("$.data.status").value("REFUNDED"));
+    }
+
+    @Test
+    @DisplayName("a refund the provider can't take yet stays owed, and the retry job refunds it once")
+    void refund_whileTheProviderIsDown_isRetriedByTheJob() throws Exception {
+        Long orderId = placeOrder(1);
+        pay(orderId, newKey(), FakePaymentGateway.REFUND_DOWN).andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/orders/{orderId}/cancel", orderId).header("Authorization", bearer(shopperToken)))
+                .andExpect(status().isOk());
+        // The attempt after the commit: a first try and 2 retries, all refused.
+        await().atMost(REFUND_WAIT).until(() -> refundThreads.size() == 3);
+        assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUND_PENDING);
+
+        assertThat(refundProcessor.retryPendingRefunds(FAR_FUTURE)).isEqualTo(1);
+
+        assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(refundThreads).hasSize(4);
+        // Nothing left to retry, and no second refund.
+        assertThat(refundProcessor.retryPendingRefunds(FAR_FUTURE)).isZero();
+        assertThat(refundThreads).hasSize(4);
+    }
+
+    @Test
+    @DisplayName("an admin cancelling an order being fulfilled refunds it")
+    void admin_cancellingAProcessingOrder_refundsIt() throws Exception {
+        Long orderId = placeOrder(1);
+        pay(orderId, newKey(), FakePaymentGateway.MASTERCARD).andExpect(status().isCreated());
+        String admin = login("admin@example.com");
+
+        for (String target : new String[] {"PROCESSING", "CANCELLED"}) {
+            mockMvc.perform(patch("/api/v1/orders/{orderId}/status", orderId)
+                            .header("Authorization", bearer(admin))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"status\":\"" + target + "\"}"))
+                    .andExpect(status().isOk());
+        }
+
+        awaitPayment(orderId, PaymentStatus.REFUNDED);
+    }
+
+    @Test
+    @DisplayName("deleting an account refunds its paid orders")
+    void deletingTheAccount_refundsItsPaidOrders() throws Exception {
+        Long orderId = placeOrder(1);
+        pay(orderId, newKey(), FakePaymentGateway.VISA).andExpect(status().isCreated());
+
+        mockMvc.perform(delete("/api/v1/users/{userId}", payerId).header("Authorization", bearer(shopperToken)))
+                .andExpect(status().is2xxSuccessful());
+
+        awaitPayment(orderId, PaymentStatus.REFUNDED);
+        assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.CANCELLED);
     }
 
     // The backstop under the order lock: whatever the code does, the database keeps
@@ -428,14 +531,14 @@ class PaymentIntegrationTest {
         return roleRepository.findByName(name).orElseGet(() -> roleRepository.save(new Role(name)));
     }
 
-    private void saveUser(String email, Role role) {
+    private Long saveUser(String email, Role role) {
         User user = new User();
         user.setFirstName("Pat");
         user.setLastName("Payer");
         user.setEmail(email);
         user.setPassword(passwordHash);
         user.setRoles(Set.of(role));
-        userRepository.save(user);
+        return userRepository.save(user).getId();
     }
 
     /** A product at {@link #UNIT_PRICE} with 100 in stock. */
@@ -476,7 +579,17 @@ class PaymentIntegrationTest {
 
     /** The id of the order's only payment. */
     private Long paymentIdOf(Long orderId) {
-        return paymentRepository.findAllByOrder(orderId).get(0).getId();
+        return paymentOf(orderId).getId();
+    }
+
+    private Payment paymentOf(Long orderId) {
+        return paymentRepository.findAllByOrder(orderId).get(0);
+    }
+
+    /** Waits, with a time limit, for the refund that runs after a commit to settle the payment. */
+    private Payment awaitPayment(Long orderId, PaymentStatus expected) {
+        await().atMost(REFUND_WAIT).until(() -> paymentOf(orderId).getStatus() == expected);
+        return paymentOf(orderId);
     }
 
     private OrderStatus orderStatus(Long orderId) {

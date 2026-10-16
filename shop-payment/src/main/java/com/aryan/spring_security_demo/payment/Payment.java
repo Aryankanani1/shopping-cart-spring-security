@@ -9,6 +9,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -22,11 +23,13 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * One attempt to pay for an order (V11 migration). Recorded as
+ * One attempt to pay for an order (V11 and V12 migrations). Recorded as
  * {@link PaymentStatus#PROCESSING} before the provider is called, then settled
- * with the provider's answer; rows are never deleted, so every attempt stays on
- * record. Its state changes only through {@link #succeed} and {@link #fail},
- * which follow {@link PaymentStatus}.
+ * with the provider's answer, and refunded if its order is cancelled; rows are
+ * never deleted, so every attempt stays on record. Its state changes only through
+ * {@link #succeed}, {@link #fail}, {@link #requestRefund} and {@link #refunded},
+ * which follow {@link PaymentStatus}. A refund never changes the charge's own
+ * fields; it adds its own.
  *
  * <p>The database also allows at most one payment per order that hasn't failed
  * (a unique key on a generated column, see V11), whatever the code does.
@@ -36,8 +39,9 @@ import java.time.Instant;
 @Entity
 @Table(name = "payment", uniqueConstraints = {
         @UniqueConstraint(name = "uk_payment_order_idempotency_key", columnNames = {"order_id", "idempotency_key"}),
-        @UniqueConstraint(name = "uk_payment_provider_reference", columnNames = "provider_reference")
-})
+        @UniqueConstraint(name = "uk_payment_provider_reference", columnNames = "provider_reference"),
+        @UniqueConstraint(name = "uk_payment_refund_reference", columnNames = "refund_reference")
+}, indexes = @Index(name = "idx_payment_status_refund_requested", columnList = "status, refund_requested_at"))
 public class Payment {
 
     @Id
@@ -90,6 +94,17 @@ public class Payment {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    /** The provider's id for the refund, once refunded. */
+    @Column(name = "refund_reference", length = 64)
+    private String refundReference;
+
+    /** When the order was cancelled and the refund became owed. */
+    @Column(name = "refund_requested_at")
+    private Instant refundRequestedAt;
+
+    @Column(name = "refunded_at")
+    private Instant refundedAt;
+
     /** A new attempt to pay {@code order}'s total, not yet sent to the provider. */
     public static Payment start(Order order, String idempotencyKey, String paymentMethod, String currency, Instant now) {
         Payment payment = new Payment();
@@ -105,7 +120,8 @@ public class Payment {
 
     /** The provider took the money. */
     public void succeed(String providerReference, String cardBrand, String cardLast4, Instant now) {
-        moveTo(PaymentStatus.SUCCEEDED, now);
+        moveTo(PaymentStatus.SUCCEEDED);
+        this.completedAt = now;
         this.providerReference = providerReference;
         this.cardBrand = cardBrand;
         this.cardLast4 = cardLast4;
@@ -113,15 +129,28 @@ public class Payment {
 
     /** The provider declined, or couldn't be reached; nothing was charged. */
     public void fail(String reason, Instant now) {
-        moveTo(PaymentStatus.FAILED, now);
+        moveTo(PaymentStatus.FAILED);
+        this.completedAt = now;
         this.failureReason = reason;
     }
 
-    private void moveTo(PaymentStatus target, Instant now) {
+    /** The order was cancelled: the money is owed back, and the provider is yet to refund it. */
+    public void requestRefund(Instant now) {
+        moveTo(PaymentStatus.REFUND_PENDING);
+        this.refundRequestedAt = now;
+    }
+
+    /** The provider gave the money back. */
+    public void refunded(String refundReference, Instant now) {
+        moveTo(PaymentStatus.REFUNDED);
+        this.refundReference = refundReference;
+        this.refundedAt = now;
+    }
+
+    private void moveTo(PaymentStatus target) {
         if (!status.canTransitionTo(target)) {
             throw new IllegalStateException("Payment " + id + " is " + status + " and can't become " + target);
         }
         this.status = target;
-        this.completedAt = now;
     }
 }

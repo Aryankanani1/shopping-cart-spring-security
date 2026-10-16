@@ -275,17 +275,17 @@ class OrderServiceTest {
         assertThat(product.getInventory()).isEqualTo(5);
     }
 
-    // Paid orders can't be cancelled until refunds exist: the money couldn't go back.
+    // A paid order can be cancelled; the event lets the payment module refund it.
     @Test
-    void cancelOrder_oncePaid_isRejected() {
+    void cancelOrder_oncePaid_isCancelled_andOtherModulesAreTold() {
         order.setOrderStatus(OrderStatus.PAID);
         when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
 
-        assertThatThrownBy(() -> orderService.cancelOrder(ORDER_ID))
-                .isInstanceOf(InvalidOrderStateException.class);
+        orderService.cancelOrder(ORDER_ID);
 
-        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PAID);
-        verifyNoInteractions(events);
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(product.getInventory()).isEqualTo(7);
+        verify(events).publishEvent(new OrderCancellingEvent(List.of(ORDER_ID)));
     }
 
     @Test
@@ -329,7 +329,7 @@ class OrderServiceTest {
         second.addOrderItem(new OrderItem(product, 1, BigDecimal.TEN));  // product 7 again
         second.addOrderItem(new OrderItem(lamp, 4, BigDecimal.TEN));
         when(orderRepository.findWithItemsByUserIdAndStatusIn(
-                OWNER_ID, List.of(OrderStatus.PENDING)))
+                OWNER_ID, List.of(OrderStatus.PENDING, OrderStatus.PAID, OrderStatus.PROCESSING)))
                 .thenReturn(List.of(order, second));
 
         orderService.prepareForAccountDeletion(OWNER_ID);
@@ -365,7 +365,7 @@ class OrderServiceTest {
     @Test
     void prepareForAccountDeletion_cancelsAndUnlinksTheOpenOrders() {
         when(orderRepository.findWithItemsByUserIdAndStatusIn(
-                OWNER_ID, List.of(OrderStatus.PENDING)))
+                OWNER_ID, List.of(OrderStatus.PENDING, OrderStatus.PAID, OrderStatus.PROCESSING)))
                 .thenReturn(List.of(order));
 
         orderService.prepareForAccountDeletion(OWNER_ID);
@@ -377,7 +377,7 @@ class OrderServiceTest {
 
     @Test
     void prepareForAccountDeletion_withNoOpenOrders_tellsNoOne() {
-        when(orderRepository.findWithItemsByUserIdAndStatusIn(OWNER_ID, List.of(OrderStatus.PENDING)))
+        when(orderRepository.findWithItemsByUserIdAndStatusIn(OWNER_ID, List.of(OrderStatus.PENDING, OrderStatus.PAID, OrderStatus.PROCESSING)))
                 .thenReturn(List.of());
 
         orderService.prepareForAccountDeletion(OWNER_ID);

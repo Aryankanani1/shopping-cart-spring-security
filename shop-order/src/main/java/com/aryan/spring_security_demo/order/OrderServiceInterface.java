@@ -21,9 +21,9 @@ public interface OrderServiceInterface {
     OrderDto updateStatus(Long orderId, OrderStatus newStatus);
 
     /**
-     * Cancel an order and restock its items. Permitted for the order's owner (or
-     * an admin) and only while the order is unpaid ({@code PENDING}); after that
-     * it can no longer be cancelled (409).
+     * Cancel an order and restock its items; the payment module refunds a paid
+     * one. Permitted for the order's owner (or an admin) until the order ships;
+     * after that it can no longer be cancelled (409).
      */
     OrderDto cancelOrder(Long orderId);
 

@@ -21,4 +21,14 @@ public interface PaymentGateway {
      *         reached; the charge didn't happen and may be retried with the same key
      */
     ChargeResult charge(ChargeRequest request);
+
+    /**
+     * Ask the provider to refund a charge in full. Refunding the same
+     * {@link RefundRequest#idempotencyKey()} again must not refund twice: the
+     * provider answers with the first refund.
+     *
+     * @throws PaymentProviderUnavailableException if the provider couldn't be
+     *         reached; nothing was refunded, and it may be retried with the same key
+     */
+    RefundResult refund(RefundRequest request);
 }

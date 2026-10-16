@@ -7,7 +7,8 @@ import java.time.Instant;
 
 /** A payment attempt as the API shows it. */
 @JsonPropertyOrder({"id", "orderId", "status", "amount", "currency", "paymentMethod",
-        "cardBrand", "cardLast4", "failureReason", "providerReference", "createdAt", "completedAt"})
+        "cardBrand", "cardLast4", "failureReason", "providerReference", "createdAt", "completedAt",
+        "refundReference", "refundRequestedAt", "refundedAt"})
 public record PaymentDto(
         Long id,
         Long orderId,
@@ -20,7 +21,10 @@ public record PaymentDto(
         String failureReason,
         String providerReference,
         Instant createdAt,
-        Instant completedAt) {
+        Instant completedAt,
+        String refundReference,
+        Instant refundRequestedAt,
+        Instant refundedAt) {
 
     static PaymentDto from(Payment payment) {
         return new PaymentDto(
@@ -35,6 +39,9 @@ public record PaymentDto(
                 payment.getFailureReason(),
                 payment.getProviderReference(),
                 payment.getCreatedAt(),
-                payment.getCompletedAt());
+                payment.getCompletedAt(),
+                payment.getRefundReference(),
+                payment.getRefundRequestedAt(),
+                payment.getRefundedAt());
     }
 }

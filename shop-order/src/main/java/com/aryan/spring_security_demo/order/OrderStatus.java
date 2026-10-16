@@ -9,17 +9,18 @@ package com.aryan.spring_security_demo.order;
  *
  * <pre>
  *   PENDING ──▶ PAID ──▶ PROCESSING ──▶ SHIPPED ──▶ DELIVERED   (terminal)
- *      │
- *      ▼
- *   CANCELLED   (terminal)
+ *      │         │           │
+ *      └─────────┴─────┬─────┘
+ *                      ▼
+ *                  CANCELLED   (terminal)
  * </pre>
  *
  * <p>An order waits in {@code PENDING}, its stock reserved, until it is paid; only
  * a successful payment moves it to {@code PAID} (see {@code OrderService.markPaid}),
  * and only a paid order is fulfilled. Fulfillment moves forward only;
  * {@code DELIVERED} and {@code CANCELLED} are terminal. An order can be cancelled
- * only while unpaid: giving the money back for a paid one needs refunds, which
- * the payment module doesn't do yet.
+ * until it ships; the payment module refunds one that was paid. Once
+ * {@code SHIPPED} the goods are in transit, and a cancel would need a returns flow.
  */
 public enum OrderStatus {
 
@@ -39,8 +40,8 @@ public enum OrderStatus {
     public boolean canTransitionTo(OrderStatus target) {
         return switch (this) {
             case PENDING    -> target == PAID || target == CANCELLED;
-            case PAID       -> target == PROCESSING;
-            case PROCESSING -> target == SHIPPED;
+            case PAID       -> target == PROCESSING || target == CANCELLED;
+            case PROCESSING -> target == SHIPPED || target == CANCELLED;
             case SHIPPED    -> target == DELIVERED;
             case DELIVERED, CANCELLED -> false;
         };

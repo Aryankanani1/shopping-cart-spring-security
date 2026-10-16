@@ -306,9 +306,9 @@ sum(rate(http_server_requests_seconds_count{uri="/api/v1/orders", method="POST",
   revoked token trips reuse detection, which would also kill the caller's new token.
   Other devices' access tokens still lapse within their 15-minute lifetime.
 - **Account deletion keeps the orders**: `DELETE /api/v1/users/{id}` (the owner or an
-  admin) ends every session and removes the cart, wishlist and notifications. Unpaid
-  orders are cancelled and their stock returned (paid ones are still fulfilled, and
-  one being paid for blocks the deletion until its payment settles); every order is then kept for the
+  admin) ends every session and removes the cart, wishlist and notifications. Orders
+  not yet shipped are cancelled, their stock returned and paid ones refunded (one
+  being paid for blocks the deletion until its payment settles); every order is then kept for the
   shop's records with no customer (`user_id` set to null), and the admin order list
   shows it as a deleted account. The shipping snapshot (name, address) stays on it.
 - **Rate-limited auth endpoints**: `RateLimitFilter` sits ahead of authentication in
@@ -421,8 +421,14 @@ is simulated, by a fake provider inside the app with test payment methods
   called, and the answer recorded: two short transactions with the call between
   them, retried (with the same provider key) only while the provider is
   unavailable.
+- **Cancelling a paid order refunds it.** The cancellation's transaction marks the
+  payment `REFUND_PENDING` (an outbox row: owed if and only if the cancellation
+  commits); after the commit, a background thread asks the provider and records
+  `REFUNDED`. `RefundRetryJob` (`APP_PAYMENT_REFUND_RETRY_CRON`, every minute,
+  ShedLock) retries any refund still owed, with the same provider key, so it is
+  refunded once.
 - An order can't be cancelled while its payment is being processed, nor once it
-  is paid (refunds come later).
+  has shipped.
 
 ## Startup pipeline
 

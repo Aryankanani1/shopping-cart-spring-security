@@ -72,6 +72,9 @@ public class PaymentController {
             case SUCCEEDED -> "Payment succeeded";
             case FAILED -> "Payment failed";
             case PROCESSING -> "Payment is being processed";
+            // A repeated request can find a payment whose order was cancelled since.
+            case REFUND_PENDING -> "Payment is being refunded";
+            case REFUNDED -> "Payment refunded";
         };
     }
 }

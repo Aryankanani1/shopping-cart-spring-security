@@ -27,11 +27,12 @@ class OrderStatusTest {
     }
 
     @Test
-    void cancellationIsAllowedOnlyBeforePayment() {
+    void cancellationIsAllowedOnlyBeforeShipping() {
         assertThat(PENDING.canTransitionTo(CANCELLED)).isTrue();
-        // A paid order would need a refund, which doesn't exist yet.
-        assertThat(PAID.canTransitionTo(CANCELLED)).isFalse();
-        assertThat(PROCESSING.canTransitionTo(CANCELLED)).isFalse();
+        // Paid orders too: the payment module refunds them.
+        assertThat(PAID.canTransitionTo(CANCELLED)).isTrue();
+        assertThat(PROCESSING.canTransitionTo(CANCELLED)).isTrue();
+        // Once shipped, the goods are in transit — no cancel.
         assertThat(SHIPPED.canTransitionTo(CANCELLED)).isFalse();
     }
 

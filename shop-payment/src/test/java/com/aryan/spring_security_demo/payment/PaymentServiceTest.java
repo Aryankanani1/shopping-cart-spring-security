@@ -148,6 +148,7 @@ class PaymentServiceTest {
 
     private static PaymentDto payment(PaymentStatus status) {
         return new PaymentDto(PAYMENT_ID, ORDER_ID, status, new BigDecimal("59.97"), "USD",
-                FakePaymentGateway.VISA, null, null, null, null, Instant.parse("2026-10-15T12:00:00Z"), null);
+                FakePaymentGateway.VISA, null, null, null, null, Instant.parse("2026-10-15T12:00:00Z"), null,
+                null, null, null);
     }
 }
