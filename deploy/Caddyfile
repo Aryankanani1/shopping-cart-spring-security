@@ -8,6 +8,13 @@
 	# so the proxy allows that much. Caddy passes the client's address and scheme in
 	# X-Forwarded-* headers; it ignores any the client sends itself.
 	handle /api/* {
+		# TRACE echoes a request back (an old cross-site tracing vector) and the API
+		# has no use for it, so it is refused here, never proxied. Tomcat refuses it
+		# too, but by closing the connection with the request body unread, which can
+		# cut its own 405 off mid-response (found by the staging fuzzing).
+		@trace method TRACE
+		respond @trace 405
+
 		request_body {
 			max_size 25MB
 		}
