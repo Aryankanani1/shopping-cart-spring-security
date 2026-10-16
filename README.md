@@ -410,7 +410,7 @@ is simulated, by a fake provider inside the app with test payment methods
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /orders/{orderId}/payments` | Pay, with an `Idempotency-Key` header and `{"paymentMethod": "test_visa"}`: `201` for a new attempt (`SUCCEEDED`, or `FAILED` with the reason), `200` with the first answer when the key was already used |
+| `POST /orders/{orderId}/payments` | Pay, with an `Idempotency-Key` header and `{"paymentMethod": "test_visa"}`: `201` for a new attempt (`SUCCEEDED`, or `FAILED` with the reason), `202` with `PROCESSING` when the provider didn't answer in time, `200` with the first answer when the key was already used |
 | `GET /orders/{orderId}/payments` | The order's attempts, oldest first |
 | `GET /orders/{orderId}/payments/{paymentId}` | One attempt |
 
@@ -427,6 +427,11 @@ is simulated, by a fake provider inside the app with test payment methods
   `REFUNDED`. `RefundRetryJob` (`APP_PAYMENT_REFUND_RETRY_CRON`, every minute,
   ShedLock) retries any refund still owed, with the same provider key, so it is
   refunded once.
+- **Lost outcomes are reconciled.** A payment still `PROCESSING` after 2 minutes
+  (the provider timed out, or the app stopped before recording its answer) is
+  settled by `PaymentReconciliationJob` (`APP_PAYMENT_RECONCILE_CRON`, every
+  minute, ShedLock), which asks the provider what it did with the charge's key:
+  approved, declined, or never received.
 - An order can't be cancelled while its payment is being processed, nor once it
   has shipped.
 

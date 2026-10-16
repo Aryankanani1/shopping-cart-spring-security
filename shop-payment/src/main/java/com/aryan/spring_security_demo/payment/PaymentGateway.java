@@ -1,5 +1,7 @@
 package com.aryan.spring_security_demo.payment;
 
+import java.util.Optional;
+
 /**
  * The boundary with the payment provider. {@link FakePaymentGateway} is the only
  * implementation: this project simulates its money. A real provider would be
@@ -19,8 +21,19 @@ public interface PaymentGateway {
      * @return whether the provider approved or declined the charge
      * @throws PaymentProviderUnavailableException if the provider couldn't be
      *         reached; the charge didn't happen and may be retried with the same key
+     * @throws PaymentOutcomeUnknownException if the request was sent but no answer
+     *         came back; the provider may have charged
      */
     ChargeResult charge(ChargeRequest request);
+
+    /**
+     * What the provider did with the charge sent under {@code idempotencyKey}: its
+     * answer, or empty if it never received one. How a payment whose outcome was
+     * lost gets settled.
+     *
+     * @throws PaymentProviderUnavailableException if the provider couldn't be reached
+     */
+    Optional<ChargeResult> findCharge(String idempotencyKey);
 
     /**
      * Ask the provider to refund a charge in full. Refunding the same

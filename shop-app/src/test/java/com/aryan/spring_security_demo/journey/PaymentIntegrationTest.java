@@ -17,6 +17,7 @@ import com.aryan.spring_security_demo.order.OrderStatus;
 import com.aryan.spring_security_demo.payment.ChargeRequest;
 import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
+import com.aryan.spring_security_demo.payment.PaymentReconciler;
 import com.aryan.spring_security_demo.payment.PaymentRepository;
 import com.aryan.spring_security_demo.payment.PaymentStatus;
 import com.aryan.spring_security_demo.payment.RefundProcessor;
@@ -62,6 +63,7 @@ import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -76,7 +78,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Paying for an order and refunding it, through HTTP and against MySQL: what a
  * payment changes, what a repeated request gets, the races a payment has to win
  * (the same request twice at once, two different payments at once, paying while
- * cancelling), and the refund a cancellation owes, made after it commits. The
+ * cancelling), the refund a cancellation owes, made after it commits, and the
+ * reconciliation of payments whose outcome was lost. The
  * provider is the real {@link FakePaymentGateway}, spied on to count calls and to
  * see whether a transaction was open during each one.
  */
@@ -115,6 +118,7 @@ class PaymentIntegrationTest {
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private PasswordEncoder passwordEncoder;
     @Autowired private RefundProcessor refundProcessor;
+    @Autowired private PaymentReconciler reconciler;
     @MockitoSpyBean private FakePaymentGateway gateway;
 
     private String passwordHash;
@@ -497,6 +501,76 @@ class PaymentIntegrationTest {
 
         awaitPayment(orderId, PaymentStatus.REFUNDED);
         assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    @DisplayName("a timeout after the provider charged: 202, then reconciliation finds the charge and the order is paid")
+    void timeoutAfterCharging_isReconciledToPaid() throws Exception {
+        Long orderId = placeOrder(1);
+
+        pay(orderId, newKey(), FakePaymentGateway.TIMEOUT_CHARGED)
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.status").value("PROCESSING"));
+        // Not retried inside the request: a timeout could take its whole length again.
+        verify(gateway, times(1)).charge(any());
+        assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PENDING);
+        // Meanwhile the order can be neither paid again nor cancelled.
+        pay(orderId, newKey(), FakePaymentGateway.VISA).andExpect(status().isConflict());
+        mockMvc.perform(post("/api/v1/orders/{orderId}/cancel", orderId).header("Authorization", bearer(shopperToken)))
+                .andExpect(status().isConflict());
+
+        assertThat(reconciler.reconcileStuckPayments(FAR_FUTURE)).isEqualTo(1);
+
+        Payment settled = paymentOf(orderId);
+        assertThat(settled.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        assertThat(settled.getProviderReference()).startsWith("ch_");
+        assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PAID);
+        verify(gateway).findCharge("pay_" + settled.getId());
+        verify(gateway, times(1)).charge(any());  // looked up, never charged again
+    }
+
+    @Test
+    @DisplayName("a timeout before the provider got the charge: reconciliation fails it, and the order can be paid")
+    void timeoutBeforeCharging_isReconciledToFailed() throws Exception {
+        Long orderId = placeOrder(1);
+        pay(orderId, newKey(), FakePaymentGateway.TIMEOUT_NOT_CHARGED).andExpect(status().isAccepted());
+
+        assertThat(reconciler.reconcileStuckPayments(FAR_FUTURE)).isEqualTo(1);
+
+        assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(paymentOf(orderId).getFailureReason()).contains("never reached the provider");
+        pay(orderId, newKey(), FakePaymentGateway.VISA)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("SUCCEEDED"));
+    }
+
+    @Test
+    @DisplayName("the app stopped after the provider charged: reconciliation records the charge")
+    void crashAfterTheProviderCharged_isReconciledToPaid() throws Exception {
+        Long orderId = placeOrder(1);
+        Order order = orderRepository.findById(orderId).orElseThrow();
+        // The attempt was recorded and the provider charged it, but the answer was
+        // never recorded (as if the app had stopped in between).
+        Payment stuck = paymentRepository.save(
+                Payment.start(order, newKey(), FakePaymentGateway.VISA, "USD", STARTED));
+        gateway.charge(new ChargeRequest("pay_" + stuck.getId(), stuck.getAmount(), "USD", FakePaymentGateway.VISA));
+
+        assertThat(reconciler.reconcile(stuck.getId())).isTrue();
+
+        assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
+        assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PAID);
+    }
+
+    @Test
+    @DisplayName("reconciliation leaves attempts younger than its cutoff to their own request")
+    void reconciliation_leavesFreshAttemptsAlone() throws Exception {
+        Long orderId = placeOrder(1);
+        pay(orderId, newKey(), FakePaymentGateway.TIMEOUT_NOT_CHARGED).andExpect(status().isAccepted());
+
+        assertThat(reconciler.reconcileStuckPayments(Instant.parse("2000-01-01T00:00:00Z"))).isZero();
+
+        assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.PROCESSING);
+        verify(gateway, never()).findCharge(any());
     }
 
     // The backstop under the order lock: whatever the code does, the database keeps

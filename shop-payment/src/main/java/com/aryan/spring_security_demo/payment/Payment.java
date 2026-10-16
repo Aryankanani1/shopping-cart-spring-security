@@ -105,6 +105,20 @@ public class Payment {
     @Column(name = "refunded_at")
     private Instant refundedAt;
 
+    /**
+     * The idempotency key of every provider call for this attempt's charge: the
+     * request's, its retries' and reconciliation's lookup. Ours, not the client's,
+     * so two orders' attempts can never share one.
+     */
+    static String chargeKey(Long paymentId) {
+        return "pay_" + paymentId;
+    }
+
+    /** The idempotency key of every provider call to refund this payment. */
+    static String refundKey(Long paymentId) {
+        return "refund_" + paymentId;
+    }
+
     /** A new attempt to pay {@code order}'s total, not yet sent to the provider. */
     public static Payment start(Order order, String idempotencyKey, String paymentMethod, String currency, Instant now) {
         Payment payment = new Payment();

@@ -5,11 +5,13 @@ import com.aryan.spring_security_demo.order.Order;
 import com.aryan.spring_security_demo.order.OrderServiceInterface;
 import com.aryan.spring_security_demo.order.OrderStatus;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -21,6 +23,7 @@ import java.util.Optional;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class PaymentRecorder {
 
     /** Failed attempts allowed per order; see {@link TooManyPaymentAttemptsException}. */
@@ -71,20 +74,60 @@ public class PaymentRecorder {
         return new Attempt(PaymentDto.from(payment), false);
     }
 
-    /** The provider approved: the payment succeeded and the order is paid, together or not at all. */
+    /**
+     * The provider approved: the payment succeeded and the order is paid, together
+     * or not at all. Nothing changes if the attempt is already settled (see
+     * {@link #settledAlready}).
+     */
     @Transactional
     public PaymentDto recordSuccess(Long paymentId, ChargeResult.Approved approved) {
         Payment payment = load(paymentId);
+        if (payment.getStatus() != PaymentStatus.PROCESSING) {
+            return settledAlready(payment, true);
+        }
         payment.succeed(approved.providerReference(), approved.cardBrand(), approved.cardLast4(), Instant.now(clock));
         orderService.markPaid(payment.getOrder().getId());
         return PaymentDto.from(payment);
     }
 
-    /** Nothing was charged; the order stays pending, and can be paid with another attempt. */
+    /**
+     * Nothing was charged; the order stays pending, and can be paid with another
+     * attempt. Nothing changes if the attempt is already settled.
+     */
     @Transactional
     public PaymentDto recordFailure(Long paymentId, String reason) {
         Payment payment = load(paymentId);
+        if (payment.getStatus() != PaymentStatus.PROCESSING) {
+            return settledAlready(payment, false);
+        }
         payment.fail(reason, Instant.now(clock));
+        return PaymentDto.from(payment);
+    }
+
+    /** Whether the attempt is still waiting for its outcome. */
+    @Transactional(readOnly = true)
+    public boolean isProcessing(Long paymentId) {
+        return load(paymentId).getStatus() == PaymentStatus.PROCESSING;
+    }
+
+    /** The attempts still waiting for their outcome since before {@code startedBefore}, oldest first. */
+    @Transactional(readOnly = true)
+    public List<Long> stuckPayments(Instant startedBefore) {
+        return paymentRepository.findIdsByStatusCreatedBefore(PaymentStatus.PROCESSING, startedBefore);
+    }
+
+    /**
+     * The request and {@link PaymentReconciler} can both settle one attempt, from the
+     * same provider answer: the first to get here records it, and the second leaves
+     * it. A settled outcome never changes; if the two ever disagreed, the first
+     * stands and the disagreement is logged.
+     */
+    private PaymentDto settledAlready(Payment payment, boolean charged) {
+        boolean wasCharged = payment.getStatus() != PaymentStatus.FAILED;
+        if (wasCharged != charged) {
+            log.warn("Payment {} is already {}; not recording it as {}", payment.getId(), payment.getStatus(),
+                    charged ? "charged" : "failed");
+        }
         return PaymentDto.from(payment);
     }
 

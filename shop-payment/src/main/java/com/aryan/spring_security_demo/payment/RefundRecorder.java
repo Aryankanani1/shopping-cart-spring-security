@@ -50,7 +50,7 @@ public class RefundRecorder {
     public Optional<RefundRequest> pendingRefund(Long paymentId) {
         return paymentRepository.findById(paymentId)
                 .filter(payment -> payment.getStatus() == PaymentStatus.REFUND_PENDING)
-                .map(payment -> new RefundRequest("refund_" + payment.getId(), payment.getProviderReference(),
+                .map(payment -> new RefundRequest(Payment.refundKey(payment.getId()), payment.getProviderReference(),
                         payment.getAmount(), payment.getCurrency()));
     }
 

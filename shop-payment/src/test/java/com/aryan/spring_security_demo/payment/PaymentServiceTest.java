@@ -90,7 +90,23 @@ class PaymentServiceTest {
                 .isEqualTo(PaymentStatus.FAILED);
     }
 
-    // An answer we can't interpret (a timeout once the request was sent, a bug)
+    // A timeout once the request was sent: it may have charged, so it isn't failed.
+    // The attempt stays PROCESSING for PaymentReconciler.
+    @Test
+    void pay_outcomeUnknown_leavesTheAttemptProcessing() {
+        when(recorder.start(ORDER_ID, KEY, FakePaymentGateway.VISA))
+                .thenReturn(new PaymentRecorder.Attempt(payment(PaymentStatus.PROCESSING), false));
+        when(gateway.charge(CHARGE)).thenThrow(new PaymentOutcomeUnknownException("timed out"));
+
+        PaymentServiceInterface.PayResult result = paymentService.pay(ORDER_ID, KEY, FakePaymentGateway.VISA);
+
+        assertThat(result.created()).isTrue();
+        assertThat(result.payment().status()).isEqualTo(PaymentStatus.PROCESSING);
+        verify(recorder, never()).recordFailure(anyLong(), anyString());
+        verify(recorder, never()).recordSuccess(anyLong(), any());
+    }
+
+    // An answer we can't interpret at all (a bug)
     // leaves the payment PROCESSING: the provider may have charged, so it is not
     // marked failed, and the order can't be paid again or cancelled meanwhile.
     @Test

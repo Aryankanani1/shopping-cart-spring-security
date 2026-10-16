@@ -27,9 +27,10 @@ public class PaymentService implements PaymentServiceInterface {
      * their own, and the provider call between them runs with no transaction open,
      * so it holds no pooled connection however long it takes (CLAUDE.md).
      *
-     * <p>If the app stops between the steps, the payment stays {@code PROCESSING},
-     * which blocks another payment and a cancellation of the order until it is
-     * settled; the order can't end up charged twice, or charged and cancelled.
+     * <p>If the app stops between the steps, or the provider times out, the payment
+     * stays {@code PROCESSING}, which blocks another payment and a cancellation of
+     * the order until {@link PaymentReconciler} settles it; the order can't end up
+     * charged twice, or charged and cancelled.
      */
     @Override
     public PayResult pay(Long orderId, String idempotencyKey, String paymentMethod) {
@@ -41,10 +42,8 @@ public class PaymentService implements PaymentServiceInterface {
     }
 
     private PaymentDto chargeAndRecord(PaymentDto payment) {
-        // Our key, not the client's: the same on every retry of this attempt, and
-        // never shared with another order's attempt.
         ChargeRequest request = new ChargeRequest(
-                "pay_" + payment.id(), payment.amount(), payment.currency(), payment.paymentMethod());
+                Payment.chargeKey(payment.id()), payment.amount(), payment.currency(), payment.paymentMethod());
         ChargeResult result;
         try {
             result = gateway.charge(request);
@@ -54,6 +53,12 @@ public class PaymentService implements PaymentServiceInterface {
             // took the charge, and the attempt is recorded as failed.
             log.warn("Payment {}: provider unavailable after retries", payment.id(), e);
             return recorder.recordFailure(payment.id(), PROVIDER_UNAVAILABLE);
+        } catch (PaymentOutcomeUnknownException e) {
+            // It may have charged, so the attempt isn't failed: it stays PROCESSING
+            // (the answer is 202), and PaymentReconciler settles it later from what
+            // the provider says happened.
+            log.warn("Payment {}: outcome unknown, left for reconciliation", payment.id(), e);
+            return payment;
         }
         if (result instanceof ChargeResult.Approved approved) {
             return recorder.recordSuccess(payment.id(), approved);
