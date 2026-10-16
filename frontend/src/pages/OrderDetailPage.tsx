@@ -11,8 +11,8 @@ import { PaymentHistory } from '../components/order/PaymentHistory'
 import { formatDate, formatMoney } from '../lib/format'
 
 // Statuses from which the owner may still cancel — mirrors the server's rule
-// (only while unpaid; a paid order would need a refund).
-const CANCELLABLE = new Set(['PENDING'])
+// (until the order ships; a paid one is refunded).
+const CANCELLABLE = new Set(['PENDING', 'PAID', 'PROCESSING'])
 
 export function OrderDetailPage() {
   const { id } = useParams()
@@ -90,7 +90,8 @@ export function OrderDetailPage() {
             <button
               className="linkbtn"
               onClick={() => {
-                if (window.confirm('Cancel this order? Items will be returned to stock.')) {
+                const refund = order.status === 'PENDING' ? '' : ' and your payment refunded'
+                if (window.confirm(`Cancel this order? Items will be returned to stock${refund}.`)) {
                   cancel.mutate()
                 }
               }}

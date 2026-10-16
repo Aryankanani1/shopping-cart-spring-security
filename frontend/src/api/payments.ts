@@ -12,6 +12,7 @@ export const TEST_PAYMENT_METHODS = [
   { value: 'test_insufficient_funds', label: 'Card with insufficient funds' },
   { value: 'test_flaky', label: 'Provider fails once, then approves' },
   { value: 'test_provider_down', label: 'Provider is down' },
+  { value: 'test_refund_down', label: 'Visa whose refunds fail at first' },
 ] as const
 
 /**

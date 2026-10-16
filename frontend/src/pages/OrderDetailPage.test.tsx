@@ -136,8 +136,24 @@ describe('OrderDetailPage', () => {
     )
     expect(await screen.findByText('paid')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Pay/ })).not.toBeInTheDocument()
-    // Paid: no cancelling any more, since nothing could refund it.
-    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument()
+  })
+
+  it('warns that cancelling a paid order refunds it', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.mocked(ordersApi.get).mockResolvedValue(order({ status: 'PAID' }))
+    open()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel order' }))
+
+    expect(confirm).toHaveBeenCalledWith('Cancel this order? Items will be returned to stock and your payment refunded.')
+  })
+
+  it('shows a refund that is still pending', async () => {
+    vi.mocked(ordersApi.get).mockResolvedValue(order({ status: 'CANCELLED' }))
+    vi.mocked(paymentsApi.list).mockResolvedValue([payment({ status: 'REFUND_PENDING' })])
+    open()
+
+    expect(await screen.findByText('refund pending')).toBeInTheDocument()
   })
 
   it('shows why a payment failed, and keeps the order payable', async () => {

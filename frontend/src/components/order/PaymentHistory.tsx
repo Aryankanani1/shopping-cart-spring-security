@@ -8,6 +8,18 @@ const STATUS: Record<PaymentStatus, { label: string; tone?: string }> = {
   SUCCEEDED: { label: 'paid', tone: 'tag--ok' },
   FAILED: { label: 'failed', tone: 'tag--danger' },
   PROCESSING: { label: 'processing' },
+  REFUND_PENDING: { label: 'refund pending' },
+  REFUNDED: { label: 'refunded' },
+}
+
+// Statuses the server settles on its own, moments later (a refund runs after the
+// cancellation commits): the list checks back until none is left.
+const UNSETTLED = new Set<PaymentStatus>(['PROCESSING', 'REFUND_PENDING'])
+const RECHECK_MS = 2000
+
+/** How soon to fetch the payments again: while one is still settling, every couple of seconds; otherwise never. */
+export function recheckInterval(payments: PaymentDto[] | undefined): number | false {
+  return payments?.some((payment) => UNSETTLED.has(payment.status)) ? RECHECK_MS : false
 }
 
 function methodOf(payment: PaymentDto): string {
@@ -20,6 +32,7 @@ export function PaymentHistory({ orderId }: { orderId: number }) {
   const { data: payments } = useQuery({
     queryKey: queryKeys.orders.payments(orderId),
     queryFn: () => paymentsApi.list(orderId),
+    refetchInterval: (query) => recheckInterval(query.state.data),
   })
   if (!payments || payments.length === 0) return null
 

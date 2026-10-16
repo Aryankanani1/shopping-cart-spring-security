@@ -67,6 +67,9 @@ export function payment(overrides: Partial<PaymentDto> = {}): PaymentDto {
     providerReference: 'ch_1',
     createdAt: '2026-09-14T10:00:00Z',
     completedAt: '2026-09-14T10:00:01Z',
+    refundReference: null,
+    refundRequestedAt: null,
+    refundedAt: null,
     ...overrides,
   }
 }

@@ -19,8 +19,8 @@ export const ORDER_STATUSES = [
  */
 export const NEXT_STATUSES: Record<string, string[]> = {
   PENDING: ['CANCELLED'],
-  PAID: ['PROCESSING'],
-  PROCESSING: ['SHIPPED'],
+  PAID: ['PROCESSING', 'CANCELLED'],
+  PROCESSING: ['SHIPPED', 'CANCELLED'],
   SHIPPED: ['DELIVERED'],
   DELIVERED: [],
   CANCELLED: [],
@@ -46,6 +46,6 @@ export const ordersApi = {
   updateStatus: (orderId: number, status: string) =>
     request<OrderDto>(`/orders/${orderId}/status`, { method: 'PATCH', body: { status } }),
 
-  /** Cancel an order (owner or admin, while unpaid); restocks inventory. */
+  /** Cancel an order (owner or admin, until it ships); restocks inventory and refunds a paid one. */
   cancel: (orderId: number) => request<OrderDto>(`/orders/${orderId}/cancel`, { method: 'POST' }),
 }
