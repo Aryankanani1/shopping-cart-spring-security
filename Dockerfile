@@ -36,6 +36,7 @@ COPY shop-cart/pom.xml shop-cart/
 COPY shop-order/pom.xml shop-order/
 COPY shop-notification/pom.xml shop-notification/
 COPY shop-wishlist/pom.xml shop-wishlist/
+COPY shop-payment/pom.xml shop-payment/
 COPY shop-app/pom.xml shop-app/
 RUN chmod +x mvnw && ./mvnw -B dependency:go-offline
 
@@ -48,6 +49,7 @@ COPY shop-cart/src/ shop-cart/src/
 COPY shop-order/src/ shop-order/src/
 COPY shop-notification/src/ shop-notification/src/
 COPY shop-wishlist/src/ shop-wishlist/src/
+COPY shop-payment/src/ shop-payment/src/
 COPY shop-app/src/ shop-app/src/
 RUN ./mvnw -B -pl shop-app -am clean package -DskipTests
 
