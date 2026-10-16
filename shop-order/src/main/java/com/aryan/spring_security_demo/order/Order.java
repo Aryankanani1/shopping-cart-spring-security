@@ -28,7 +28,9 @@ import java.util.Set;
         //   WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT n
         // Leading user_id satisfies the filter; (created_at, id) gives a stable,
         // unique seek key for keyset pagination without a separate sort step.
-        @Index(name = "idx_orders_user_created", columnList = "user_id, created_at, id")
+        @Index(name = "idx_orders_user_created", columnList = "user_id, created_at, id"),
+        // UnpaidOrderExpiryJob: WHERE order_status = 'PENDING' AND created_at < ?
+        @Index(name = "idx_orders_status_created", columnList = "order_status, created_at")
 })
 public class Order {
 

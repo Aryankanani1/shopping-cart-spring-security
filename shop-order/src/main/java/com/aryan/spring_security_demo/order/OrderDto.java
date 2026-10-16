@@ -4,11 +4,12 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
 @Data
-@JsonPropertyOrder({"id", "userId", "orderDate", "status", "totalAmount",
+@JsonPropertyOrder({"id", "userId", "orderDate", "status", "payBy", "totalAmount",
         "recipientName", "addressLine1", "addressLine2", "city", "state", "postalCode", "country",
         "items"})
 public class OrderDto {
@@ -18,6 +19,8 @@ public class OrderDto {
     private LocalDate orderDate;
     private BigDecimal totalAmount;
     private String status;
+    /** While the order is unpaid: when it is cancelled if it still isn't paid. Null otherwise. */
+    private Instant payBy;
 
     // Shipping address (matches Order field names so ModelMapper maps them directly).
     private String recipientName;

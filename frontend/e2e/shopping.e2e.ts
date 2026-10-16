@@ -63,6 +63,8 @@ test('a new customer signs up, buys and pays for a product, cancels it for a ref
   })
 
   await test.step('a declined test card fails, and a test Visa pays the order', async () => {
+    // Unpaid, the order says when it will be cancelled.
+    await expect(page.getByText(/^Pay by /)).toBeVisible()
     const pay = page.getByRole('button', { name: 'Pay $49.50' })
     await page.getByLabel('Test card').selectOption('test_declined')
     await pay.click()

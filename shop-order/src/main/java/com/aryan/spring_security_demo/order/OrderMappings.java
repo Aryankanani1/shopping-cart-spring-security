@@ -16,6 +16,8 @@ public class OrderMappings implements ModelMapperCustomizer {
             mapper.map(Order::getLocalDate, OrderDto::setOrderDate);
             mapper.map(Order::getOrderStatus, OrderDto::setStatus);
             mapper.map(Order::getOrderItems, OrderDto::setItems);
+            // Worked out by OrderService from the unpaid-order window, not a field.
+            mapper.skip(OrderDto::setPayBy);
         });
     }
 }

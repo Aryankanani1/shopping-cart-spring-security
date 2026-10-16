@@ -195,6 +195,12 @@ app:
   # Retries refunds still owed (RefundRetryJob): ones the attempt right after the
   # cancellation couldn't finish. Spring cron, every minute (at :30, off the wishlist
   # scan's beat) by default; ShedLock makes only one instance run each tick.
+  # Unpaid orders: checkout reserves the stock, so an order left unpaid this long is
+  # cancelled and its items go back on sale (UnpaidOrderExpiryJob, every minute at
+  # :45, ShedLock). The order's payBy shows the customer the deadline.
+  orders:
+    unpaid-expiry: ${APP_ORDERS_UNPAID_EXPIRY:30m}
+    unpaid-expiry-cron: ${APP_ORDERS_UNPAID_EXPIRY_CRON:45 * * * * *}
   payment:
     refund-retry-cron: ${APP_PAYMENT_REFUND_RETRY_CRON:30 * * * * *}
     # Settles payments still PROCESSING after 2 minutes (PaymentReconciliationJob)

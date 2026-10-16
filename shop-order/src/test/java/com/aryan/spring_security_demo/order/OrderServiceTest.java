@@ -32,6 +32,7 @@ import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -73,6 +74,7 @@ class OrderServiceTest {
     @Mock private ModelMapper modelMapper;
     @Mock private EntityManager entityManager;
     @Mock private ApplicationEventPublisher events;
+    @Spy private OrderProperties properties = new OrderProperties();
     @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-14T12:00:00Z"), ZoneOffset.UTC);
 
     @InjectMocks private OrderService orderService;
@@ -383,6 +385,78 @@ class OrderServiceTest {
         orderService.prepareForAccountDeletion(OWNER_ID);
 
         verifyNoInteractions(events);
+    }
+
+    // ---- unpaid order expiry ----------------------------------------------
+
+    private static final Instant PLACED = Instant.parse("2026-03-14T12:00:00Z");
+    private static final Instant CUTOFF = PLACED.plusSeconds(60);
+
+    @Test
+    void unpaidOrdersPlacedBefore_asksForPendingOnes() {
+        when(orderRepository.findIdsByStatusCreatedBefore(OrderStatus.PENDING, CUTOFF)).thenReturn(List.of(ORDER_ID));
+
+        assertThat(orderService.unpaidOrdersPlacedBefore(CUTOFF)).containsExactly(ORDER_ID);
+    }
+
+    @Test
+    void expireIfUnpaid_cancelsAnOldUnpaidOrder_likeItsOwnerWould() {
+        order.setCreatedAt(PLACED);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThat(orderService.expireIfUnpaid(ORDER_ID, CUTOFF)).isTrue();
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(product.getInventory()).isEqualTo(7);  // back on sale
+        verify(events).publishEvent(new OrderCancellingEvent(List.of(ORDER_ID)));
+        verifyNoInteractions(authUtils);  // the shop cancels it, not a user
+    }
+
+    // Checked again in the order's own transaction: it may have changed since the scan.
+    @Test
+    void expireIfUnpaid_anOrderPaidSinceTheScan_isLeftAlone() {
+        order.setCreatedAt(PLACED);
+        order.setOrderStatus(OrderStatus.PAID);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThat(orderService.expireIfUnpaid(ORDER_ID, CUTOFF)).isFalse();
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PAID);
+        verifyNoInteractions(events);
+    }
+
+    @Test
+    void expireIfUnpaid_anOrderPlacedAfterTheCutoff_isLeftAlone() {
+        order.setCreatedAt(CUTOFF);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThat(orderService.expireIfUnpaid(ORDER_ID, CUTOFF)).isFalse();
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+    }
+
+    @Test
+    void expireIfUnpaid_aMissingOrder_isLeftAlone() {
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThat(orderService.expireIfUnpaid(ORDER_ID, CUTOFF)).isFalse();
+    }
+
+    @Test
+    void anUnpaidOrder_saysWhenItMustBePaidBy() {
+        order.setCreatedAt(PLACED);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThat(orderService.getOrder(ORDER_ID).getPayBy()).isEqualTo(PLACED.plus(Duration.ofMinutes(30)));
+    }
+
+    @Test
+    void aPaidOrder_hasNoPayBy() {
+        order.setCreatedAt(PLACED);
+        order.setOrderStatus(OrderStatus.PAID);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThat(orderService.getOrder(ORDER_ID).getPayBy()).isNull();
     }
 
     // ---- payment hooks ----------------------------------------------------

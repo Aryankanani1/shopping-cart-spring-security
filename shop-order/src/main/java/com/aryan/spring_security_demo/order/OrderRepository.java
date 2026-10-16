@@ -81,4 +81,8 @@ public interface OrderRepository extends JpaRepository<Order,Long> {
             ORDER BY o.createdAt DESC, o.id DESC
             """)
     Page<OrderSummaryDto> findAllSummaries(Pageable pageable);
+
+    /** Orders in {@code status} placed before {@code before}, oldest first (UnpaidOrderExpiryJob). */
+    @Query("SELECT o.id FROM Order o WHERE o.orderStatus = :status AND o.createdAt < :before ORDER BY o.createdAt")
+    List<Long> findIdsByStatusCreatedBefore(@Param("status") OrderStatus status, @Param("before") Instant before);
 }

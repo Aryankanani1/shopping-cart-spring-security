@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -42,6 +43,7 @@ public class OrderService implements OrderServiceInterface{
     private final Clock clock;
     private final EntityManager entityManager;
     private final ApplicationEventPublisher events;
+    private final OrderProperties properties;
 
     private final ModelMapper modelMapper;
 
@@ -158,6 +160,26 @@ public class OrderService implements OrderServiceInterface{
             throw new ResourceNotFoundException("order not found!");
         }
         applyTransition(order, OrderStatus.PAID);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Long> unpaidOrdersPlacedBefore(Instant placedBefore) {
+        return orderRepository.findIdsByStatusCreatedBefore(OrderStatus.PENDING, placedBefore);
+    }
+
+    @Override
+    @Transactional
+    public boolean expireIfUnpaid(Long orderId, Instant placedBefore) {
+        // No ownership check: the shop cancels it, not a user. Checked again here,
+        // in this order's own transaction: it may have been paid since the scan.
+        Order order = orderRepository.findByIdWithItems(orderId).orElse(null);
+        if (order == null || order.getOrderStatus() != OrderStatus.PENDING
+                || !order.getCreatedAt().isBefore(placedBefore)) {
+            return false;
+        }
+        applyTransition(order, OrderStatus.CANCELLED);
+        return true;
     }
 
     @Override
@@ -357,6 +379,11 @@ public class OrderService implements OrderServiceInterface{
     }
 
     private OrderDto convertToDto(Order order){
-        return modelMapper.map(order,OrderDto.class);
+        OrderDto dto = modelMapper.map(order,OrderDto.class);
+        // When an unpaid order is cancelled by UnpaidOrderExpiryJob.
+        if (order.getOrderStatus() == OrderStatus.PENDING && order.getCreatedAt() != null) {
+            dto.setPayBy(order.getCreatedAt().plus(properties.getUnpaidExpiry()));
+        }
+        return dto;
     }
 }

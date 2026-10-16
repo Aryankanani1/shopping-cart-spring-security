@@ -126,7 +126,7 @@ export function OrderDetailPage() {
       {cancel.isError && <ErrorNote message={errMessage(cancel.error)} />}
 
       {order.status === 'PENDING' && (
-        <PaymentPanel orderId={orderId} amount={order.totalAmount} confirming={confirming} />
+        <PaymentPanel orderId={orderId} amount={order.totalAmount} payBy={order.payBy} confirming={confirming} />
       )}
 
       <ul className="order-items">
