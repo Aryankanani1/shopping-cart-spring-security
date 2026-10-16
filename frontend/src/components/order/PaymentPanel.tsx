@@ -7,8 +7,12 @@ import { errMessage } from '../../lib/errors'
 import { formatMoney } from '../../lib/format'
 import { ErrorNote } from '../ui'
 
-/** Pay for a pending order with one of the simulated provider's test cards. */
-export function PaymentPanel({ orderId, amount }: { orderId: number; amount: number }) {
+/**
+ * Pay for a pending order with one of the simulated provider's test cards. While
+ * a payment is {@code confirming} (the provider didn't answer in time, and the
+ * server is settling it in the background), it says so instead.
+ */
+export function PaymentPanel({ orderId, amount, confirming }: { orderId: number; amount: number; confirming: boolean }) {
   const queryClient = useQueryClient()
   const [method, setMethod] = useState<string>(TEST_PAYMENT_METHODS[0].value)
   const [failure, setFailure] = useState<string | null>(null)
@@ -33,6 +37,20 @@ export function PaymentPanel({ orderId, amount }: { orderId: number; amount: num
       if (err instanceof ApiError && err.status < 500) attemptKey.current = null
     },
   })
+
+  if (confirming) {
+    return (
+      <section className="payment-panel" aria-labelledby="payment-heading">
+        <h2 id="payment-heading" className="eyebrow">
+          Payment
+        </h2>
+        <p className="note" role="status">
+          We’re confirming your payment with the provider. This page updates by itself once it’s settled, which
+          can take a few minutes.
+        </p>
+      </section>
+    )
+  }
 
   return (
     <section className="payment-panel" aria-labelledby="payment-heading">

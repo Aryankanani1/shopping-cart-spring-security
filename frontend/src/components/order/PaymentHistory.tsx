@@ -1,6 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
-import { paymentsApi, TEST_PAYMENT_METHODS } from '../../api/payments'
-import { queryKeys } from '../../api/queryKeys'
+import { TEST_PAYMENT_METHODS } from '../../api/payments'
 import type { PaymentDto, PaymentStatus } from '../../api/types'
 import { cx, formatDateTime, formatMoney } from '../../lib/format'
 
@@ -12,8 +10,9 @@ const STATUS: Record<PaymentStatus, { label: string; tone?: string }> = {
   REFUNDED: { label: 'refunded' },
 }
 
-// Statuses the server settles on its own, moments later (a refund runs after the
-// cancellation commits): the list checks back until none is left.
+// Statuses the server settles on its own, later (a refund runs after the
+// cancellation commits; a payment the provider was slow to answer is reconciled):
+// the list checks back until none is left.
 const UNSETTLED = new Set<PaymentStatus>(['PROCESSING', 'REFUND_PENDING'])
 const RECHECK_MS = 2000
 
@@ -28,12 +27,7 @@ function methodOf(payment: PaymentDto): string {
 }
 
 /** An order's payment attempts, oldest first; nothing until there is one. */
-export function PaymentHistory({ orderId }: { orderId: number }) {
-  const { data: payments } = useQuery({
-    queryKey: queryKeys.orders.payments(orderId),
-    queryFn: () => paymentsApi.list(orderId),
-    refetchInterval: (query) => recheckInterval(query.state.data),
-  })
+export function PaymentHistory({ payments }: { payments: PaymentDto[] | undefined }) {
   if (!payments || payments.length === 0) return null
 
   return (
