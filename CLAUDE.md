@@ -72,6 +72,7 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 - A change to a JPA entity's tables or columns must come with a matching migration in the same PR, because dev, prod and the integration tests run `ddl-auto: validate` against the Flyway schema and fail on a mismatch.
 - A new foreign key to `users` or `product` must declare what happens on delete (`on delete cascade` or `on delete set null` in the migration, with the matching `@OnDelete` on the entity field), otherwise deleting a user or product fails.
 - Associations are `FetchType.LAZY`; load what a query needs with `join fetch` or `@BatchSize`, never by switching to `EAGER`.
+- A `@ManyToMany` field is a `Set`, never a `Collection` or a `List`: Hibernate loads those as a bag, which holds the same element twice and whose `add()` always returns true, so a check like "add the role if the user lacks it" silently adds a copy (as `AdminBootstrap` did before V15). Its join table gets a primary key over both columns in the migration, so the database refuses a duplicate as well.
 
 ### Security and data access
 - Endpoints are authenticated by default (`identity/security/config/ShopConfig`); a new `permitAll()` or a changed role rule must have a comment beside it explaining why it is safe.

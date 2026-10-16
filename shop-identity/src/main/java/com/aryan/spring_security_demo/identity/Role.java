@@ -7,8 +7,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.BatchSize;
 
-import java.util.Collection;
 import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name="roles")
@@ -28,7 +28,7 @@ public class Role {
 
     @BatchSize(size = 20)
     @ManyToMany(mappedBy = "roles",fetch = FetchType.LAZY)
-    private Collection<User> users = new HashSet<>();
+    private Set<User> users = new HashSet<>();
 
     public Role(String name) {
         this.name = name;

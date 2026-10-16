@@ -8,8 +8,8 @@ import lombok.Setter;
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.NaturalId;
 
-import java.util.Collection;
 import java.util.HashSet;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -46,7 +46,9 @@ public class User {
                     (name = "role_id",
                     referencedColumnName = "id")
     )
-    private Collection<Role> roles = new HashSet<>();
+    // A Set, not a Collection: Hibernate loads a Collection as a bag, which takes the
+    // same role twice, so add() would report a role the user already has as new.
+    private Set<Role> roles = new HashSet<>();
 
     // email is the @NaturalId (a stable, unique business key), so it is the
     // safest basis for equality across the entity lifecycle and detached state.
