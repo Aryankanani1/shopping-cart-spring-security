@@ -448,12 +448,68 @@ holds them forever. An order still `PENDING` 30 minutes after it was placed
 `V13__orders_status_created_index.sql` adds `(order_status, created_at)` for the
 job's query; the existing index leads with `user_id`.
 
-## 7. Roadmap
+## 7. Phase 3: webhooks
 
-- **Phase 1:** everything in sections 1 to 3, the pay step on the storefront's
-  order page, and tests (unit, integration against MySQL, end-to-end).
-- **Phase 2:** refunds when a paid order is cancelled (section 4), reconciliation of
-  payments stuck in `PROCESSING` (section 5), and expiry of orders left unpaid
-  (section 6).
-- **Phase 3:** provider webhooks with a signature check, and an adapter for a real
-  provider's test mode.
+A real provider also reports what happened by calling the shop: a **webhook**, an
+HTTP request it sends when a charge succeeds or fails, or a refund goes through.
+Webhooks settle a payment the shop couldn't (a timeout) in seconds, rather than
+when reconciliation next runs. The jobs stay as the safety net, because a webhook
+can be late, repeated, out of order, or never arrive.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant G as Provider (FakePaymentGateway)
+    participant W as POST /api/v1/payments/webhooks
+    participant DB as MySQL
+    G->>W: event evt_1 (charge.succeeded for pay_7), Payment-Signature: t=..., v1=HMAC
+    W->>W: check the signature (constant time) and the timestamp (within 5 minutes)
+    rect rgb(230, 240, 255)
+    note over W,DB: one transaction
+    W->>DB: INSERT event evt_1 (unique event id)
+    W->>DB: lock payment 7, SUCCEEDED; order PAID
+    end
+    W-->>G: 200
+    G->>W: evt_1 again (the provider retries, or delivers twice)
+    W->>DB: evt_1 already recorded: nothing to do
+    W-->>G: 200
+```
+
+- **Authenticated by signature, not by JWT.** The provider has no user token, so
+  the endpoint is `permitAll`, and every request must carry
+  `Payment-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256>`, computed over
+  `<t>.<raw body>` with a secret only the provider and the shop know
+  (`PAYMENT_WEBHOOK_SECRET`). The signature is checked over the raw bytes received
+  (parsing and re-serializing the JSON could change them), with a constant-time
+  comparison, so its timing reveals nothing about the right value.
+- **Replay protection.** A captured request can't be sent again later: the
+  timestamp is part of what is signed, and one more than 5 minutes from the shop's
+  clock is refused.
+- **Exactly-once effect from at-least-once delivery.** Providers deliver an event
+  at least once: retries after a timeout, duplicates. Each event id is recorded in
+  `payment_webhook_event` (unique) in the same transaction as the change it makes,
+  so the change happens once: a repeat finds the id and does nothing, and two
+  deliveries at the same moment collide on the unique key, the loser rolled back
+  and answered `200` as already done.
+- **Same transitions as everywhere else.** A webhook settles a payment through the
+  same recorder methods as the request, reconciliation and the refund job, so
+  whatever arrives first records the outcome and the rest change nothing.
+  Recording an outcome now locks the payment row first, so two recorders at the
+  same moment take turns instead of the second failing its version check (a `409`
+  for a payment that succeeded).
+- **Unknown events are acknowledged.** An event type the shop doesn't handle, or
+  for a payment it doesn't know, is recorded and answered `200`; refusing it would
+  only make the provider retry forever.
+
+The fake provider sends `charge.succeeded`, `charge.failed` and `refund.succeeded`
+about a second after it answers (the way a real one does), over HTTP to
+`app.payment.fake.webhook-url`, signed with the same secret. A real provider
+retries a failed delivery for days; the fake tries once, and a lost webhook is
+left to reconciliation and the refund job. Webhooks are off until both the secret
+and the URL are set: staging and production send them to the API itself.
+
+`V14__payment_webhook_events.sql` adds the event table. It keeps the payment's id
+as a plain column, not a foreign key, since an event can name a payment the shop
+doesn't know.
+
+## 8. Roadmap
