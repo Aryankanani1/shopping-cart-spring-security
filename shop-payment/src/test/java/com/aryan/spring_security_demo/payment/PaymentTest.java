@@ -63,6 +63,31 @@ class PaymentTest {
         assertThatThrownBy(() -> paid.refunded("re_1", SETTLED)).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void providerKeys_carryThePaymentId_andParseBack() {
+        assertThat(Payment.chargeKey(7L)).isEqualTo("pay_7");
+        assertThat(Payment.refundKey(7L)).isEqualTo("refund_7");
+        assertThat(Payment.idFromKey("pay_7", Payment.CHARGE_KEY_PREFIX)).contains(7L);
+        assertThat(Payment.idFromKey("refund_7", Payment.REFUND_KEY_PREFIX)).contains(7L);
+        assertThat(Payment.idFromKey("refund_7", Payment.CHARGE_KEY_PREFIX)).isEmpty();
+        assertThat(Payment.idFromKey("pay_x", Payment.CHARGE_KEY_PREFIX)).isEmpty();
+        assertThat(Payment.idFromKey(null, Payment.CHARGE_KEY_PREFIX)).isEmpty();
+    }
+
+    @Test
+    void aWebhookSecret_isEitherOff_orLongEnough() {
+        PaymentProperties properties = new PaymentProperties();
+        assertThat(properties.isWebhooksEnabled()).isFalse();
+        assertThat(properties.isWebhookSecretUsable()).isTrue();
+
+        properties.setWebhookSecret("too-short");
+        assertThat(properties.isWebhookSecretUsable()).isFalse();
+
+        properties.setWebhookSecret("x".repeat(32));
+        assertThat(properties.isWebhooksEnabled()).isTrue();
+        assertThat(properties.isWebhookSecretUsable()).isTrue();
+    }
+
     private static List<PaymentStatus> allowedFrom(PaymentStatus from) {
         return Arrays.stream(PaymentStatus.values()).filter(from::canTransitionTo).toList();
     }

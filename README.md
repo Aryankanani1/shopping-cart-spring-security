@@ -413,6 +413,7 @@ is simulated, by a fake provider inside the app with test payment methods
 | `POST /orders/{orderId}/payments` | Pay, with an `Idempotency-Key` header and `{"paymentMethod": "test_visa"}`: `201` for a new attempt (`SUCCEEDED`, or `FAILED` with the reason), `202` with `PROCESSING` when the provider didn't answer in time, `200` with the first answer when the key was already used |
 | `GET /orders/{orderId}/payments` | The order's attempts, oldest first |
 | `GET /orders/{orderId}/payments/{paymentId}` | One attempt |
+| `POST /payments/webhooks` | Events from the payment provider (`charge.succeeded`, `charge.failed`, `refund.succeeded`), with no user token: authenticated by their `Payment-Signature` |
 
 - **Never charged twice.** A repeated request with the same key gets the first
   answer; the order row is locked while an attempt starts, so two attempts take
@@ -437,6 +438,14 @@ is simulated, by a fake provider inside the app with test payment methods
   on sale, by `UnpaidOrderExpiryJob` (`APP_ORDERS_UNPAID_EXPIRY_CRON`, every
   minute, ShedLock), one transaction per order. An order being paid for is left
   until its payment settles. The order's `payBy` tells the customer the deadline.
+- **Webhooks settle what the shop couldn't, in seconds.** The provider reports each
+  charge and refund by a signed webhook: an HMAC-SHA256 over the timestamp and the
+  raw body with `PAYMENT_WEBHOOK_SECRET`, checked in constant time, refused if
+  more than 5 minutes old. Each event's id is recorded in the same transaction as
+  its change, so a repeated delivery changes nothing. The simulated provider sends
+  them to the API itself once both `PAYMENT_WEBHOOK_SECRET` and
+  `APP_PAYMENT_FAKE_WEBHOOK_URL` are set (staging and production do); the jobs
+  above still cover a webhook that never arrives.
 - An order can't be cancelled while its payment is being processed, nor once it
   has shipped.
 

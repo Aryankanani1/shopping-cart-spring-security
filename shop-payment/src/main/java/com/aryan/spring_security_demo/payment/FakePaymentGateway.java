@@ -32,7 +32,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>Like a real provider, it keeps each answer under the request's idempotency
  * key, and a key it has seen gets the same answer again without charging or
  * refunding again. The answers live in memory, so they are forgotten on restart;
- * a refund of a charge it no longer knows is still refunded.
+ * a refund of a charge it no longer knows is still refunded. Each new charge or
+ * refund is also reported once by webhook ({@link FakeWebhookSender}), when those
+ * are on.
  */
 @Component
 public class FakePaymentGateway implements PaymentGateway {
@@ -53,6 +55,11 @@ public class FakePaymentGateway implements PaymentGateway {
     private final Map<String, String> methodByCharge = new ConcurrentHashMap<>();
     private final Map<String, RefundResult> refunds = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> refundCalls = new ConcurrentHashMap<>();
+    private final FakeWebhookSender webhooks;
+
+    public FakePaymentGateway(FakeWebhookSender webhooks) {
+        this.webhooks = webhooks;
+    }
 
     @Override
     public ChargeResult charge(ChargeRequest request) {
@@ -64,9 +71,14 @@ public class FakePaymentGateway implements PaymentGateway {
         if (TIMEOUT_NOT_CHARGED.equals(method)) {
             throw new PaymentOutcomeUnknownException("The payment provider didn't answer in time");
         }
-        ChargeResult result = answers.computeIfAbsent(request.idempotencyKey(), key -> answer(method));
-        if (result instanceof ChargeResult.Approved approved) {
-            methodByCharge.put(approved.providerReference(), method);
+        ChargeResult answer = answer(method);
+        ChargeResult earlier = answers.putIfAbsent(request.idempotencyKey(), answer);
+        ChargeResult result = earlier == null ? answer : earlier;
+        if (earlier == null) {
+            if (result instanceof ChargeResult.Approved approved) {
+                methodByCharge.put(approved.providerReference(), method);
+            }
+            announce(request.idempotencyKey(), result);
         }
         if (TIMEOUT_CHARGED.equals(method)) {
             throw new PaymentOutcomeUnknownException("The payment provider didn't answer in time");
@@ -85,8 +97,25 @@ public class FakePaymentGateway implements PaymentGateway {
         if (REFUND_DOWN.equals(methodByCharge.get(request.providerReference())) && call <= REFUND_DOWN_CALLS) {
             throw new PaymentProviderUnavailableException("The payment provider is unavailable");
         }
-        return refunds.computeIfAbsent(request.idempotencyKey(),
-                key -> new RefundResult("re_" + UUID.randomUUID().toString().replace("-", "")));
+        RefundResult refund = new RefundResult("re_" + UUID.randomUUID().toString().replace("-", ""));
+        RefundResult earlier = refunds.putIfAbsent(request.idempotencyKey(), refund);
+        if (earlier != null) {
+            return earlier;
+        }
+        webhooks.send(WebhookEvent.REFUND_SUCCEEDED, new WebhookEvent.Data(request.idempotencyKey(),
+                request.providerReference(), null, null, null, refund.refundReference()));
+        return refund;
+    }
+
+    /** Report a new charge's outcome by webhook, as a real provider does. */
+    private void announce(String idempotencyKey, ChargeResult result) {
+        if (result instanceof ChargeResult.Approved approved) {
+            webhooks.send(WebhookEvent.CHARGE_SUCCEEDED, new WebhookEvent.Data(idempotencyKey,
+                    approved.providerReference(), approved.cardBrand(), approved.cardLast4(), null, null));
+        } else {
+            webhooks.send(WebhookEvent.CHARGE_FAILED, new WebhookEvent.Data(idempotencyKey,
+                    null, null, null, ((ChargeResult.Declined) result).reason(), null));
+        }
     }
 
     private static ChargeResult answer(String method) {

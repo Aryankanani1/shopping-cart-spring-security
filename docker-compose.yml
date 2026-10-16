@@ -84,6 +84,10 @@ services:
       # this message. Put it in .env (see .env.example).
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env — see .env.example (openssl rand -base64 32)}
       JAVA_OPTS: ${JAVA_OPTS:-}
+      # Payment webhooks, off unless PAYMENT_WEBHOOK_SECRET is set in .env: the
+      # simulated provider then delivers them to the API itself.
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      APP_PAYMENT_FAKE_WEBHOOK_URL: http://localhost:8080/api/v1/payments/webhooks
       # Prometheus scrape account (HTTP Basic, /actuator/prometheus only). Off
       # unless enabled in .env; the monitoring profile's Prometheus uses it.
       PROMETHEUS_SCRAPE_ENABLED: ${PROMETHEUS_SCRAPE_ENABLED:-false}

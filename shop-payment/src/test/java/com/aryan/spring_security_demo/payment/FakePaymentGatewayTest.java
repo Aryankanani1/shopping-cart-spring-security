@@ -6,11 +6,20 @@ import java.math.BigDecimal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /** The simulated provider answers by payment method, and once per idempotency key. */
 class FakePaymentGatewayTest {
 
-    private final FakePaymentGateway gateway = new FakePaymentGateway();
+    private final FakeWebhookSender webhooks = mock(FakeWebhookSender.class);
+    private final FakePaymentGateway gateway = new FakePaymentGateway(webhooks);
 
     @Test
     void testCards_areApproved() {
@@ -113,6 +122,55 @@ class FakePaymentGatewayTest {
     @Test
     void refund_ofAChargeItNoLongerKnows_isStillGiven() {
         assertThat(gateway.refund(refund("refund_9", "ch_forgotten")).refundReference()).startsWith("re_");
+    }
+
+    // ---- webhooks: each new charge or refund is reported once ------------
+
+    @Test
+    void anApprovedCharge_isReportedOnce_evenWhenRepeated() {
+        ChargeResult.Approved charge = (ChargeResult.Approved) gateway.charge(request("pay_1", FakePaymentGateway.VISA));
+        gateway.charge(request("pay_1", FakePaymentGateway.VISA));
+
+        verify(webhooks, times(1)).send(eq(WebhookEvent.CHARGE_SUCCEEDED), argThat(data ->
+                data.idempotencyKey().equals("pay_1") && data.providerReference().equals(charge.providerReference())
+                        && data.cardLast4().equals("4242")));
+    }
+
+    @Test
+    void aDeclinedCharge_isReportedWithItsReason() {
+        gateway.charge(request("pay_1", FakePaymentGateway.DECLINED));
+
+        verify(webhooks).send(eq(WebhookEvent.CHARGE_FAILED),
+                argThat(data -> data.failureReason().equals("Your card was declined.")));
+    }
+
+    // The case webhooks exist for: the answer was lost, the webhook tells the shop.
+    @Test
+    void aChargeWhoseAnswerTimedOut_isStillReported() {
+        assertThatThrownBy(() -> gateway.charge(request("pay_1", FakePaymentGateway.TIMEOUT_CHARGED)))
+                .isInstanceOf(PaymentOutcomeUnknownException.class);
+
+        verify(webhooks).send(eq(WebhookEvent.CHARGE_SUCCEEDED), argThat(data -> data.idempotencyKey().equals("pay_1")));
+    }
+
+    @Test
+    void nothingIsReported_forAChargeThatNeverReachedTheProvider() {
+        assertThatThrownBy(() -> gateway.charge(request("pay_1", FakePaymentGateway.TIMEOUT_NOT_CHARGED)))
+                .isInstanceOf(PaymentOutcomeUnknownException.class);
+        assertThatThrownBy(() -> gateway.charge(request("pay_2", FakePaymentGateway.PROVIDER_DOWN)))
+                .isInstanceOf(PaymentProviderUnavailableException.class);
+
+        verify(webhooks, never()).send(anyString(), any());
+    }
+
+    @Test
+    void aRefund_isReportedOnce() {
+        ChargeResult.Approved charge = (ChargeResult.Approved) gateway.charge(request("pay_1", FakePaymentGateway.VISA));
+        RefundResult refund = gateway.refund(refund("refund_1", charge.providerReference()));
+        gateway.refund(refund("refund_1", charge.providerReference()));
+
+        verify(webhooks, times(1)).send(eq(WebhookEvent.REFUND_SUCCEEDED), argThat(data ->
+                data.idempotencyKey().equals("refund_1") && data.refundReference().equals(refund.refundReference())));
     }
 
     private static RefundRequest refund(String key, String providerReference) {

@@ -95,6 +95,11 @@ public class ShopConfig {
                             .requestMatchers(HttpMethod.PUT, "/api/v1/auth/password").authenticated()
                             .requestMatchers("/api/v1/auth/**").permitAll()                 // login
                             .requestMatchers(HttpMethod.POST, "/api/v1/users").permitAll()  // self-registration
+                            // The payment provider's webhooks. The provider has no user token,
+                            // so each request is authenticated by its HMAC signature instead,
+                            // checked over the raw body before anything else; an unsigned or
+                            // badly signed one is a 401 (PaymentWebhookService).
+                            .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks").permitAll()
                             // Read-only catalog browsing is open to everyone.
                             .requestMatchers(HttpMethod.GET,
                                     "/api/v1/products/**",

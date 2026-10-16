@@ -69,7 +69,7 @@ class RefundRecorderTest {
     void recordRefunded_settlesAnOwedRefund() {
         Payment owed = paid();
         owed.requestRefund(NOW);
-        when(paymentRepository.findById(7L)).thenReturn(Optional.of(owed));
+        when(paymentRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(owed));
 
         recorder.recordRefunded(7L, new RefundResult("re_1"));
 
@@ -83,11 +83,23 @@ class RefundRecorderTest {
         Payment refunded = paid();
         refunded.requestRefund(NOW);
         refunded.refunded("re_1", NOW);
-        when(paymentRepository.findById(7L)).thenReturn(Optional.of(refunded));
+        when(paymentRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(refunded));
 
         recorder.recordRefunded(7L, new RefundResult("re_2"));
 
         assertThat(refunded.getRefundReference()).isEqualTo("re_1");
+    }
+
+    // A webhook records its event and the refund in one transaction.
+    @Test
+    void recordRefundedInCurrentTransaction_settlesAnOwedRefundTheSameWay() {
+        Payment owed = paid();
+        owed.requestRefund(NOW);
+        when(paymentRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(owed));
+
+        recorder.recordRefundedInCurrentTransaction(7L, new RefundResult("re_1"));
+
+        assertThat(owed.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
     }
 
     @Test

@@ -49,6 +49,9 @@ app:
   payment:
     refund-retry-cron: "-"
     reconcile-cron: "-"
+    # Deliberately fake, so the webhook tests can sign their requests. The fake
+    # provider sends no webhooks here: its webhook-url stays empty.
+    webhook-secret: "test-only-webhook-secret-0000000000000000000000"
   startup:
     seed:
       enabled: false

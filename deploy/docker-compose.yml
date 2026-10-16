@@ -34,6 +34,10 @@ services:
       DB_USERNAME: ${DB_USERNAME:?Set DB_USERNAME in .env}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -base64 32)}
+      # The simulated payment provider signs its webhooks with this, and delivers
+      # them to the API itself (docs/payment-design.md, section 7).
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?Set PAYMENT_WEBHOOK_SECRET in .env (openssl rand -hex 32)}
+      APP_PAYMENT_FAKE_WEBHOOK_URL: http://localhost:8080/api/v1/payments/webhooks
       # First start only: creates this account as the admin (see the README).
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}

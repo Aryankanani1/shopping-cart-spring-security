@@ -81,7 +81,7 @@ public class PaymentRecorder {
      */
     @Transactional
     public PaymentDto recordSuccess(Long paymentId, ChargeResult.Approved approved) {
-        Payment payment = load(paymentId);
+        Payment payment = loadForUpdate(paymentId);
         if (payment.getStatus() != PaymentStatus.PROCESSING) {
             return settledAlready(payment, true);
         }
@@ -96,7 +96,7 @@ public class PaymentRecorder {
      */
     @Transactional
     public PaymentDto recordFailure(Long paymentId, String reason) {
-        Payment payment = load(paymentId);
+        Payment payment = loadForUpdate(paymentId);
         if (payment.getStatus() != PaymentStatus.PROCESSING) {
             return settledAlready(payment, false);
         }
@@ -129,6 +129,11 @@ public class PaymentRecorder {
                     charged ? "charged" : "failed");
         }
         return PaymentDto.from(payment);
+    }
+
+    private Payment loadForUpdate(Long paymentId) {
+        return paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new IllegalStateException("Payment " + paymentId + " is missing"));
     }
 
     private Payment load(Long paymentId) {

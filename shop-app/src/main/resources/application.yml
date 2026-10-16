@@ -206,6 +206,15 @@ app:
     # Settles payments still PROCESSING after 2 minutes (PaymentReconciliationJob)
     # by asking the provider what happened. Every minute, at :15; ShedLock too.
     reconcile-cron: ${APP_PAYMENT_RECONCILE_CRON:15 * * * * *}
+    # Webhooks (PaymentWebhookController): the provider signs each with this secret
+    # (at least 32 characters; openssl rand -hex 32), and one signed more than
+    # webhook-tolerance away from now is refused as a replay. Empty: webhooks off.
+    webhook-secret: ${PAYMENT_WEBHOOK_SECRET:}
+    webhook-tolerance: 5m
+    fake:
+      # Where the simulated provider delivers its webhooks (the API's own endpoint).
+      # Empty: it sends none.
+      webhook-url: ${APP_PAYMENT_FAKE_WEBHOOK_URL:}
   startup:
     seed:
       enabled: true

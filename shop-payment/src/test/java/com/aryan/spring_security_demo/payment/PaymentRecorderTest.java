@@ -171,7 +171,7 @@ class PaymentRecorderTest {
     @Test
     void recordSuccess_settlesThePayment_andMarksTheOrderPaid() {
         Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);
-        when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(payment));
 
         PaymentDto result = recorder.recordSuccess(PAYMENT_ID, new ChargeResult.Approved("ch_1", "Visa", "4242"));
 
@@ -184,7 +184,7 @@ class PaymentRecorderTest {
     @Test
     void recordFailure_settlesThePayment_andLeavesTheOrderAlone() {
         Payment payment = Payment.start(order, KEY, FakePaymentGateway.DECLINED, "USD", NOW);
-        when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(payment));
 
         PaymentDto result = recorder.recordFailure(PAYMENT_ID, "Your card was declined.");
 
@@ -199,7 +199,7 @@ class PaymentRecorderTest {
     void recordSuccess_ofAnAttemptAlreadySettled_changesNothing() {
         Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);
         payment.succeed("ch_1", "Visa", "4242", NOW);
-        when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(payment));
 
         PaymentDto result = recorder.recordSuccess(PAYMENT_ID, new ChargeResult.Approved("ch_2", "Visa", "4242"));
 
@@ -211,7 +211,7 @@ class PaymentRecorderTest {
     void recordFailure_ofAnAttemptThatSucceeded_keepsTheSuccess() {
         Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);
         payment.succeed("ch_1", "Visa", "4242", NOW);
-        when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(payment));
 
         assertThat(recorder.recordFailure(PAYMENT_ID, "declined").status()).isEqualTo(PaymentStatus.SUCCEEDED);
     }
@@ -235,7 +235,7 @@ class PaymentRecorderTest {
 
     @Test
     void recordingAMissingPayment_isABug() {
-        when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.empty());
+        when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recorder.recordFailure(PAYMENT_ID, "declined"))
                 .isInstanceOf(IllegalStateException.class);

@@ -1,6 +1,8 @@
 package com.aryan.spring_security_demo.payment;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,6 +12,16 @@ import java.util.List;
 import java.util.Optional;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
+
+    /**
+     * The payment, locked until the transaction ends. Recording an outcome takes
+     * this lock first, so recorders racing for one payment (its request,
+     * reconciliation, a webhook, the refund job) take turns, and each sees what
+     * the one before recorded.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payment p where p.id = :id")
+    Optional<Payment> findByIdForUpdate(@Param("id") Long id);
 
     @Query("select p from Payment p where p.order.id = :orderId and p.idempotencyKey = :idempotencyKey")
     Optional<Payment> findByOrderAndKey(@Param("orderId") Long orderId,
