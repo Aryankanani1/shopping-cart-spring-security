@@ -156,6 +156,13 @@ describe('OrderDetailPage', () => {
     expect(await screen.findByText('refund pending')).toBeInTheDocument()
   })
 
+  it('tells the customer when an unpaid order must be paid by', async () => {
+    vi.mocked(ordersApi.get).mockResolvedValue(order({ payBy: '2026-09-14T10:30:00Z' }))
+    open()
+
+    expect(await screen.findByText(/Pay by/)).toHaveTextContent('is cancelled, and its items go back on sale')
+  })
+
   it('shows why a payment failed, and keeps the order payable', async () => {
     vi.mocked(paymentsApi.pay).mockResolvedValue(DECLINED)
     open()

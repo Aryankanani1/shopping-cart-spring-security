@@ -4,7 +4,7 @@ import { ApiError } from '../../api/client'
 import { newIdempotencyKey, paymentsApi, TEST_PAYMENT_METHODS } from '../../api/payments'
 import { queryKeys } from '../../api/queryKeys'
 import { errMessage } from '../../lib/errors'
-import { formatMoney } from '../../lib/format'
+import { formatDateTime, formatMoney } from '../../lib/format'
 import { ErrorNote } from '../ui'
 
 /**
@@ -12,7 +12,18 @@ import { ErrorNote } from '../ui'
  * a payment is {@code confirming} (the provider didn't answer in time, and the
  * server is settling it in the background), it says so instead.
  */
-export function PaymentPanel({ orderId, amount, confirming }: { orderId: number; amount: number; confirming: boolean }) {
+export function PaymentPanel({
+  orderId,
+  amount,
+  payBy,
+  confirming,
+}: {
+  orderId: number
+  amount: number
+  /** When the order is cancelled if it still isn't paid. */
+  payBy?: string | null
+  confirming: boolean
+}) {
   const queryClient = useQueryClient()
   const [method, setMethod] = useState<string>(TEST_PAYMENT_METHODS[0].value)
   const [failure, setFailure] = useState<string | null>(null)
@@ -57,6 +68,12 @@ export function PaymentPanel({ orderId, amount, confirming }: { orderId: number;
       <h2 id="payment-heading" className="eyebrow">
         Payment
       </h2>
+      {payBy && (
+        <p>
+          Pay by <strong>{formatDateTime(payBy)}</strong>. An order still unpaid then is cancelled, and its items go
+          back on sale.
+        </p>
+      )}
       <p className="faint">
         This is a demo shop: payments are simulated, and no real card is charged. Pick a test card.
       </p>

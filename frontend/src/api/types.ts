@@ -85,6 +85,8 @@ export interface OrderDto {
   orderDate: string
   totalAmount: number
   status: string
+  /** While unpaid: the ISO instant it is cancelled at if it still isn't paid. */
+  payBy?: string | null
   recipientName?: string
   addressLine1?: string
   addressLine2?: string
