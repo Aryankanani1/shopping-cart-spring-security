@@ -201,6 +201,34 @@ describe('OrderDetailPage', () => {
     expect(paymentsApi.list).toHaveBeenCalledWith(55)
   })
 
+  it('says a payment is being confirmed, with nothing to pay or cancel meanwhile', async () => {
+    vi.mocked(paymentsApi.list).mockResolvedValue([
+      payment({ status: 'PROCESSING', cardBrand: null, cardLast4: null, providerReference: null, completedAt: null }),
+    ])
+    open()
+
+    expect(await screen.findByText(/confirming your payment with the provider/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Pay/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument()
+  })
+
+  // Settled in the background: the order may be paid now, so it's fetched again.
+  it('fetches the order again once a confirming payment is settled', async () => {
+    const confirmingPayment = payment({ status: 'PROCESSING', providerReference: null, completedAt: null })
+    vi.mocked(paymentsApi.list).mockResolvedValue([confirmingPayment])
+    const { queryClient } = open()
+    await screen.findByText(/confirming your payment/)
+    // Like the server once reconciliation has run.
+    vi.mocked(ordersApi.get).mockResolvedValue(order({ status: 'PAID' }))
+    vi.mocked(paymentsApi.list).mockResolvedValue([payment({ status: 'SUCCEEDED' })])
+
+    queryClient.setQueryData(queryKeys.orders.payments(55), [payment({ status: 'SUCCEEDED' })])
+
+    await waitFor(() => expect(ordersApi.get).toHaveBeenCalledTimes(2))
+    // Both the order's badge and the payment's tag now say so.
+    await waitFor(() => expect(screen.getAllByText('paid')).toHaveLength(2))
+  })
+
   it('shows someone else’s order as an error, not the order', async () => {
     vi.mocked(ordersApi.get).mockRejectedValue(
       new ApiError(403, 'You do not have permission to perform this action'),

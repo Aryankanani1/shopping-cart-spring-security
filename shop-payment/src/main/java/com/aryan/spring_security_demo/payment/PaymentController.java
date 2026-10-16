@@ -37,7 +37,9 @@ public class PaymentController {
      * Pay for the order. {@code Idempotency-Key} names this attempt: sending the
      * same request again with it (after a timeout, say) returns the first answer
      * with 200 instead of paying twice. A new attempt is 201, with status
-     * {@code SUCCEEDED} or, when declined, {@code FAILED} and the reason.
+     * {@code SUCCEEDED} or, when declined, {@code FAILED} and the reason; or 202
+     * with {@code PROCESSING} when the provider didn't answer in time, until
+     * reconciliation settles it.
      */
     @PostMapping
     public ResponseEntity<ApiResponse<PaymentDto>> pay(
@@ -54,6 +56,9 @@ public class PaymentController {
         }
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{paymentId}").buildAndExpand(payment.id()).toUri();
+        if (payment.status() == PaymentStatus.PROCESSING) {
+            return ResponseEntity.accepted().location(location).body(body);
+        }
         return ResponseEntity.created(location).body(body);
     }
 

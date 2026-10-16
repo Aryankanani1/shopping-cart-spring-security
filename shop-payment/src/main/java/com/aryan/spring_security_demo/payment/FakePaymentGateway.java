@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.payment;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,6 +19,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>{@value #DECLINED}, {@value #INSUFFICIENT_FUNDS}: declined</li>
  *   <li>{@value #FLAKY}: unavailable on the first try of each charge, approved on the retry</li>
  *   <li>{@value #PROVIDER_DOWN}: unavailable every time</li>
+ *   <li>{@value #TIMEOUT_CHARGED}: charged, but the answer never comes back
+ *       (a timeout); {@link #findCharge} then reports it approved</li>
+ *   <li>{@value #TIMEOUT_NOT_CHARGED}: a timeout before the request reached the
+ *       provider; {@link #findCharge} then reports no charge</li>
  *   <li>{@value #REFUND_DOWN}: approved, but unavailable for the first
  *       {@value #REFUND_DOWN_CALLS} calls to refund it (a first try and its
  *       retries), so a later retry is what refunds it</li>
@@ -39,6 +44,8 @@ public class FakePaymentGateway implements PaymentGateway {
     public static final String FLAKY = "test_flaky";
     public static final String PROVIDER_DOWN = "test_provider_down";
     public static final String REFUND_DOWN = "test_refund_down";
+    public static final String TIMEOUT_CHARGED = "test_timeout_charged";
+    public static final String TIMEOUT_NOT_CHARGED = "test_timeout_not_charged";
     static final int REFUND_DOWN_CALLS = 3;
 
     private final Map<String, ChargeResult> answers = new ConcurrentHashMap<>();
@@ -54,11 +61,22 @@ public class FakePaymentGateway implements PaymentGateway {
                 || (FLAKY.equals(method) && flakyKeysTried.add(request.idempotencyKey()))) {
             throw new PaymentProviderUnavailableException("The payment provider is unavailable");
         }
+        if (TIMEOUT_NOT_CHARGED.equals(method)) {
+            throw new PaymentOutcomeUnknownException("The payment provider didn't answer in time");
+        }
         ChargeResult result = answers.computeIfAbsent(request.idempotencyKey(), key -> answer(method));
         if (result instanceof ChargeResult.Approved approved) {
             methodByCharge.put(approved.providerReference(), method);
         }
+        if (TIMEOUT_CHARGED.equals(method)) {
+            throw new PaymentOutcomeUnknownException("The payment provider didn't answer in time");
+        }
         return result;
+    }
+
+    @Override
+    public Optional<ChargeResult> findCharge(String idempotencyKey) {
+        return Optional.ofNullable(answers.get(idempotencyKey));
     }
 
     @Override
@@ -73,7 +91,7 @@ public class FakePaymentGateway implements PaymentGateway {
 
     private static ChargeResult answer(String method) {
         return switch (method) {
-            case VISA, FLAKY, REFUND_DOWN -> approved("Visa", "4242");
+            case VISA, FLAKY, REFUND_DOWN, TIMEOUT_CHARGED -> approved("Visa", "4242");
             case MASTERCARD -> approved("Mastercard", "4444");
             case DECLINED -> new ChargeResult.Declined("Your card was declined.");
             case INSUFFICIENT_FUNDS -> new ChargeResult.Declined("Your card has insufficient funds.");

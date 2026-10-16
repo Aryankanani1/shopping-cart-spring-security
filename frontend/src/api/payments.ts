@@ -13,6 +13,8 @@ export const TEST_PAYMENT_METHODS = [
   { value: 'test_flaky', label: 'Provider fails once, then approves' },
   { value: 'test_provider_down', label: 'Provider is down' },
   { value: 'test_refund_down', label: 'Visa whose refunds fail at first' },
+  { value: 'test_timeout_charged', label: 'Provider times out after charging' },
+  { value: 'test_timeout_not_charged', label: 'Provider times out before charging' },
 ] as const
 
 /**

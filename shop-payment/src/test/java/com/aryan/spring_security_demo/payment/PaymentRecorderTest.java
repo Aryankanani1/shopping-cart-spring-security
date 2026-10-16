@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -190,6 +191,46 @@ class PaymentRecorderTest {
         assertThat(result.status()).isEqualTo(PaymentStatus.FAILED);
         assertThat(result.failureReason()).isEqualTo("Your card was declined.");
         verify(orderService, never()).markPaid(any());
+    }
+
+    // A late request and the reconciliation job can both settle one attempt: the
+    // first records it, the second changes nothing.
+    @Test
+    void recordSuccess_ofAnAttemptAlreadySettled_changesNothing() {
+        Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);
+        payment.succeed("ch_1", "Visa", "4242", NOW);
+        when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.of(payment));
+
+        PaymentDto result = recorder.recordSuccess(PAYMENT_ID, new ChargeResult.Approved("ch_2", "Visa", "4242"));
+
+        assertThat(result.providerReference()).isEqualTo("ch_1");
+        verify(orderService, never()).markPaid(any());
+    }
+
+    @Test
+    void recordFailure_ofAnAttemptThatSucceeded_keepsTheSuccess() {
+        Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);
+        payment.succeed("ch_1", "Visa", "4242", NOW);
+        when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.of(payment));
+
+        assertThat(recorder.recordFailure(PAYMENT_ID, "declined").status()).isEqualTo(PaymentStatus.SUCCEEDED);
+    }
+
+    @Test
+    void isProcessing_untilTheAttemptIsSettled() {
+        Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);
+        when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.of(payment));
+
+        assertThat(recorder.isProcessing(PAYMENT_ID)).isTrue();
+        payment.fail("declined", NOW);
+        assertThat(recorder.isProcessing(PAYMENT_ID)).isFalse();
+    }
+
+    @Test
+    void stuckPayments_areTheOnesStillProcessing() {
+        when(paymentRepository.findIdsByStatusCreatedBefore(PaymentStatus.PROCESSING, NOW)).thenReturn(List.of(7L));
+
+        assertThat(recorder.stuckPayments(NOW)).containsExactly(7L);
     }
 
     @Test

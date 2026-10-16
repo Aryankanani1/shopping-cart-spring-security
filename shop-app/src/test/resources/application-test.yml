@@ -41,9 +41,11 @@ app:
   # that drives WishlistAlertService directly. Tests call the service themselves.
   wishlist:
     alert-cron: "-"
-  # Tests call RefundProcessor.retryPendingRefunds themselves, with a time they choose.
+  # Tests call RefundProcessor.retryPendingRefunds and
+  # PaymentReconciler.reconcileStuckPayments themselves, with a time they choose.
   payment:
     refund-retry-cron: "-"
+    reconcile-cron: "-"
   startup:
     seed:
       enabled: false

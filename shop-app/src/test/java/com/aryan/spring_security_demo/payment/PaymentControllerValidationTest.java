@@ -92,6 +92,18 @@ class PaymentControllerValidationTest {
                 .andExpect(jsonPath("$.message").value("Payment failed"));
     }
 
+    // The provider didn't answer in time: accepted, and settled later by reconciliation.
+    @Test
+    void pay_aNewAttemptStillProcessing_is202_withWhereToFindIt() throws Exception {
+        when(paymentService.pay(9L, KEY, "test_visa"))
+                .thenReturn(new PaymentServiceInterface.PayResult(payment(PaymentStatus.PROCESSING), true));
+
+        pay(KEY, VISA_BODY)
+                .andExpect(status().isAccepted())
+                .andExpect(header().string("Location", endsWith("/api/v1/orders/9/payments/7")))
+                .andExpect(jsonPath("$.data.status").value("PROCESSING"));
+    }
+
     @Test
     void pay_aRepeatedKey_is200_withTheFirstAnswer() throws Exception {
         when(paymentService.pay(9L, KEY, "test_visa"))

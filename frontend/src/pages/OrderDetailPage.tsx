@@ -1,13 +1,15 @@
+import { useEffect, useRef } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ordersApi } from '../api/orders'
+import { paymentsApi } from '../api/payments'
 import { queryKeys } from '../api/queryKeys'
 import { useAuth } from '../context/AuthContext'
 import { errMessage } from '../lib/errors'
 import { Loader, ErrorNote } from '../components/ui'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { PaymentPanel } from '../components/order/PaymentPanel'
-import { PaymentHistory } from '../components/order/PaymentHistory'
+import { PaymentHistory, recheckInterval } from '../components/order/PaymentHistory'
 import { formatDate, formatMoney } from '../lib/format'
 
 // Statuses from which the owner may still cancel — mirrors the server's rule
@@ -32,6 +34,24 @@ export function OrderDetailPage() {
     enabled: Number.isFinite(orderId),
   })
   const error = queryError ? errMessage(queryError) : null
+
+  const { data: payments } = useQuery({
+    queryKey: queryKeys.orders.payments(orderId),
+    queryFn: () => paymentsApi.list(orderId),
+    enabled: Number.isFinite(orderId),
+    refetchInterval: (query) => recheckInterval(query.state.data),
+  })
+  // A payment the provider didn't answer in time is settled in the background
+  // (reconciliation). Until then it can't be paid again or cancelled; once it is
+  // settled, the order may have become paid, so fetch it again.
+  const confirming = payments?.some((payment) => payment.status === 'PROCESSING') ?? false
+  const wasConfirming = useRef(false)
+  useEffect(() => {
+    if (wasConfirming.current && !confirming) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.detail(orderId) })
+    }
+    wasConfirming.current = confirming
+  }, [confirming, orderId, queryClient])
 
   const cancel = useMutation({
     mutationFn: () => ordersApi.cancel(orderId),
@@ -86,7 +106,7 @@ export function OrderDetailPage() {
         <div className="order-head__meta">
           <StatusBadge status={order.status} />
           <span className="price order-head__total">{formatMoney(order.totalAmount)}</span>
-          {CANCELLABLE.has(order.status) && (
+          {CANCELLABLE.has(order.status) && !confirming && (
             <button
               className="linkbtn"
               onClick={() => {
@@ -105,7 +125,9 @@ export function OrderDetailPage() {
 
       {cancel.isError && <ErrorNote message={errMessage(cancel.error)} />}
 
-      {order.status === 'PENDING' && <PaymentPanel orderId={orderId} amount={order.totalAmount} />}
+      {order.status === 'PENDING' && (
+        <PaymentPanel orderId={orderId} amount={order.totalAmount} confirming={confirming} />
+      )}
 
       <ul className="order-items">
         <li className="order-item order-item--head">
@@ -142,7 +164,7 @@ export function OrderDetailPage() {
         </div>
       )}
 
-      <PaymentHistory orderId={orderId} />
+      <PaymentHistory payments={payments} />
     </div>
   )
 }

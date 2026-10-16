@@ -62,6 +62,31 @@ class FakePaymentGatewayTest {
     }
 
     @Test
+    void timeoutCharged_losesTheAnswer_butTheProviderKnowsItCharged() {
+        assertThatThrownBy(() -> gateway.charge(request("pay_1", FakePaymentGateway.TIMEOUT_CHARGED)))
+                .isInstanceOf(PaymentOutcomeUnknownException.class);
+
+        assertThat(gateway.findCharge("pay_1")).hasValueSatisfying(answer ->
+                assertThat(answer).isInstanceOf(ChargeResult.Approved.class));
+    }
+
+    @Test
+    void timeoutNotCharged_neverReachesTheProvider() {
+        assertThatThrownBy(() -> gateway.charge(request("pay_1", FakePaymentGateway.TIMEOUT_NOT_CHARGED)))
+                .isInstanceOf(PaymentOutcomeUnknownException.class);
+
+        assertThat(gateway.findCharge("pay_1")).isEmpty();
+    }
+
+    @Test
+    void findCharge_reportsEachKeysAnswer() {
+        ChargeResult declined = gateway.charge(request("pay_1", FakePaymentGateway.DECLINED));
+
+        assertThat(gateway.findCharge("pay_1")).contains(declined);
+        assertThat(gateway.findCharge("pay_2")).isEmpty();
+    }
+
+    @Test
     void refund_isGivenOnce_perKey() {
         ChargeResult.Approved charge = (ChargeResult.Approved) gateway.charge(request("pay_1", FakePaymentGateway.VISA));
 

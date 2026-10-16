@@ -197,6 +197,9 @@ app:
   # scan's beat) by default; ShedLock makes only one instance run each tick.
   payment:
     refund-retry-cron: ${APP_PAYMENT_REFUND_RETRY_CRON:30 * * * * *}
+    # Settles payments still PROCESSING after 2 minutes (PaymentReconciliationJob)
+    # by asking the provider what happened. Every minute, at :15; ShedLock too.
+    reconcile-cron: ${APP_PAYMENT_RECONCILE_CRON:15 * * * * *}
   startup:
     seed:
       enabled: true
