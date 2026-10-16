@@ -13,3 +13,8 @@
 # since moved into shop-app. They sign tokens only inside the tests.
 0bb6c04a694d1c5f18103bf0a9e19ec426ff81e7:src/test/java/com/aryan/spring_security_demo/identity/AuthTokenPropertiesTest.java:generic-api-key:24
 e1c60147211a0ba941bfdfbcb14c72308dc76e64:src/test/resources/application-test.yml:generic-api-key:31
+
+# A sample Idempotency-Key (a random UUID) in a controller test, flagged because
+# its constant is named KEY. It only names a payment attempt inside the test; the
+# test has since used an obviously fake UUID.
+b5364af0d12e2cb939ef57ff70a9eae1ae61b374:shop-app/src/test/java/com/aryan/spring_security_demo/payment/PaymentControllerValidationTest.java:generic-api-key:37

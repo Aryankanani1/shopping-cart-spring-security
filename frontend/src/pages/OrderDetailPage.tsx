@@ -6,11 +6,13 @@ import { useAuth } from '../context/AuthContext'
 import { errMessage } from '../lib/errors'
 import { Loader, ErrorNote } from '../components/ui'
 import { StatusBadge } from '../components/ui/StatusBadge'
+import { PaymentPanel } from '../components/order/PaymentPanel'
+import { PaymentHistory } from '../components/order/PaymentHistory'
 import { formatDate, formatMoney } from '../lib/format'
 
 // Statuses from which the owner may still cancel — mirrors the server's rule
-// (PENDING/PROCESSING only; once SHIPPED it can no longer be cancelled).
-const CANCELLABLE = new Set(['PENDING', 'PROCESSING'])
+// (only while unpaid; a paid order would need a refund).
+const CANCELLABLE = new Set(['PENDING'])
 
 export function OrderDetailPage() {
   const { id } = useParams()
@@ -102,6 +104,8 @@ export function OrderDetailPage() {
 
       {cancel.isError && <ErrorNote message={errMessage(cancel.error)} />}
 
+      {order.status === 'PENDING' && <PaymentPanel orderId={orderId} amount={order.totalAmount} />}
+
       <ul className="order-items">
         <li className="order-item order-item--head">
           <span className="eyebrow">Item</span>
@@ -136,6 +140,8 @@ export function OrderDetailPage() {
           </address>
         </div>
       )}
+
+      <PaymentHistory orderId={orderId} />
     </div>
   )
 }

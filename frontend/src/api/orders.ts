@@ -4,6 +4,7 @@ import type { OrderDto, OrderSummaryDto, PagedResponse, ShippingAddress, SlicedR
 /** The order lifecycle states, in fulfillment order (mirrors the backend enum). */
 export const ORDER_STATUSES = [
   'PENDING',
+  'PAID',
   'PROCESSING',
   'SHIPPED',
   'DELIVERED',
@@ -11,13 +12,15 @@ export const ORDER_STATUSES = [
 ] as const
 
 /**
- * Legal next states from each status — mirrors OrderStatus.canTransitionTo on the
- * backend so the admin UI only offers valid moves. The server re-validates, so a
- * stale map here can never corrupt data; it just improves the UX.
+ * The next states an admin may set from each status — OrderStatus.canTransitionTo
+ * on the backend, minus PAID, which only a successful payment sets. Keeps the
+ * admin UI to valid moves; the server re-validates, so a stale map here can never
+ * corrupt data, it just improves the UX.
  */
 export const NEXT_STATUSES: Record<string, string[]> = {
-  PENDING: ['PROCESSING', 'CANCELLED'],
-  PROCESSING: ['SHIPPED', 'CANCELLED'],
+  PENDING: ['CANCELLED'],
+  PAID: ['PROCESSING'],
+  PROCESSING: ['SHIPPED'],
   SHIPPED: ['DELIVERED'],
   DELIVERED: [],
   CANCELLED: [],
@@ -43,6 +46,6 @@ export const ordersApi = {
   updateStatus: (orderId: number, status: string) =>
     request<OrderDto>(`/orders/${orderId}/status`, { method: 'PATCH', body: { status } }),
 
-  /** Cancel an order (owner or admin, while PENDING/PROCESSING); restocks inventory. */
+  /** Cancel an order (owner or admin, while unpaid); restocks inventory. */
   cancel: (orderId: number) => request<OrderDto>(`/orders/${orderId}/cancel`, { method: 'POST' }),
 }

@@ -57,6 +57,20 @@ describe('request', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/products?name=tea%20pot&page=0')
   })
 
+  it('sends extra headers alongside the JSON body', async () => {
+    fetchMock.mockResolvedValueOnce(resp(201, { message: 'ok', data: {} }))
+
+    await request('/orders/5/payments', {
+      auth: false,
+      method: 'POST',
+      body: { paymentMethod: 'test_visa' },
+      headers: { 'Idempotency-Key': 'key-12345' },
+    })
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers).toEqual({ 'Idempotency-Key': 'key-12345', 'Content-Type': 'application/json' })
+  })
+
   it('attaches the bearer token when authenticated', async () => {
     setSession({ id: 7, token: 'access-1', refreshToken: 'refresh-1' })
     fetchMock.mockResolvedValueOnce(resp(200, { message: 'ok', data: null }))

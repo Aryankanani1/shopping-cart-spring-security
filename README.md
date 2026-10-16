@@ -117,6 +117,7 @@ shop-identity/       Users, roles, auth (login/refresh/logout/password), refresh
 shop-catalog/        Products, categories, images, the category cache, catalog seeding + warm-up
 shop-cart/           Carts and cart items
 shop-order/          Checkout, order lifecycle, keyset-paged history
+shop-payment/        Paying for orders: idempotent attempts, a simulated provider, retries
 shop-notification/   In-app inbox
 shop-wishlist/       Wishlist, dated reminders, price/stock alert job   (optional module)
 shop-app/            The runnable application: SpringSecurityDemoApplication, application*.yml,
@@ -126,10 +127,11 @@ shop-app/            The runnable application: SpringSecurityDemoApplication, ap
 
 Dependencies point one way, with no cycles, and Maven enforces it, since a module
 sees only the modules it declares: every module may use `shop-common`;
-`shop-identity` and `shop-catalog` ← `shop-cart` ← `shop-order`; `shop-identity`
-and `shop-catalog` ← `shop-notification` ← `shop-wishlist`. Modules further down
-react to changes higher up through events (`UserDeletingEvent`,
-`ProductDeletingEvent`), never by importing the module that depends on them.
+`shop-identity` and `shop-catalog` ← `shop-cart` ← `shop-order` ← `shop-payment`;
+`shop-identity` and `shop-catalog` ← `shop-notification` ← `shop-wishlist`. Modules
+further down react to changes higher up through events (`UserDeletingEvent`,
+`ProductDeletingEvent`, `OrderCancellingEvent`), never by importing the module
+that depends on them.
 
 ### Modular component scanning
 
@@ -304,8 +306,9 @@ sum(rate(http_server_requests_seconds_count{uri="/api/v1/orders", method="POST",
   revoked token trips reuse detection, which would also kill the caller's new token.
   Other devices' access tokens still lapse within their 15-minute lifetime.
 - **Account deletion keeps the orders**: `DELETE /api/v1/users/{id}` (the owner or an
-  admin) ends every session and removes the cart, wishlist and notifications. Orders
-  still open are cancelled and their stock returned; every order is then kept for the
+  admin) ends every session and removes the cart, wishlist and notifications. Unpaid
+  orders are cancelled and their stock returned (paid ones are still fulfilled, and
+  one being paid for blocks the deletion until its payment settles); every order is then kept for the
   shop's records with no customer (`user_id` set to null), and the admin order list
   shows it as a deleted account. The shipping snapshot (name, address) stays on it.
 - **Rate-limited auth endpoints**: `RateLimitFilter` sits ahead of authentication in
@@ -395,6 +398,31 @@ path carries a user id.
   name is stored with them) with the link cleared.
 - Someone else's notification id returns `404`, not `403`, so ids can't be
   probed for existence.
+
+### Payments
+
+Orders are paid for before they are fulfilled: checkout leaves an order `PENDING`
+with its stock reserved, and a successful payment moves it to `PAID`. The money
+is simulated, by a fake provider inside the app with test payment methods
+(`test_visa`, `test_declined`, `test_insufficient_funds`, `test_flaky`,
+`test_provider_down`, ...). The design, with its diagrams and trade-offs, is in
+[docs/payment-design.md](docs/payment-design.md).
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /orders/{orderId}/payments` | Pay, with an `Idempotency-Key` header and `{"paymentMethod": "test_visa"}`: `201` for a new attempt (`SUCCEEDED`, or `FAILED` with the reason), `200` with the first answer when the key was already used |
+| `GET /orders/{orderId}/payments` | The order's attempts, oldest first |
+| `GET /orders/{orderId}/payments/{paymentId}` | One attempt |
+
+- **Never charged twice.** A repeated request with the same key gets the first
+  answer; the order row is locked while an attempt starts, so two attempts take
+  turns; and the database allows one payment per order that hasn't failed.
+- **No provider call inside a transaction.** The attempt is recorded, the provider
+  called, and the answer recorded: two short transactions with the call between
+  them, retried (with the same provider key) only while the provider is
+  unavailable.
+- An order can't be cancelled while its payment is being processed, nor once it
+  is paid (refunds come later).
 
 ## Startup pipeline
 

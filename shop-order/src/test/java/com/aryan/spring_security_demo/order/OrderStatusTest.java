@@ -15,21 +15,29 @@ class OrderStatusTest {
 
     @Test
     void forwardFulfilmentTransitionsAreAllowed() {
-        assertThat(PENDING.canTransitionTo(PROCESSING)).isTrue();
+        assertThat(PENDING.canTransitionTo(PAID)).isTrue();
+        assertThat(PAID.canTransitionTo(PROCESSING)).isTrue();
         assertThat(PROCESSING.canTransitionTo(SHIPPED)).isTrue();
         assertThat(SHIPPED.canTransitionTo(DELIVERED)).isTrue();
     }
 
     @Test
-    void cancellationIsAllowedOnlyBeforeShipping() {
+    void anUnpaidOrderIsNeverFulfilled() {
+        assertThat(PENDING.canTransitionTo(PROCESSING)).isFalse();
+    }
+
+    @Test
+    void cancellationIsAllowedOnlyBeforePayment() {
         assertThat(PENDING.canTransitionTo(CANCELLED)).isTrue();
-        assertThat(PROCESSING.canTransitionTo(CANCELLED)).isTrue();
-        // Once shipped, the goods are in transit — no cancel.
+        // A paid order would need a refund, which doesn't exist yet.
+        assertThat(PAID.canTransitionTo(CANCELLED)).isFalse();
+        assertThat(PROCESSING.canTransitionTo(CANCELLED)).isFalse();
         assertThat(SHIPPED.canTransitionTo(CANCELLED)).isFalse();
     }
 
     @Test
     void backwardAndSkippingTransitionsAreRejected() {
+        assertThat(PAID.canTransitionTo(PENDING)).isFalse();
         assertThat(PROCESSING.canTransitionTo(PENDING)).isFalse();
         assertThat(SHIPPED.canTransitionTo(PROCESSING)).isFalse();
         assertThat(PENDING.canTransitionTo(SHIPPED)).isFalse();
@@ -47,6 +55,7 @@ class OrderStatusTest {
         assertThat(DELIVERED.isTerminal()).isTrue();
         assertThat(CANCELLED.isTerminal()).isTrue();
         assertThat(PENDING.isTerminal()).isFalse();
+        assertThat(PAID.isTerminal()).isFalse();
         assertThat(PROCESSING.isTerminal()).isFalse();
         assertThat(SHIPPED.isTerminal()).isFalse();
     }

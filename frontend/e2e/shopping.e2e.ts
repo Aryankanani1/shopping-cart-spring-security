@@ -1,7 +1,7 @@
 import { adminToken, createProduct, expect, inventoryOf, test, unique, type CreatedProduct } from './support'
 
 // The customer's path through the shop, in a real browser against the real stack:
-// sign up, find a product, put it in the bag, check out, and find the order again.
+// sign up, find a product, put it in the bag, check out, pay, and find the order again.
 
 let product: CreatedProduct
 
@@ -15,7 +15,7 @@ test.beforeAll(async ({ request }) => {
   })
 })
 
-test('a new customer signs up, buys a product and finds the order', async ({ page, request }) => {
+test('a new customer signs up, buys and pays for a product, and finds the order', async ({ page, request }) => {
   const email = `${unique('e2e').replace(' ', '-')}@example.com`
 
   await test.step('sign up', async () => {
@@ -59,6 +59,20 @@ test('a new customer signs up, buys a product and finds the order', async ({ pag
 
   await test.step('the order took the item out of stock', async () => {
     expect(await inventoryOf(request, product.id)).toBe(3)
+  })
+
+  await test.step('a declined test card fails, and a test Visa pays the order', async () => {
+    const pay = page.getByRole('button', { name: 'Pay $49.50' })
+    await page.getByLabel('Test card').selectOption('test_declined')
+    await pay.click()
+    await expect(page.getByText('Payment failed: Your card was declined.')).toBeVisible()
+
+    await page.getByLabel('Test card').selectOption('test_visa')
+    await pay.click()
+    // Paid: the attempt is listed, and there is nothing left to pay or cancel.
+    await expect(page.getByText('Visa ending 4242')).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Pay / })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Cancel order' })).toHaveCount(0)
   })
 
   await test.step('the order is listed under My orders', async () => {

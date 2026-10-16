@@ -18,6 +18,8 @@ export interface RequestOptions {
   query?: Record<string, QueryValue>
   /** Attach the bearer token (default true). */
   auth?: boolean
+  /** Extra request headers, e.g. a payment's Idempotency-Key. */
+  headers?: Record<string, string>
 }
 
 /** A failed request, carrying the parsed problem+json details. */
@@ -149,7 +151,7 @@ async function refreshSession(rejectedToken: string): Promise<RefreshOutcome> {
 
 async function doRequest<T>(path: string, opts: RequestOptions, allowRefresh: boolean): Promise<T> {
   const useAuth = opts.auth !== false
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = { ...opts.headers }
 
   const sentToken = useAuth ? getSession()?.token : undefined
   if (sentToken) headers.Authorization = `Bearer ${sentToken}`

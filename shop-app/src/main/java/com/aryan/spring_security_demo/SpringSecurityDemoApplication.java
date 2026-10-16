@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.common.CommonModule;
 import com.aryan.spring_security_demo.identity.IdentityModule;
 import com.aryan.spring_security_demo.notification.NotificationModule;
 import com.aryan.spring_security_demo.order.OrderModule;
+import com.aryan.spring_security_demo.payment.PaymentModule;
 import com.aryan.spring_security_demo.wishlist.WishlistModule;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.SpringBootConfiguration;
@@ -34,6 +35,7 @@ import org.springframework.context.annotation.Import;
         OrderModule.class,
         NotificationModule.class,
         WishlistModule.class,
+        PaymentModule.class,
 })
 public class SpringSecurityDemoApplication {
 

@@ -46,6 +46,10 @@
 			<artifactId>shop-wishlist</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>com.aryan</groupId>
+			<artifactId>shop-payment</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>com.mysql</groupId>
 			<artifactId>mysql-connector-j</artifactId>
 			<scope>runtime</scope>

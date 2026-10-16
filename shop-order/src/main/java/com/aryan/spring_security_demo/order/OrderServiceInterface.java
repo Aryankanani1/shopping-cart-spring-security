@@ -22,10 +22,28 @@ public interface OrderServiceInterface {
 
     /**
      * Cancel an order and restock its items. Permitted for the order's owner (or
-     * an admin) and only while the order is still {@code PENDING} or
-     * {@code PROCESSING} — once shipped it can no longer be cancelled (409).
+     * an admin) and only while the order is unpaid ({@code PENDING}); after that
+     * it can no longer be cancelled (409).
      */
     OrderDto cancelOrder(Long orderId);
+
+    /**
+     * Load an order to pay for, locked until the caller's transaction ends, and
+     * check the caller owns it (or is an admin). Its status is not checked: a
+     * payment request that is repeated finds its first result even once the order
+     * is paid. Requires a transaction.
+     */
+    Order lockForPayment(Long orderId);
+
+    /**
+     * Note that a payment is starting for a locked order: raises its version, so a
+     * cancellation that read the order before fails its version check at commit,
+     * instead of cancelling an order that is being paid for. Requires a transaction.
+     */
+    void startPayment(Order order);
+
+    /** Record that the order is paid ({@code PENDING} to {@code PAID}). Requires a transaction. */
+    void markPaid(Long orderId);
 
     /**
      * Ready {@code userId}'s orders for the account being deleted: cancel and

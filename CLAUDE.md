@@ -48,7 +48,7 @@ approval in the `production` environment.
 The backend is a multi-module Maven build, one Maven module per feature module.
 `shop-<name>` holds the package `com.aryan.spring_security_demo.<name>`:
 `shop-common` (config, aspects, error handler, response wrappers), `shop-identity`
-(users, auth, security), `shop-catalog`, `shop-cart`, `shop-order`,
+(users, auth, security), `shop-catalog`, `shop-cart`, `shop-order`, `shop-payment`,
 `shop-notification`, `shop-wishlist`. `shop-app` holds the main class,
 `application*.yml`, the Flyway migrations and the tests that need the application
 context; it depends on all the others and builds the runnable jar. The parent
@@ -56,8 +56,8 @@ context; it depends on all the others and builds the runnable jar. The parent
 
 Dependencies point one way, and Maven enforces it (a module sees only the modules
 it declares): every module may use `shop-common`; `shop-identity` and
-`shop-catalog` ← `shop-cart` ← `shop-order`; `shop-identity` and `shop-catalog` ←
-`shop-notification` ← `shop-wishlist`.
+`shop-catalog` ← `shop-cart` ← `shop-order` ← `shop-payment`; `shop-identity` and
+`shop-catalog` ← `shop-notification` ← `shop-wishlist`.
 
 There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s one
 `XxxModule` class per module, and each scans only its own package.
@@ -97,8 +97,8 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 
 ### Modules and wiring
 - New backend classes go in the feature module (Maven module and package) they belong to.
-- A module depends only on the modules shown in the Layout graph. Never add a dependency the other way, which Maven would reject as a cycle: move the shared piece into `shop-common`, or have the lower module publish an event the higher one listens to (as `UserDeletingEvent` and `ProductDeletingEvent` do).
-- A new feature module is a new Maven module `shop-<name>`: listed in the parent pom's `<modules>` and `<dependencyManagement>`, and a dependency of `shop-app`. It needs its own `XxxModule` class annotated `@ModuleConfiguration`, added to `@Import` in `SpringSecurityDemoApplication`; otherwise none of its beans are loaded.
+- A module depends only on the modules shown in the Layout graph. Never add a dependency the other way, which Maven would reject as a cycle: move the shared piece into `shop-common`, or have the lower module publish an event the higher one listens to (as `UserDeletingEvent`, `ProductDeletingEvent` and `OrderCancellingEvent` do).
+- A new feature module is a new Maven module `shop-<name>`: listed in the parent pom's `<modules>` and `<dependencyManagement>`, a dependency of `shop-app`, and its `pom.xml` and `src/` copied in the root `Dockerfile` (which copies each module by name, so the image build fails without them). It needs its own `XxxModule` class annotated `@ModuleConfiguration`, added to `@Import` in `SpringSecurityDemoApplication`; otherwise none of its beans are loaded.
 - Versions live only in the parent pom (a property applied through `<dependencyManagement>`, or a BOM); a module pom never declares a `<version>`.
 - Do not add `@SpringBootApplication`, `@ComponentScan`, `@EnableJpaRepositories` or `@EntityScan` anywhere.
 - Aspects select layers with the named pointcuts in `common/aop/Layers`, not with package-based `execution(...)` expressions.

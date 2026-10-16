@@ -8,21 +8,23 @@ package com.aryan.spring_security_demo.order;
  * from A to B?", and an illegal jump is rejected the same way everywhere.
  *
  * <pre>
- *   PENDING ──▶ PROCESSING ──▶ SHIPPED ──▶ DELIVERED   (terminal)
- *      │             │
- *      └──────┬──────┘
- *             ▼
- *         CANCELLED   (terminal)
+ *   PENDING ──▶ PAID ──▶ PROCESSING ──▶ SHIPPED ──▶ DELIVERED   (terminal)
+ *      │
+ *      ▼
+ *   CANCELLED   (terminal)
  * </pre>
  *
- * <p>Fulfillment moves forward only; {@code DELIVERED} and {@code CANCELLED} are
- * terminal. An order can be cancelled only before it ships (from {@code PENDING}
- * or {@code PROCESSING}) — once it is {@code SHIPPED} the goods are in transit and
- * a cancel would need a separate returns flow, so it is disallowed here.
+ * <p>An order waits in {@code PENDING}, its stock reserved, until it is paid; only
+ * a successful payment moves it to {@code PAID} (see {@code OrderService.markPaid}),
+ * and only a paid order is fulfilled. Fulfillment moves forward only;
+ * {@code DELIVERED} and {@code CANCELLED} are terminal. An order can be cancelled
+ * only while unpaid: giving the money back for a paid one needs refunds, which
+ * the payment module doesn't do yet.
  */
 public enum OrderStatus {
 
     PENDING,
+    PAID,
     PROCESSING,
     SHIPPED,
     DELIVERED,
@@ -36,8 +38,9 @@ public enum OrderStatus {
     /** Whether an order in this state may legally move to {@code target}. */
     public boolean canTransitionTo(OrderStatus target) {
         return switch (this) {
-            case PENDING    -> target == PROCESSING || target == CANCELLED;
-            case PROCESSING -> target == SHIPPED || target == CANCELLED;
+            case PENDING    -> target == PAID || target == CANCELLED;
+            case PAID       -> target == PROCESSING;
+            case PROCESSING -> target == SHIPPED;
             case SHIPPED    -> target == DELIVERED;
             case DELIVERED, CANCELLED -> false;
         };

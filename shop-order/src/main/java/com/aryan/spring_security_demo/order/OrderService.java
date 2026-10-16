@@ -13,10 +13,12 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -39,6 +41,7 @@ public class OrderService implements OrderServiceInterface{
     private final AuthUtils authUtils;
     private final Clock clock;
     private final EntityManager entityManager;
+    private final ApplicationEventPublisher events;
 
     private final ModelMapper modelMapper;
 
@@ -101,6 +104,9 @@ public class OrderService implements OrderServiceInterface{
     public OrderDto updateStatus(Long orderId, OrderStatus newStatus) {
         // Admin-only fulfillment action; the edge rule in ShopConfig already
         // requires ROLE_ADMIN for PATCH /orders/*/status, so no owner check here.
+        if (newStatus == OrderStatus.PAID) {
+            throw new InvalidOrderStateException("An order is marked paid only by a successful payment");
+        }
         Order order = loadOrderWithItems(orderId);
         applyTransition(order, newStatus);
         return convertToDto(order);
@@ -116,6 +122,42 @@ public class OrderService implements OrderServiceInterface{
         authUtils.requireSelfOrAdmin(order.getUser() == null ? null : order.getUser().getId());
         applyTransition(order, OrderStatus.CANCELLED);
         return convertToDto(order);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Order lockForPayment(Long orderId) {
+        // Locked for the rest of the payment's first transaction, so two attempts
+        // to pay for one order run one after the other.
+        Order order = entityManager.find(Order.class, orderId, LockModeType.PESSIMISTIC_WRITE);
+        if (order == null) {
+            throw new ResourceNotFoundException("order not found!");
+        }
+        // After the fetch, so a missing order stays a 404 (as in getOrder).
+        authUtils.requireSelfOrAdmin(order.getUser() == null ? null : order.getUser().getId());
+        return order;
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void startPayment(Order order) {
+        // Only for a new attempt, not for a repeated request: a raised version
+        // committed while an attempt is in flight would make recording its outcome
+        // fail its version check, leaving a charged payment unrecorded.
+        entityManager.lock(order, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void markPaid(Long orderId) {
+        // Read under a lock, so this works from the latest version of the order:
+        // the money is already taken, and a version conflict here would leave the
+        // payment unrecorded.
+        Order order = entityManager.find(Order.class, orderId, LockModeType.PESSIMISTIC_WRITE);
+        if (order == null) {
+            throw new ResourceNotFoundException("order not found!");
+        }
+        applyTransition(order, OrderStatus.PAID);
     }
 
     @Override
@@ -150,7 +192,10 @@ public class OrderService implements OrderServiceInterface{
                         "Cannot change order status from " + current + " to " + target);
             }
         }
-        if (target == OrderStatus.CANCELLED) {
+        if (target == OrderStatus.CANCELLED && !orders.isEmpty()) {
+            // Before anything changes, so a listener can refuse (payments does
+            // while an order is being paid for) and roll the cancellation back.
+            events.publishEvent(new OrderCancellingEvent(orders.stream().map(Order::getId).toList()));
             lockProductsForRestock(orders);
             orders.forEach(this::restock);
         }
