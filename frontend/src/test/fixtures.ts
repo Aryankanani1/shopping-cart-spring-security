@@ -3,6 +3,7 @@ import type {
   OrderDto,
   OrderSummaryDto,
   PagedResponse,
+  PaymentDto,
   ProductDto,
 } from '../api/types'
 
@@ -48,6 +49,24 @@ export function order(overrides: Partial<OrderDto> = {}): OrderDto {
     postalCode: 'EC1A',
     country: 'UK',
     items: [{ productId: 1, productName: 'Desk Lamp', productBrand: 'Acme', quantity: 2, price: 24 }],
+    ...overrides,
+  }
+}
+
+export function payment(overrides: Partial<PaymentDto> = {}): PaymentDto {
+  return {
+    id: 7,
+    orderId: 55,
+    status: 'SUCCEEDED',
+    amount: 48,
+    currency: 'USD',
+    paymentMethod: 'test_visa',
+    cardBrand: 'Visa',
+    cardLast4: '4242',
+    failureReason: null,
+    providerReference: 'ch_1',
+    createdAt: '2026-09-14T10:00:00Z',
+    completedAt: '2026-09-14T10:00:01Z',
     ...overrides,
   }
 }

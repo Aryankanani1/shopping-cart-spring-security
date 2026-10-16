@@ -2,6 +2,7 @@ import { cx } from '../../lib/format'
 
 // Map each OrderStatus to a tone. PENDING/PROCESSING stay neutral.
 const VARIANT: Record<string, string> = {
+  PAID: 'tag--ok',
   SHIPPED: 'tag--ok',
   DELIVERED: 'tag--ok',
   CANCELLED: 'tag--danger',

@@ -15,11 +15,12 @@ import { ordersApi } from '../../api/orders'
 
 const PENDING = orderSummary({ id: 55, status: 'PENDING' })
 const DELIVERED = orderSummary({ id: 56, status: 'DELIVERED', userEmail: 'grace@example.com' })
+const PAID = orderSummary({ id: 58, status: 'PAID' })
 
 const rowFor = (orderId: number) => screen.getByText(`#${orderId}`).closest('tr') as HTMLElement
 
 beforeEach(() => {
-  vi.mocked(ordersApi.adminList).mockReset().mockResolvedValue(paged([PENDING, DELIVERED]))
+  vi.mocked(ordersApi.adminList).mockReset().mockResolvedValue(paged([PENDING, DELIVERED, PAID]))
   vi.mocked(ordersApi.updateStatus).mockReset()
 })
 
@@ -46,8 +47,11 @@ describe('AdminOrdersPage', () => {
     renderPage(<AdminOrdersPage />)
     await screen.findByText('#55')
 
-    const options = within(within(rowFor(55)).getByRole('combobox')).getAllByRole('option')
-    expect(options.map((o) => o.textContent)).toEqual(['Move to…', 'processing', 'cancelled'])
+    const optionsFor = (orderId: number) =>
+      within(within(rowFor(orderId)).getByRole('combobox')).getAllByRole('option').map((o) => o.textContent)
+    // Unpaid: it can only be cancelled; paying is the customer's step, not the admin's.
+    expect(optionsFor(55)).toEqual(['Move to…', 'cancelled'])
+    expect(optionsFor(58)).toEqual(['Move to…', 'processing'])
     // A delivered order is final.
     expect(within(rowFor(56)).queryByRole('combobox')).not.toBeInTheDocument()
   })
@@ -57,9 +61,9 @@ describe('AdminOrdersPage', () => {
     renderPage(<AdminOrdersPage />)
     await screen.findByText('#55')
 
-    fireEvent.change(within(rowFor(55)).getByRole('combobox'), { target: { value: 'PROCESSING' } })
+    fireEvent.change(within(rowFor(58)).getByRole('combobox'), { target: { value: 'PROCESSING' } })
 
-    await waitFor(() => expect(ordersApi.updateStatus).toHaveBeenCalledWith(55, 'PROCESSING'))
+    await waitFor(() => expect(ordersApi.updateStatus).toHaveBeenCalledWith(58, 'PROCESSING'))
     await waitFor(() => expect(ordersApi.adminList).toHaveBeenCalledTimes(2))
   })
 
@@ -77,12 +81,12 @@ describe('AdminOrdersPage', () => {
 
   it('shows a refused status change', async () => {
     vi.mocked(ordersApi.updateStatus).mockRejectedValue(
-      new ApiError(409, 'Cannot change order status from PENDING to SHIPPED'),
+      new ApiError(409, 'Cannot change order status from PAID to PROCESSING'),
     )
     renderPage(<AdminOrdersPage />)
-    await screen.findByText('#55')
+    await screen.findByText('#58')
 
-    fireEvent.change(within(rowFor(55)).getByRole('combobox'), { target: { value: 'PROCESSING' } })
+    fireEvent.change(within(rowFor(58)).getByRole('combobox'), { target: { value: 'PROCESSING' } })
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Cannot change order status')
   })

@@ -1197,6 +1197,41 @@
   color: var(--ink-2);
 }
 
+/* Paying for a pending order, and the order's payment attempts. */
+.payment-panel,
+.order-payments {
+  margin-top: 2rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line);
+}
+.payment-panel h2 {
+  margin: 0 0 0.4rem;
+}
+.payment-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.payment-panel__row .field {
+  flex: 1 1 16rem;
+  max-width: 24rem;
+}
+.order-payments__list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.order-payments__item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
 @media (max-width: 720px) {
   .checkout {
     grid-template-columns: 1fr;

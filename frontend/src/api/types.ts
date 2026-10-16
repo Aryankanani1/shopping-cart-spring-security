@@ -95,6 +95,27 @@ export interface OrderDto {
   items: OrderItemDto[]
 }
 
+/** Where a payment attempt stands (mirrors the backend PaymentStatus). */
+export type PaymentStatus = 'PROCESSING' | 'SUCCEEDED' | 'FAILED'
+
+/** One attempt to pay for an order (PaymentDto). */
+export interface PaymentDto {
+  id: number
+  orderId: number
+  status: PaymentStatus
+  amount: number
+  currency: string
+  paymentMethod: string
+  cardBrand: string | null
+  cardLast4: string | null
+  /** Why it failed, worded for the customer. */
+  failureReason: string | null
+  providerReference: string | null
+  /** ISO instants. */
+  createdAt: string
+  completedAt: string | null
+}
+
 /** Lightweight order row for the admin order list (no item breakdown). */
 export interface OrderSummaryDto {
   id: number

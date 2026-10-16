@@ -182,7 +182,7 @@ export function CheckoutPage() {
           <button className="btn btn--accent btn--block" type="submit" disabled={place.isPending}>
             {place.isPending ? 'Placing order…' : 'Place order'}
           </button>
-          <p className="faint checkout__note">Payment is collected on delivery.</p>
+          <p className="faint checkout__note">You pay on the next page, once the order is placed.</p>
         </form>
 
         <aside className="cart-summary card">
