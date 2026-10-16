@@ -44,6 +44,18 @@ class CorsIntegrationTest {
     }
 
     @Test
+    @DisplayName("a payment may send its Idempotency-Key from the listed origin")
+    void preflightForAPayment_allowsTheIdempotencyKey() throws Exception {
+        mockMvc.perform(options("/api/v1/orders/1/payments")
+                        .header("Origin", SHOP)
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "authorization, content-type, idempotency-key"))
+                .andExpect(status().isOk())
+                // Echoed as the browser asked, in lower case.
+                .andExpect(header().string("Access-Control-Allow-Headers", containsString("idempotency-key")));
+    }
+
+    @Test
     @DisplayName("a request from the listed origin gets the CORS header")
     void requestFromTheListedOrigin_carriesTheHeader() throws Exception {
         mockMvc.perform(get("/api/v1/categories").header("Origin", SHOP))

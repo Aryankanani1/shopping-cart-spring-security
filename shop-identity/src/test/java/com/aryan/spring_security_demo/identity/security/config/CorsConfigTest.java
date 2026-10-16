@@ -26,7 +26,7 @@ class CorsConfigTest {
         CorsConfiguration api = source.getCorsConfiguration(request("/api/v1/orders/7"));
         assertThat(api).isNotNull();
         assertThat(api.getAllowedOrigins()).containsExactly("https://shop.example.com");
-        assertThat(api.getAllowedHeaders()).containsExactlyInAnyOrder("Authorization", "Content-Type");
+        assertThat(api.getAllowedHeaders()).containsExactlyInAnyOrder("Authorization", "Content-Type", "Idempotency-Key");
         assertThat(api.getAllowCredentials()).as("the token is a header, never a cookie").isNotEqualTo(Boolean.TRUE);
         assertThat(source.getCorsConfiguration(request("/actuator/health"))).isNull();
         assertThat(source.getCorsConfiguration(request("/v3/api-docs"))).isNull();

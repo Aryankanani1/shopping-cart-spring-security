@@ -33,7 +33,8 @@ public class CorsConfig {
         CorsConfiguration api = new CorsConfiguration();
         api.setAllowedOrigins(properties.getAllowedOrigins());
         api.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE"));
-        api.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE));
+        // Idempotency-Key names a payment attempt, so a repeated request doesn't pay twice.
+        api.setAllowedHeaders(List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, "Idempotency-Key"));
         // Response headers the frontend may read: where a created resource lives,
         // when to retry after a 429, and a downloaded image's file name.
         api.setExposedHeaders(List.of(HttpHeaders.LOCATION, HttpHeaders.RETRY_AFTER, HttpHeaders.CONTENT_DISPOSITION));

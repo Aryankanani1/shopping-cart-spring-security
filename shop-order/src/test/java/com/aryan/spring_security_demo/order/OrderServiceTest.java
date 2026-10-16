@@ -23,6 +23,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.modelmapper.ModelMapper;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -71,6 +72,7 @@ class OrderServiceTest {
     @Mock private AuthUtils authUtils;
     @Mock private ModelMapper modelMapper;
     @Mock private EntityManager entityManager;
+    @Mock private ApplicationEventPublisher events;
     @Spy private Clock clock = Clock.fixed(Instant.parse("2026-03-14T12:00:00Z"), ZoneOffset.UTC);
 
     @InjectMocks private OrderService orderService;
@@ -90,7 +92,7 @@ class OrderServiceTest {
         order = new Order();
         order.setId(ORDER_ID);
         order.setUser(owner);
-        order.setOrderStatus(OrderStatus.PROCESSING);
+        order.setOrderStatus(OrderStatus.PENDING);
         order.addOrderItem(new OrderItem(product, 2, BigDecimal.TEN));
 
         // ModelMapper is a pure transformer here — stub it so convertToDto returns
@@ -250,6 +252,43 @@ class OrderServiceTest {
     }
 
     @Test
+    void cancelOrder_tellsOtherModules_beforeRestocking() {
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        orderService.cancelOrder(ORDER_ID);
+
+        InOrder steps = inOrder(events, entityManager);
+        steps.verify(events).publishEvent(new OrderCancellingEvent(List.of(ORDER_ID)));
+        steps.verify(entityManager).refresh(product, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    @Test
+    void cancelOrder_refusedByAListener_changesNothing() {
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+        doThrow(new InvalidOrderStateException("being paid for"))
+                .when(events).publishEvent(any(OrderCancellingEvent.class));
+
+        assertThatThrownBy(() -> orderService.cancelOrder(ORDER_ID))
+                .isInstanceOf(InvalidOrderStateException.class);
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(product.getInventory()).isEqualTo(5);
+    }
+
+    // Paid orders can't be cancelled until refunds exist: the money couldn't go back.
+    @Test
+    void cancelOrder_oncePaid_isRejected() {
+        order.setOrderStatus(OrderStatus.PAID);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.cancelOrder(ORDER_ID))
+                .isInstanceOf(InvalidOrderStateException.class);
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PAID);
+        verifyNoInteractions(events);
+    }
+
+    @Test
     void cancelOrder_onceShipped_isRejectedAndInventoryUntouched() {
         order.setOrderStatus(OrderStatus.SHIPPED);
         when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
@@ -260,6 +299,7 @@ class OrderServiceTest {
         assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.SHIPPED);
         assertThat(product.getInventory()).isEqualTo(5); // no restock on a rejected cancel
         verify(entityManager, never()).refresh(any(), any(LockModeType.class));  // nor a lock
+        verifyNoInteractions(events);
     }
 
     // Regression: the restock used the stock as loaded with the order, unlocked, so a
@@ -289,7 +329,7 @@ class OrderServiceTest {
         second.addOrderItem(new OrderItem(product, 1, BigDecimal.TEN));  // product 7 again
         second.addOrderItem(new OrderItem(lamp, 4, BigDecimal.TEN));
         when(orderRepository.findWithItemsByUserIdAndStatusIn(
-                OWNER_ID, List.of(OrderStatus.PENDING, OrderStatus.PROCESSING)))
+                OWNER_ID, List.of(OrderStatus.PENDING)))
                 .thenReturn(List.of(order, second));
 
         orderService.prepareForAccountDeletion(OWNER_ID);
@@ -325,7 +365,7 @@ class OrderServiceTest {
     @Test
     void prepareForAccountDeletion_cancelsAndUnlinksTheOpenOrders() {
         when(orderRepository.findWithItemsByUserIdAndStatusIn(
-                OWNER_ID, List.of(OrderStatus.PENDING, OrderStatus.PROCESSING)))
+                OWNER_ID, List.of(OrderStatus.PENDING)))
                 .thenReturn(List.of(order));
 
         orderService.prepareForAccountDeletion(OWNER_ID);
@@ -336,7 +376,91 @@ class OrderServiceTest {
     }
 
     @Test
+    void prepareForAccountDeletion_withNoOpenOrders_tellsNoOne() {
+        when(orderRepository.findWithItemsByUserIdAndStatusIn(OWNER_ID, List.of(OrderStatus.PENDING)))
+                .thenReturn(List.of());
+
+        orderService.prepareForAccountDeletion(OWNER_ID);
+
+        verifyNoInteractions(events);
+    }
+
+    // ---- payment hooks ----------------------------------------------------
+
+    @Test
+    void lockForPayment_locksTheOrder_thenChecksTheOwner() {
+        when(entityManager.find(Order.class, ORDER_ID, LockModeType.PESSIMISTIC_WRITE)).thenReturn(order);
+
+        assertThat(orderService.lockForPayment(ORDER_ID)).isSameAs(order);
+
+        verify(authUtils).requireSelfOrAdmin(OWNER_ID);
+        verify(entityManager, never()).lock(any(), any(LockModeType.class));  // the version stays as it is
+    }
+
+    @Test
+    void startPayment_raisesTheOrdersVersion() {
+        orderService.startPayment(order);
+
+        verify(entityManager).lock(order, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+    }
+
+    @Test
+    void lockForPayment_someoneElsesOrder_isRefused() {
+        when(entityManager.find(Order.class, ORDER_ID, LockModeType.PESSIMISTIC_WRITE)).thenReturn(order);
+        doThrow(new AccessDeniedException("not yours")).when(authUtils).requireSelfOrAdmin(OWNER_ID);
+
+        assertThatThrownBy(() -> orderService.lockForPayment(ORDER_ID))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void lockForPayment_missingOrder_is404() {
+        assertThatThrownBy(() -> orderService.lockForPayment(ORDER_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verifyNoInteractions(authUtils);
+    }
+
+    @Test
+    void lockForPayment_ofADeletedAccount_isCheckedAsHavingNoOwner() {
+        order.setUser(null);
+        when(entityManager.find(Order.class, ORDER_ID, LockModeType.PESSIMISTIC_WRITE)).thenReturn(order);
+
+        orderService.lockForPayment(ORDER_ID);
+
+        verify(authUtils).requireSelfOrAdmin(null);
+    }
+
+    @Test
+    void markPaid_movesAPendingOrderToPaid_readUnderALock() {
+        when(entityManager.find(Order.class, ORDER_ID, LockModeType.PESSIMISTIC_WRITE)).thenReturn(order);
+
+        orderService.markPaid(ORDER_ID);
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(product.getInventory()).isEqualTo(5);  // stock stays reserved
+    }
+
+    @Test
+    void markPaid_aCancelledOrder_isRejected() {
+        order.setOrderStatus(OrderStatus.CANCELLED);
+        when(entityManager.find(Order.class, ORDER_ID, LockModeType.PESSIMISTIC_WRITE)).thenReturn(order);
+
+        assertThatThrownBy(() -> orderService.markPaid(ORDER_ID))
+                .isInstanceOf(InvalidOrderStateException.class);
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    void markPaid_missingOrder_is404() {
+        assertThatThrownBy(() -> orderService.markPaid(ORDER_ID))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void updateStatus_forwardTransition_advancesWithoutRestocking() {
+        order.setOrderStatus(OrderStatus.PROCESSING);
         when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
 
         orderService.updateStatus(ORDER_ID, OrderStatus.SHIPPED);
@@ -355,6 +479,25 @@ class OrderServiceTest {
                 .isInstanceOf(InvalidOrderStateException.class);
 
         assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.DELIVERED);
+    }
+
+    // Only a successful payment marks an order paid, never an admin by hand.
+    @Test
+    void updateStatus_toPaid_isRejected() {
+        assertThatThrownBy(() -> orderService.updateStatus(ORDER_ID, OrderStatus.PAID))
+                .isInstanceOf(InvalidOrderStateException.class);
+
+        verifyNoInteractions(orderRepository);
+    }
+
+    @Test
+    void updateStatus_unpaidOrder_cannotBeFulfilled() {
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateStatus(ORDER_ID, OrderStatus.PROCESSING))
+                .isInstanceOf(InvalidOrderStateException.class);
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
     }
 
     // ---- order history (keyset paging) ------------------------------------
