@@ -587,6 +587,49 @@ docker run --rm -v "$PWD/docs:/spec:ro" schemathesis/schemathesis:4.31.1 run /sp
   --checks not_a_server_error --exclude-operation-id deleteUser
 ```
 
+## Load testing
+
+[`load/checkout.js`](load/checkout.js) is a [k6](https://k6.io/) load test of the
+purchase path. Up to 50 virtual shoppers each sign up, then loop: browse products, add
+one to the cart, check out, pay (with an `Idempotency-Key`), view the paid order, and
+wait a second. A second scenario reads the database connection pool (Hikari's active and
+pending connections, from the actuator as an admin) once a second, so the summary shows
+the pool next to the latencies. It passes when under 1% of requests fail, 99% of checks
+pass, and p95 stays under 300 ms to browse, 800 ms to check out and 1.5 s to pay.
+
+Run it against an API started with the `prod` profile (no SQL logging), with an admin
+account and the auth rate limit raised for the test:
+
+```bash
+# the API, from the repository root (MySQL from docker-compose.yml)
+APP_RATELIMIT_CAPACITY=100000 ADMIN_EMAIL=loadadmin@load.test ADMIN_PASSWORD=<12+ characters> \
+  SPRING_PROFILES_ACTIVE=prod ./mvnw -pl shop-app -am spring-boot:run -Dspring-boot.run.arguments=--server.port=8082
+# k6 (APP_PAYMENT_FAKE_LATENCY=300ms on the API simulates a slow payment provider)
+ADMIN_EMAIL=loadadmin@load.test ADMIN_PASSWORD=<the same> docker run --rm -e ADMIN_EMAIL -e ADMIN_PASSWORD \
+  -v "$PWD/load:/load:ro" grafana/k6:2.3.0 run /load/checkout.js -e BASE_URL=http://host.docker.internal:8082
+```
+
+Results on a laptop (Apple M1, 8 cores; MySQL in Docker on the same machine; one run each
+of 2m20s; numbers from another machine will differ):
+
+| | Provider answers at once | Provider takes 300 ms per call |
+|---|---|---|
+| Requests (failed) | 19,811 (0%) | 17,023 (0%) |
+| Throughput | 139 requests/s, 27.5 purchases/s | 120 requests/s, 24.5 purchases/s |
+| p95 browse / check out / pay | 80 ms / 138 ms / 166 ms | 40 ms / 66 ms / 380 ms |
+| Pool: connections in use, average (max of 10) | 5.9 (10) | 3.5 (10) |
+| Pool: requests waiting for one, average / p90 / max | 3.4 / 13 / 19 | 0.3 / 0 / 9 |
+
+- **A slow provider doesn't drain the pool**, the point of keeping its call outside any
+  transaction. With 300 ms per call, paying takes about that much longer, but the pool
+  is *less* busy: each purchase spends those 300 ms holding no connection. Had the call
+  run inside the payment's transaction, at 24.5 payments a second it would have held
+  about 7 of the 10 connections by itself (24.5 × 0.3 s).
+- **At 50 shoppers the pool is the busiest resource.** Its 10 connections are all in use
+  at peaks and requests briefly queue for one, which is Hikari's back-pressure: latency
+  stays low and nothing fails. Every request also looks its user up in the database
+  (the JWT filter), so that lookup is the first thing to cache if the shop needed more.
+
 ## CI/CD pipeline
 
 [`.github/workflows/pipeline.yml`](.github/workflows/pipeline.yml) takes every change

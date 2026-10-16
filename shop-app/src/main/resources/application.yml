@@ -215,6 +215,9 @@ app:
       # Where the simulated provider delivers its webhooks (the API's own endpoint).
       # Empty: it sends none.
       webhook-url: ${APP_PAYMENT_FAKE_WEBHOOK_URL:}
+      # How long each of its calls takes, like a real provider's round trip. 0 (the
+      # default) answers at once; the load test (load/checkout.js) raises it.
+      latency: ${APP_PAYMENT_FAKE_LATENCY:0ms}
   startup:
     seed:
       enabled: true

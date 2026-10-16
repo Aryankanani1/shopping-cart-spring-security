@@ -1,7 +1,9 @@
 package com.aryan.spring_security_demo.payment;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -56,13 +58,29 @@ public class FakePaymentGateway implements PaymentGateway {
     private final Map<String, RefundResult> refunds = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> refundCalls = new ConcurrentHashMap<>();
     private final FakeWebhookSender webhooks;
+    private final PaymentProperties properties;
+    private final Sleeper sleeper;
 
-    public FakePaymentGateway(FakeWebhookSender webhooks) {
+    /** How a simulated round trip waits; tests pass one that only records it. */
+    @FunctionalInterface
+    interface Sleeper {
+        void sleep(Duration duration) throws InterruptedException;
+    }
+
+    @Autowired
+    public FakePaymentGateway(FakeWebhookSender webhooks, PaymentProperties properties) {
+        this(webhooks, properties, duration -> Thread.sleep(duration.toMillis()));
+    }
+
+    FakePaymentGateway(FakeWebhookSender webhooks, PaymentProperties properties, Sleeper sleeper) {
         this.webhooks = webhooks;
+        this.properties = properties;
+        this.sleeper = sleeper;
     }
 
     @Override
     public ChargeResult charge(ChargeRequest request) {
+        roundTrip();
         String method = request.paymentMethod();
         if (PROVIDER_DOWN.equals(method)
                 || (FLAKY.equals(method) && flakyKeysTried.add(request.idempotencyKey()))) {
@@ -88,11 +106,13 @@ public class FakePaymentGateway implements PaymentGateway {
 
     @Override
     public Optional<ChargeResult> findCharge(String idempotencyKey) {
+        roundTrip();
         return Optional.ofNullable(answers.get(idempotencyKey));
     }
 
     @Override
     public RefundResult refund(RefundRequest request) {
+        roundTrip();
         int call = refundCalls.computeIfAbsent(request.idempotencyKey(), key -> new AtomicInteger()).incrementAndGet();
         if (REFUND_DOWN.equals(methodByCharge.get(request.providerReference())) && call <= REFUND_DOWN_CALLS) {
             throw new PaymentProviderUnavailableException("The payment provider is unavailable");
@@ -105,6 +125,20 @@ public class FakePaymentGateway implements PaymentGateway {
         webhooks.send(WebhookEvent.REFUND_SUCCEEDED, new WebhookEvent.Data(request.idempotencyKey(),
                 request.providerReference(), null, null, null, refund.refundReference()));
         return refund;
+    }
+
+    /** Waits as long as a real provider's network round trip would ({@code app.payment.fake.latency}). */
+    private void roundTrip() {
+        Duration latency = properties.getFake().getLatency();
+        if (latency.isZero()) {
+            return;
+        }
+        try {
+            sleeper.sleep(latency);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new PaymentProviderUnavailableException("Interrupted while waiting for the payment provider");
+        }
     }
 
     /** Report a new charge's outcome by webhook, as a real provider does. */
