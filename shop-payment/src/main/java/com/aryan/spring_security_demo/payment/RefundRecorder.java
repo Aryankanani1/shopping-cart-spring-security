@@ -55,12 +55,27 @@ public class RefundRecorder {
     }
 
     /**
-     * Record the provider's refund. Nothing to do if it is already recorded: the
-     * after-commit listener and the retry job can both get here for one refund.
+     * Record the provider's refund, in a transaction of its own. Nothing to do if it
+     * is already recorded: the after-commit listener, the retry job and a webhook
+     * can all get here for one refund.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordRefunded(Long paymentId, RefundResult result) {
-        Payment payment = paymentRepository.findById(paymentId)
+        refunded(paymentId, result);
+    }
+
+    /**
+     * The same, inside the caller's transaction: a webhook records its event and
+     * the refund together, so a repeat of the event changes nothing.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordRefundedInCurrentTransaction(Long paymentId, RefundResult result) {
+        refunded(paymentId, result);
+    }
+
+    private void refunded(Long paymentId, RefundResult result) {
+        // Locked first, so recorders racing for this refund take turns.
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                 .orElseThrow(() -> new IllegalStateException("Payment " + paymentId + " is missing"));
         if (payment.getStatus() == PaymentStatus.REFUND_PENDING) {
             payment.refunded(result.refundReference(), Instant.now(clock));

@@ -21,6 +21,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 
 /**
  * One attempt to pay for an order (V11 and V12 migrations). Recorded as
@@ -43,6 +44,9 @@ import java.time.Instant;
         @UniqueConstraint(name = "uk_payment_refund_reference", columnNames = "refund_reference")
 }, indexes = @Index(name = "idx_payment_status_refund_requested", columnList = "status, refund_requested_at"))
 public class Payment {
+
+    static final String CHARGE_KEY_PREFIX = "pay_";
+    static final String REFUND_KEY_PREFIX = "refund_";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -111,12 +115,24 @@ public class Payment {
      * so two orders' attempts can never share one.
      */
     static String chargeKey(Long paymentId) {
-        return "pay_" + paymentId;
+        return CHARGE_KEY_PREFIX + paymentId;
     }
 
     /** The idempotency key of every provider call to refund this payment. */
     static String refundKey(Long paymentId) {
-        return "refund_" + paymentId;
+        return REFUND_KEY_PREFIX + paymentId;
+    }
+
+    /** The payment id in a key made by {@link #chargeKey} or {@link #refundKey}, if {@code key} is one. */
+    static Optional<Long> idFromKey(String key, String prefix) {
+        if (key == null || !key.startsWith(prefix)) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Long.parseLong(key.substring(prefix.length())));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     /** A new attempt to pay {@code order}'s total, not yet sent to the provider. */
