@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test'
 import { adminToken, createProduct, expect, inventoryOf, test, unique, type CreatedProduct } from './support'
 
 // The customer's path through the shop, in a real browser against the real stack:
@@ -16,45 +17,48 @@ test.beforeAll(async ({ request }) => {
   })
 })
 
+/** Sign up as a new customer (which also signs in). */
+async function signUp(page: Page) {
+  await page.goto('/register')
+  await page.getByLabel('First name').fill('Erin')
+  await page.getByLabel('Last name').fill('Tester')
+  await page.getByLabel('Email').fill(`${unique('e2e').replace(' ', '-')}@example.com`)
+  await page.getByLabel('Password').fill('e2e-password-123')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await expect(page).toHaveURL('/')
+  await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
+}
+
+/** Put one of `item` in the bag and check out; ends on the new order's page. */
+async function buy(page: Page, item: CreatedProduct) {
+  await page.goto(`/products/${item.id}`)
+  await expect(page.getByRole('heading', { name: item.name, exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Add to bag' }).click()
+  await expect(page.getByText('Added to your bag.')).toBeVisible()
+  await page.getByRole('link', { name: 'View bag →' }).click()
+  await expect(page).toHaveURL('/cart')
+  // The line's name link (its picture links to the product too).
+  await expect(page.getByRole('link', { name: item.name, exact: true }).first()).toBeVisible()
+
+  await page.getByRole('button', { name: 'Checkout' }).click()
+  await expect(page).toHaveURL('/checkout')
+  await page.getByLabel('Recipient name').fill('Erin Tester')
+  await page.getByLabel('Address line 1').fill('1 Test Street')
+  await page.getByLabel('City').fill('Testville')
+  await page.getByLabel('State / region').fill('TS')
+  await page.getByLabel('Postal code').fill('12345')
+  await page.getByLabel('Country').fill('US')
+  await page.getByRole('button', { name: 'Place order' }).click()
+  await expect(page).toHaveURL(/\/orders\/\d+$/)
+  await expect(page.getByText('Thank you — your order has been placed.')).toBeVisible()
+}
+
 test('a new customer signs up, buys and pays for a product, cancels it for a refund, and finds the order', async ({ page, request }) => {
-  const email = `${unique('e2e').replace(' ', '-')}@example.com`
-
-  await test.step('sign up', async () => {
-    await page.goto('/register')
-    await page.getByLabel('First name').fill('Erin')
-    await page.getByLabel('Last name').fill('Tester')
-    await page.getByLabel('Email').fill(email)
-    await page.getByLabel('Password').fill('e2e-password-123')
-    await page.getByRole('button', { name: 'Create account' }).click()
-    // Signing up also signs in.
-    await expect(page).toHaveURL('/')
-    await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
-  })
-
-  await test.step('put the product in the bag', async () => {
-    await page.goto(`/products/${product.id}`)
-    await expect(page.getByRole('heading', { name: product.name, exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Add to bag' }).click()
-    await expect(page.getByText('Added to your bag.')).toBeVisible()
-    await page.getByRole('link', { name: 'View bag →' }).click()
-    await expect(page).toHaveURL('/cart')
-    // The line's name link (its picture links to the product too).
-    await expect(page.getByRole('link', { name: product.name, exact: true }).first()).toBeVisible()
-  })
+  await test.step('sign up', () => signUp(page))
 
   let orderUrl = ''
-  await test.step('check out', async () => {
-    await page.getByRole('button', { name: 'Checkout' }).click()
-    await expect(page).toHaveURL('/checkout')
-    await page.getByLabel('Recipient name').fill('Erin Tester')
-    await page.getByLabel('Address line 1').fill('1 Test Street')
-    await page.getByLabel('City').fill('Testville')
-    await page.getByLabel('State / region').fill('TS')
-    await page.getByLabel('Postal code').fill('12345')
-    await page.getByLabel('Country').fill('US')
-    await page.getByRole('button', { name: 'Place order' }).click()
-    await expect(page).toHaveURL(/\/orders\/\d+$/)
-    await expect(page.getByText('Thank you — your order has been placed.')).toBeVisible()
+  await test.step('put the product in the bag and check out', async () => {
+    await buy(page, product)
     orderUrl = new URL(page.url()).pathname
   })
 
@@ -89,6 +93,28 @@ test('a new customer signs up, buys and pays for a product, cancels it for a ref
     await page.goto('/orders')
     await expect(page.locator(`a[href="${orderUrl}"]`).first()).toBeVisible()
   })
+})
+
+// Staging turns on the simulated provider's webhooks: it reports the charge whose
+// answer it "lost", and the webhook settles the payment within seconds, long
+// before reconciliation would.
+test('a payment the provider is slow to confirm is settled by its webhook', async ({ page, request }) => {
+  const token = await adminToken(request)
+  const fan = await createProduct(request, token, {
+    name: unique('E2E Fan'),
+    price: 20,
+    inventory: 2,
+    category: unique('E2E Cooling'),
+  })
+  await signUp(page)
+  await buy(page, fan)
+
+  await page.getByLabel('Test card').selectOption('test_timeout_charged')
+  await page.getByRole('button', { name: 'Pay $20.00' }).click()
+  await expect(page.getByText(/confirming your payment with the provider/)).toBeVisible()
+  // The order badge and the payment both say paid once the webhook is in.
+  await expect(page.getByText('Visa ending 4242')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('paid', { exact: true })).toHaveCount(2, { timeout: 15_000 })
 })
 
 test('a visitor who is not signed in is sent to sign in before checkout', async ({ page }) => {
