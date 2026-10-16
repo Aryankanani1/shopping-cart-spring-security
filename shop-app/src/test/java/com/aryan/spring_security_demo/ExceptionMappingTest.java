@@ -24,13 +24,18 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.method.annotation.ExceptionHandlerMethodResolver;
 
 import java.lang.reflect.Method;
+import java.sql.SQLTransientConnectionException;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
 import org.apache.tomcat.util.http.InvalidParameterException;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.security.web.firewall.RequestRejectedException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
@@ -84,6 +89,25 @@ class ExceptionMappingTest {
                         "Malformed request", "The request parameters could not be decoded", null),
                 arguments(new RequestRejectedException("The parameter name \"x\" is not allowed"), 400,
                         "Malformed request", "The request was rejected", null));
+    }
+
+    // An exhausted pool (or an unreachable database) is a 503 the client may retry,
+    // not a 500: the request waited connection-timeout for a connection and got none.
+    @Test
+    void noDatabaseConnection_is503_withRetryAfter() throws Exception {
+        for (RuntimeException exception : List.of(
+                new CannotCreateTransactionException("Could not open JPA EntityManager for transaction",
+                        new SQLTransientConnectionException("ShoppingCartHikariPool - Connection is not available")),
+                new CannotGetJdbcConnectionException("Failed to obtain JDBC Connection"))) {
+            Method method = RESOLVER.resolveMethod(exception);
+            assertThat(method).as("a handler for " + exception.getClass().getSimpleName()).isNotNull();
+
+            ResponseEntity<?> response = (ResponseEntity<?>) method.invoke(HANDLER, exception);
+
+            assertThat(response.getStatusCode().value()).isEqualTo(503);
+            assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+            assertThat(((ProblemDetail) response.getBody()).getTitle()).isEqualTo("Service unavailable");
+        }
     }
 
     // MaxUploadSizeExceededException is a MultipartException too: it must keep the

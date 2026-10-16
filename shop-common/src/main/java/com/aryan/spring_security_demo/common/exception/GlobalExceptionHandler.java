@@ -7,6 +7,8 @@ import org.apache.tomcat.util.http.InvalidParameterException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
@@ -263,6 +265,24 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // can leak stack traces, SQL fragments, class names or file paths that help
     // an attacker and mean nothing to a legitimate caller.
     // -----------------------------------------------------------------------
+
+    /** How long a client is told to wait before retrying a 503. */
+    private static final String RETRY_AFTER_SECONDS = "1";
+
+    /**
+     * 503 — no database connection could be had in time: the pool stayed exhausted
+     * for its connection-timeout (an overload), or the database is unreachable. Not
+     * the application's fault, and a retry shortly after may well succeed, so the
+     * client is told when (Retry-After) instead of getting a 500.
+     */
+    @ExceptionHandler({CannotCreateTransactionException.class, CannotGetJdbcConnectionException.class})
+    public ResponseEntity<ProblemDetail> handleNoDatabaseConnection(RuntimeException ex) {
+        log.warn("503 No database connection available", ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
+                .body(problem(HttpStatus.SERVICE_UNAVAILABLE, "Service unavailable",
+                        "The service is busy; please retry shortly"));
+    }
 
     /** 500 — the catch-all for anything not handled above. */
     @ExceptionHandler(Exception.class)

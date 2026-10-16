@@ -18,6 +18,7 @@ a PR adds or changes; older code may predate some of them.
 ./mvnw -Dmaven.test.skip=true verify # static analysis only: SpotBugs + FindSecBugs, PMD, CPD (the pipeline's "Static analysis")
 ./mvnw -DskipTests package dependency-check:aggregate   # OWASP CVE scan; report in target/ (set NVD_API_KEY to speed up the download)
 ./mvnw test -pl shop-app -am -Dtest=OpenApiContractTest -Dsurefire.failIfNoSpecifiedTests=false -Dopenapi.update=true   # regenerate docs/openapi.json after an API change
+docker run --rm -v "$PWD/load:/load:ro" grafana/k6:2.3.0 run /load/checkout.js -e BASE_URL=http://host.docker.internal:8082   # load test; how to start the API for it: README, "Load testing"
 cd frontend && npm test              # Vitest
 cd frontend && npm run test:coverage # Vitest with coverage (coverage/index.html)
 cd frontend && npm run build         # type-check + production build

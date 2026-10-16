@@ -49,5 +49,13 @@ public class PaymentProperties {
          * API's own webhook endpoint. Empty (the default) means it sends none.
          */
         private String webhookUrl = "";
+
+        /**
+         * How long each of its calls takes ({@code APP_PAYMENT_FAKE_LATENCY}), as a
+         * real provider's network round trip would. Zero (the default) answers at
+         * once; the load test sets it to show that a slow provider doesn't drain
+         * the connection pool, since no transaction is open during its calls.
+         */
+        private Duration latency = Duration.ZERO;
     }
 }

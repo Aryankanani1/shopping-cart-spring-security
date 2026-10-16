@@ -3,6 +3,9 @@ package com.aryan.spring_security_demo.payment;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,7 +22,9 @@ import static org.mockito.Mockito.verify;
 class FakePaymentGatewayTest {
 
     private final FakeWebhookSender webhooks = mock(FakeWebhookSender.class);
-    private final FakePaymentGateway gateway = new FakePaymentGateway(webhooks);
+    private final PaymentProperties properties = new PaymentProperties();
+    private final List<Duration> waits = new ArrayList<>();
+    private final FakePaymentGateway gateway = new FakePaymentGateway(webhooks, properties, waits::add);
 
     @Test
     void testCards_areApproved() {
@@ -171,6 +176,20 @@ class FakePaymentGatewayTest {
 
         verify(webhooks, times(1)).send(eq(WebhookEvent.REFUND_SUCCEEDED), argThat(data ->
                 data.idempotencyKey().equals("refund_1") && data.refundReference().equals(refund.refundReference())));
+    }
+
+    // A simulated round trip on every call; the default (zero) answers at once.
+    @Test
+    void aConfiguredLatency_delaysEveryProviderCall() {
+        gateway.charge(request("pay_1", FakePaymentGateway.VISA));
+        assertThat(waits).isEmpty();
+
+        properties.getFake().setLatency(Duration.ofMillis(300));
+        ChargeResult.Approved charge = (ChargeResult.Approved) gateway.charge(request("pay_2", FakePaymentGateway.VISA));
+        gateway.findCharge("pay_2");
+        gateway.refund(refund("refund_2", charge.providerReference()));
+
+        assertThat(waits).containsExactly(Duration.ofMillis(300), Duration.ofMillis(300), Duration.ofMillis(300));
     }
 
     private static RefundRequest refund(String key, String providerReference) {
