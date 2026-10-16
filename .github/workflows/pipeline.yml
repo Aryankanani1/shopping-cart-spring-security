@@ -7,6 +7,9 @@ name: CI/CD
 #          └─ Static analysis ─────────────────┘
 #   any stage fails ──▶ Failed build (which stage, in the run's summary)
 #
+# Staging also fuzzes the deployed API against its committed contract, docs/openapi.json
+# (Schemathesis): any 5xx fails it.
+#
 # Pull request: every stage up to and including staging. The images are built on the
 #   runner for linux/amd64 and handed to the staging job; nothing is pushed.
 # Push to master: every stage. The images go to GitHub Container Registry for
@@ -41,6 +44,9 @@ concurrency:
 env:
   API_IMAGE: ghcr.io/aryankanani1/shopping-cart-api
   WEB_IMAGE: ghcr.io/aryankanani1/shopping-cart-web
+  # The API fuzzer (staging stage), pinned to a digest like every other tool.
+  # Dependabot doesn't see images run from a workflow: bump it by hand.
+  SCHEMATHESIS_IMAGE: schemathesis/schemathesis:4.31.1@sha256:e6d34d7defc8c8a5c7a684255648a43b169cfe0c1e51b2bae7c68c310f3b0ab7
 
 jobs:
   build:
@@ -473,6 +479,30 @@ jobs:
           npx playwright install --with-deps chromium
           npm run e2e
 
+      # Fuzz the running API against its committed contract (docs/openapi.json):
+      # thousands of generated requests, valid and malformed, and any 5xx fails the
+      # stage. As a customer, not an admin (an admin's fuzzed deletes would empty the
+      # catalogue), and never deleting that customer's own account.
+      - name: Fuzz the API (Schemathesis)
+        run: |
+          email="fuzz-$(date +%s)@staging.test"
+          password=$(openssl rand -hex 12)
+          echo "::add-mask::$password"
+          curl -sSfk https://localhost/api/v1/users -H 'Content-Type: application/json' \
+            -d "{\"firstName\":\"Fuzz\",\"lastName\":\"Tester\",\"email\":\"$email\",\"password\":\"$password\"}" > /dev/null
+          token=$(curl -sSfk https://localhost/api/v1/auth/login -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$email\",\"password\":\"$password\"}" | jq -r .data.token)
+          echo "::add-mask::$token"
+          mkdir -p "$RUNNER_TEMP/schemathesis"
+          docker run --rm --network host --user "$(id -u):$(id -g)" \
+            -v "$PWD/docs:/spec:ro" -v "$RUNNER_TEMP/schemathesis:/out" \
+            "$SCHEMATHESIS_IMAGE" run /spec/openapi.json \
+            --url https://localhost --tls-verify false \
+            --header "Authorization: Bearer $token" \
+            --checks not_a_server_error --max-examples 25 \
+            --exclude-operation-id deleteUser \
+            --report junit --report-junit-path /out/junit.xml
+
       - if: failure()
         name: Staging logs
         working-directory: deploy
@@ -484,6 +514,7 @@ jobs:
           path: |
             frontend/playwright-report/
             frontend/test-results/
+            ${{ runner.temp }}/schemathesis/
           if-no-files-found: ignore
       - if: always()
         name: Remove staging
