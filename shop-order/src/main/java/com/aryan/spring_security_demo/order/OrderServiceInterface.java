@@ -4,6 +4,9 @@ import com.aryan.spring_security_demo.common.web.SlicedResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Instant;
+import java.util.List;
+
 public interface OrderServiceInterface {
 
     /** Turn the signed-in user's cart into an order shipped to the given address. */
@@ -44,6 +47,18 @@ public interface OrderServiceInterface {
 
     /** Record that the order is paid ({@code PENDING} to {@code PAID}). Requires a transaction. */
     void markPaid(Long orderId);
+
+    /** The orders still unpaid that were placed before {@code placedBefore}, oldest first. */
+    List<Long> unpaidOrdersPlacedBefore(Instant placedBefore);
+
+    /**
+     * Cancel an order left unpaid since before {@code placedBefore}, as its owner
+     * could: the stock goes back on sale, and other modules are told (a payment in
+     * progress refuses, with a 409). A transaction of its own.
+     *
+     * @return false if it has been paid or cancelled in the meantime
+     */
+    boolean expireIfUnpaid(Long orderId, Instant placedBefore);
 
     /**
      * Ready {@code userId}'s orders for the account being deleted: cancel and

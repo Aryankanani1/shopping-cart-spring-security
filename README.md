@@ -432,6 +432,11 @@ is simulated, by a fake provider inside the app with test payment methods
   settled by `PaymentReconciliationJob` (`APP_PAYMENT_RECONCILE_CRON`, every
   minute, ShedLock), which asks the provider what it did with the charge's key:
   approved, declined, or never received.
+- **Unpaid orders expire.** Checkout reserves the stock, so an order still unpaid
+  after 30 minutes (`APP_ORDERS_UNPAID_EXPIRY`) is cancelled and its items go back
+  on sale, by `UnpaidOrderExpiryJob` (`APP_ORDERS_UNPAID_EXPIRY_CRON`, every
+  minute, ShedLock), one transaction per order. An order being paid for is left
+  until its payment settles. The order's `payBy` tells the customer the deadline.
 - An order can't be cancelled while its payment is being processed, nor once it
   has shipped.
 
