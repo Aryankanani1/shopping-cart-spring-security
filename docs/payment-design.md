@@ -74,16 +74,17 @@ stateDiagram-v2
     PENDING --> PAID: payment succeeded
     PENDING --> CANCELLED: customer or admin cancels
     PAID --> PROCESSING: admin
+    PAID --> CANCELLED: cancelled and refunded (phase 2)
     PROCESSING --> SHIPPED: admin
+    PROCESSING --> CANCELLED: cancelled and refunded (phase 2)
     SHIPPED --> DELIVERED: admin
     DELIVERED --> [*]
     CANCELLED --> [*]
 ```
 
 Only a successful payment moves an order to `PAID`; an admin can't set it by hand.
-Until phase 2 adds refunds, a paid order can't be cancelled, since nothing could
-give the money back. Phase 2 adds `PAID` and `PROCESSING` to `CANCELLED`, with a
-refund.
+Phase 1 couldn't cancel a paid order, since nothing could give the money back;
+phase 2 refunds it (section 4).
 
 ### Payment lifecycle
 
@@ -262,14 +263,105 @@ customer got a `409`. Now only a new attempt raises the version (a repeat starts
 nothing, so it has no cancellation to fence off), and `markPaid` reads the order
 under a lock, so recording a result always works from the latest version.
 
-## 4. Roadmap
+## 4. Phase 2: refunds
+
+Cancelling a paid order (by the customer, an admin, or deleting the account) now
+refunds it in full. The refund has to survive two things a transaction can't
+cover: a provider that is down, and the app stopping between the cancellation and
+the refund call.
+
+### The flow: an outbox row, then the provider after the commit
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant O as OrderService
+    participant L as PaymentOrderListener
+    participant DB as MySQL
+    participant A as RefundAfterCommitListener (@Async)
+    participant G as Provider
+    participant J as RefundRetryJob (ShedLock)
+    C->>O: POST /orders/42/cancel
+    rect rgb(230, 240, 255)
+    note over O,DB: the cancellation's transaction
+    O->>L: OrderCancellingEvent (same transaction)
+    L->>DB: payment 7: SUCCEEDED becomes REFUND_PENDING (the outbox row)
+    L-->>O: RefundsRequestedEvent, delivered after the commit
+    O->>DB: restock, order 42 becomes CANCELLED
+    end
+    O-->>C: 200 CANCELLED
+    A->>G: refund(key refund_7) on another thread, no transaction, no connection
+    G-->>A: refunded (re_...)
+    A->>DB: payment 7 becomes REFUNDED (a short transaction)
+    note over J: every minute: refunds still pending after a minute
+    J->>G: refund(key refund_7) again: the same key, so the provider refunds once
+```
+
+- **The outbox row is written in the cancellation's transaction.** The order
+  becoming `CANCELLED` and the payment becoming `REFUND_PENDING` commit together or
+  not at all, so a cancelled order always has a record that money is owed back,
+  even if the app stops a moment later.
+- **The provider is called only after the commit.** Calling it inside the
+  transaction would hold a pooled connection, and if the transaction then rolled
+  back, the customer would be refunded for an order that wasn't cancelled.
+- **The after-commit listener runs `@Async`.** Spring runs an `AFTER_COMMIT`
+  listener *before* it releases the transaction's connection and unbinds its
+  resources (`AbstractPlatformTransactionManager.processCommit`: `doCommit`, then
+  `triggerAfterCommit`, then `cleanupAfterCompletion`). A provider call made right
+  there would hold the request's connection for as long as it takes. A
+  `@Transactional` method called from there would also join the transaction that
+  has already committed, and its writes would be silently lost. On a background
+  thread there is neither problem, and the cancel request doesn't wait for the
+  provider.
+- **The recorder's refund methods are `REQUIRES_NEW`.** On the background thread or
+  in the job, that is simply a new transaction; if the listener were ever made
+  synchronous again, it would still keep the write out of the committed one.
+- **The listener catches every failure and leaves the row pending.** The
+  transaction has committed by then, so there is nothing left to roll back;
+  `RefundRetryJob` retries every refund still pending a minute after it was
+  requested (one instance at a time, through ShedLock).
+- **Every call for one refund uses the key `refund_<payment id>`.** The listener,
+  its retries and the job can all reach the provider for the same refund, and the
+  provider refunds it once. Recording an outcome that is already recorded does
+  nothing.
+
+### Payment lifecycle, completed
+
+```mermaid
+stateDiagram-v2
+    [*] --> PROCESSING: attempt recorded
+    PROCESSING --> SUCCEEDED: provider approved
+    PROCESSING --> FAILED: declined, or provider unavailable
+    SUCCEEDED --> REFUND_PENDING: order cancelled (same transaction)
+    REFUND_PENDING --> REFUNDED: provider refunded (after the commit, or the job)
+```
+
+The charge's own facts (amount, provider reference, card) never change; a refund
+adds its own reference and times. `V12__payment_refunds.sql` adds the two statuses,
+`refund_reference` (unique), `refund_requested_at` and `refunded_at`, and an index
+for the job's query.
+
+### What happens when
+
+| Situation | Result |
+|---|---|
+| A paid (or processing) order is cancelled | `200`, order `CANCELLED`, stock returned, payment `REFUND_PENDING`, then `REFUNDED` a moment later |
+| The provider is down when the refund is first tried | The payment stays `REFUND_PENDING`; the job refunds it once the provider is back |
+| The app stops right after the cancellation commits | The row is `REFUND_PENDING`; the job finds it on the next run |
+| The listener and the job reach the provider for one refund | The same key: refunded once, recorded once |
+| An unpaid order is cancelled | No payment to refund; as before |
+| An order whose payment is `PROCESSING` is cancelled | `409`, as before: the charge may still go through |
+
+A new test method, `test_refund_down`, charges normally, but the provider fails the
+first 3 refund calls (the first try and its 2 retries), so the job's later attempt
+is the one that succeeds.
+
+## 5. Roadmap
 
 - **Phase 1 (this change):** everything above, the pay step on the storefront's
   order page, and tests (unit, integration against MySQL, end-to-end).
-- **Phase 2:** refunds when a paid order is cancelled: the cancellation's
-  transaction marks the payment `REFUND_PENDING` (an outbox row, written
-  atomically with the cancellation), an `AFTER_COMMIT` listener calls the provider,
-  and a scheduled job (with ShedLock) retries any that failed. Also a
+- **Phase 2:** refunds when a paid order is cancelled (section 4), then a
   reconciliation job for payments stuck in `PROCESSING`, and expiry of orders left
   unpaid for 30 minutes.
 - **Phase 3:** provider webhooks with a signature check, and an adapter for a real
