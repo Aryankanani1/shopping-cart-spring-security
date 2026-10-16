@@ -51,7 +51,8 @@ describe('AdminOrdersPage', () => {
       within(within(rowFor(orderId)).getByRole('combobox')).getAllByRole('option').map((o) => o.textContent)
     // Unpaid: it can only be cancelled; paying is the customer's step, not the admin's.
     expect(optionsFor(55)).toEqual(['Move to…', 'cancelled'])
-    expect(optionsFor(58)).toEqual(['Move to…', 'processing'])
+    // Paid: fulfil it, or cancel it (which refunds it).
+    expect(optionsFor(58)).toEqual(['Move to…', 'processing', 'cancelled'])
     // A delivered order is final.
     expect(within(rowFor(56)).queryByRole('combobox')).not.toBeInTheDocument()
   })

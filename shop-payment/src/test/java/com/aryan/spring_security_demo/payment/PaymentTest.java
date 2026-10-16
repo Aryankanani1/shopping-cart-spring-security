@@ -5,25 +5,66 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** A payment's lifecycle: started from an order, then settled once. */
+/** A payment's lifecycle: started from an order, settled once, and refunded if its order is cancelled. */
 class PaymentTest {
 
     private static final Instant STARTED = Instant.parse("2026-10-15T12:00:00Z");
     private static final Instant SETTLED = Instant.parse("2026-10-15T12:00:02Z");
 
     @Test
-    void statusMachine_onlyAnAttemptInProgressCanBeSettled() {
-        assertThat(PaymentStatus.PROCESSING.canTransitionTo(PaymentStatus.SUCCEEDED)).isTrue();
-        assertThat(PaymentStatus.PROCESSING.canTransitionTo(PaymentStatus.FAILED)).isTrue();
-        for (PaymentStatus target : PaymentStatus.values()) {
-            assertThat(PaymentStatus.SUCCEEDED.canTransitionTo(target)).as("SUCCEEDED -> %s", target).isFalse();
-            assertThat(PaymentStatus.FAILED.canTransitionTo(target)).as("FAILED -> %s", target).isFalse();
-        }
-        assertThat(PaymentStatus.PROCESSING.canTransitionTo(PaymentStatus.PROCESSING)).isFalse();
+    void statusMachine_settlesOnce_thenOnlyASucceededChargeIsRefunded() {
+        assertThat(allowedFrom(PaymentStatus.PROCESSING))
+                .containsExactlyInAnyOrder(PaymentStatus.SUCCEEDED, PaymentStatus.FAILED);
+        assertThat(allowedFrom(PaymentStatus.SUCCEEDED)).containsExactly(PaymentStatus.REFUND_PENDING);
+        assertThat(allowedFrom(PaymentStatus.REFUND_PENDING)).containsExactly(PaymentStatus.REFUNDED);
+        assertThat(allowedFrom(PaymentStatus.FAILED)).isEmpty();
+        assertThat(allowedFrom(PaymentStatus.REFUNDED)).isEmpty();
+    }
+
+    @Test
+    void refund_isOwed_thenRecorded_andTheChargeItselfNeverChanges() {
+        Payment payment = started();
+        payment.succeed("ch_1", "Visa", "4242", SETTLED);
+        Instant cancelled = Instant.parse("2026-10-16T09:00:00Z");
+        Instant refundedAt = Instant.parse("2026-10-16T09:00:01Z");
+
+        payment.requestRefund(cancelled);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUND_PENDING);
+        assertThat(payment.getRefundRequestedAt()).isEqualTo(cancelled);
+        assertThat(payment.getRefundReference()).isNull();
+
+        payment.refunded("re_1", refundedAt);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getRefundReference()).isEqualTo("re_1");
+        assertThat(payment.getRefundedAt()).isEqualTo(refundedAt);
+        // The charge's own facts stay as they were.
+        assertThat(payment.getProviderReference()).isEqualTo("ch_1");
+        assertThat(payment.getCompletedAt()).isEqualTo(SETTLED);
+        assertThat(payment.getAmount()).isEqualByComparingTo("59.97");
+    }
+
+    @Test
+    void onlyASucceededCharge_canBeRefunded() {
+        Payment inProgress = started();
+        assertThatThrownBy(() -> inProgress.requestRefund(SETTLED)).isInstanceOf(IllegalStateException.class);
+
+        Payment failed = started();
+        failed.fail("Your card was declined.", SETTLED);
+        assertThatThrownBy(() -> failed.requestRefund(SETTLED)).isInstanceOf(IllegalStateException.class);
+
+        Payment paid = started();
+        paid.succeed("ch_1", "Visa", "4242", SETTLED);
+        assertThatThrownBy(() -> paid.refunded("re_1", SETTLED)).isInstanceOf(IllegalStateException.class);
+    }
+
+    private static List<PaymentStatus> allowedFrom(PaymentStatus from) {
+        return Arrays.stream(PaymentStatus.values()).filter(from::canTransitionTo).toList();
     }
 
     @Test

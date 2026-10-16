@@ -61,6 +61,39 @@ class FakePaymentGatewayTest {
         }
     }
 
+    @Test
+    void refund_isGivenOnce_perKey() {
+        ChargeResult.Approved charge = (ChargeResult.Approved) gateway.charge(request("pay_1", FakePaymentGateway.VISA));
+
+        RefundResult first = gateway.refund(refund("refund_1", charge.providerReference()));
+
+        assertThat(first.refundReference()).startsWith("re_");
+        assertThat(gateway.refund(refund("refund_1", charge.providerReference()))).isEqualTo(first);
+    }
+
+    @Test
+    void refundDown_failsTheFirstTryAndItsRetries_thenRefunds() {
+        ChargeResult.Approved charge =
+                (ChargeResult.Approved) gateway.charge(request("pay_1", FakePaymentGateway.REFUND_DOWN));
+
+        for (int call = 0; call < FakePaymentGateway.REFUND_DOWN_CALLS; call++) {
+            assertThatThrownBy(() -> gateway.refund(refund("refund_1", charge.providerReference())))
+                    .isInstanceOf(PaymentProviderUnavailableException.class);
+        }
+        assertThat(gateway.refund(refund("refund_1", charge.providerReference())).refundReference())
+                .startsWith("re_");
+    }
+
+    // After a restart the fake has forgotten its charges; a refund still goes through.
+    @Test
+    void refund_ofAChargeItNoLongerKnows_isStillGiven() {
+        assertThat(gateway.refund(refund("refund_9", "ch_forgotten")).refundReference()).startsWith("re_");
+    }
+
+    private static RefundRequest refund(String key, String providerReference) {
+        return new RefundRequest(key, providerReference, new BigDecimal("10.00"), "USD");
+    }
+
     private static ChargeRequest request(String key, String method) {
         return new ChargeRequest(key, new BigDecimal("10.00"), "USD", method);
     }

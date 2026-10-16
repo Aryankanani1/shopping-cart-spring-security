@@ -96,7 +96,7 @@ export interface OrderDto {
 }
 
 /** Where a payment attempt stands (mirrors the backend PaymentStatus). */
-export type PaymentStatus = 'PROCESSING' | 'SUCCEEDED' | 'FAILED'
+export type PaymentStatus = 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'REFUND_PENDING' | 'REFUNDED'
 
 /** One attempt to pay for an order (PaymentDto). */
 export interface PaymentDto {
@@ -114,6 +114,10 @@ export interface PaymentDto {
   /** ISO instants. */
   createdAt: string
   completedAt: string | null
+  /** Set once the order was cancelled and the money refunded. */
+  refundReference: string | null
+  refundRequestedAt: string | null
+  refundedAt: string | null
 }
 
 /** Lightweight order row for the admin order list (no item breakdown). */

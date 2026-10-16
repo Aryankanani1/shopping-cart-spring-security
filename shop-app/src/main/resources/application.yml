@@ -192,6 +192,11 @@ app:
   # ShedLock makes only one instance run each tick. "-" disables it.
   wishlist:
     alert-cron: ${APP_WISHLIST_ALERT_CRON:0 * * * * *}
+  # Retries refunds still owed (RefundRetryJob): ones the attempt right after the
+  # cancellation couldn't finish. Spring cron, every minute (at :30, off the wishlist
+  # scan's beat) by default; ShedLock makes only one instance run each tick.
+  payment:
+    refund-retry-cron: ${APP_PAYMENT_REFUND_RETRY_CRON:30 * * * * *}
   startup:
     seed:
       enabled: true

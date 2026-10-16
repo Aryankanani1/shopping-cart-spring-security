@@ -25,4 +25,10 @@ public class PaymentGatewayClient {
     public ChargeResult charge(ChargeRequest request) {
         return gateway.charge(request);
     }
+
+    /** Refund through the provider, retrying the same way as {@link #charge}. */
+    @Retryable(includes = PaymentProviderUnavailableException.class, maxRetries = 2, delay = 100, multiplier = 2)
+    public RefundResult refund(RefundRequest request) {
+        return gateway.refund(request);
+    }
 }

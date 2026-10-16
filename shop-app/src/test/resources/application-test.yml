@@ -41,6 +41,9 @@ app:
   # that drives WishlistAlertService directly. Tests call the service themselves.
   wishlist:
     alert-cron: "-"
+  # Tests call RefundProcessor.retryPendingRefunds themselves, with a time they choose.
+  payment:
+    refund-retry-cron: "-"
   startup:
     seed:
       enabled: false

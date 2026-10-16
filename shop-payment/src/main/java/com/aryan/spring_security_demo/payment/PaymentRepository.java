@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -16,6 +17,15 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     @Query("select count(p) from Payment p where p.order.id = :orderId and p.status = :status")
     long countByOrderAndStatus(@Param("orderId") Long orderId, @Param("status") PaymentStatus status);
+
+    @Query("select p from Payment p where p.order.id in :orderIds and p.status = :status")
+    List<Payment> findByOrdersAndStatus(@Param("orderIds") Collection<Long> orderIds,
+                                        @Param("status") PaymentStatus status);
+
+    @Query("select p.id from Payment p where p.status = :status and p.refundRequestedAt < :before"
+            + " order by p.refundRequestedAt")
+    List<Long> findIdsByStatusRequestedBefore(@Param("status") PaymentStatus status,
+                                              @Param("before") Instant before);
 
     @Query("select count(p) from Payment p where p.order.id in :orderIds and p.status = :status")
     long countByOrdersAndStatus(@Param("orderIds") Collection<Long> orderIds, @Param("status") PaymentStatus status);

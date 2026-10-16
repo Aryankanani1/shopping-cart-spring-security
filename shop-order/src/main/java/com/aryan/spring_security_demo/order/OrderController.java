@@ -64,9 +64,9 @@ public class OrderController {
     }
 
     /**
-     * Cancel an order and restock its items. Allowed for the order's owner (or an
-     * admin) and only while unpaid (PENDING) — the service enforces both,
-     * returning 403 for a non-owner and 409 once the order is paid, or while a
+     * Cancel an order, restock its items and refund it if it was paid. Allowed for
+     * the order's owner (or an admin) until it ships — the service enforces both,
+     * returning 403 for a non-owner and 409 once the order has shipped, or while a
      * payment for it is being processed.
      */
     @PostMapping("/{orderId}/cancel")

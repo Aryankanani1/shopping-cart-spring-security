@@ -1,7 +1,8 @@
 import { adminToken, createProduct, expect, inventoryOf, test, unique, type CreatedProduct } from './support'
 
 // The customer's path through the shop, in a real browser against the real stack:
-// sign up, find a product, put it in the bag, check out, pay, and find the order again.
+// sign up, find a product, put it in the bag, check out, pay, cancel for a refund,
+// and find the order again.
 
 let product: CreatedProduct
 
@@ -15,7 +16,7 @@ test.beforeAll(async ({ request }) => {
   })
 })
 
-test('a new customer signs up, buys and pays for a product, and finds the order', async ({ page, request }) => {
+test('a new customer signs up, buys and pays for a product, cancels it for a refund, and finds the order', async ({ page, request }) => {
   const email = `${unique('e2e').replace(' ', '-')}@example.com`
 
   await test.step('sign up', async () => {
@@ -69,10 +70,17 @@ test('a new customer signs up, buys and pays for a product, and finds the order'
 
     await page.getByLabel('Test card').selectOption('test_visa')
     await pay.click()
-    // Paid: the attempt is listed, and there is nothing left to pay or cancel.
+    // Paid: the attempt is listed, and there is nothing left to pay.
     await expect(page.getByText('Visa ending 4242')).toBeVisible()
     await expect(page.getByRole('button', { name: /^Pay / })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Cancel order' })).toHaveCount(0)
+  })
+
+  await test.step('cancelling the paid order refunds it and puts the item back in stock', async () => {
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.getByRole('button', { name: 'Cancel order' }).click()
+    // The refund runs just after the cancellation commits; the page checks back until it's settled.
+    await expect(page.getByText('refunded', { exact: true })).toBeVisible({ timeout: 15_000 })
+    expect(await inventoryOf(request, product.id)).toBe(4)
   })
 
   await test.step('the order is listed under My orders', async () => {
