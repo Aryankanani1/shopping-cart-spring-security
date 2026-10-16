@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc(addFilters = false)
 class PaymentControllerValidationTest {
 
-    private static final String KEY = "6f1c2a4e-0d1b-4c3a-9e58-2b7d4f8a1c90";
+    private static final String KEY = "00000000-0000-4000-8000-000000000001";
     private static final String VISA_BODY = "{\"paymentMethod\":\"test_visa\"}";
 
     @Autowired private MockMvc mockMvc;
