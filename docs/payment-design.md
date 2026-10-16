@@ -101,7 +101,7 @@ stateDiagram-v2
 
 | Method | Path | Who | Result |
 |---|---|---|---|
-| `POST` | `/api/v1/orders/{orderId}/payments` | the order's owner or an admin | `201` with the new payment (`SUCCEEDED` or `FAILED`); `200` with the stored payment when the `Idempotency-Key` was already used for this order |
+| `POST` | `/api/v1/orders/{orderId}/payments` | the order's owner or an admin | `201` with the new payment (`SUCCEEDED` or `FAILED`); `202` with it `PROCESSING` when the provider didn't answer in time (section 5); `200` with the stored payment when the `Idempotency-Key` was already used for this order |
 | `GET` | `/api/v1/orders/{orderId}/payments` | owner or admin | the order's attempts, oldest first (at most 5, so not paginated) |
 | `GET` | `/api/v1/orders/{orderId}/payments/{paymentId}` | owner or admin | one attempt |
 
@@ -357,12 +357,74 @@ A new test method, `test_refund_down`, charges normally, but the provider fails 
 first 3 refund calls (the first try and its 2 retries), so the job's later attempt
 is the one that succeeds.
 
-## 5. Roadmap
+## 5. Phase 2: reconciliation
 
-- **Phase 1 (this change):** everything above, the pay step on the storefront's
+A payment is recorded as `PROCESSING` before the provider is called, and settled
+after. If the settling never happens, it stays `PROCESSING`, and its order can be
+neither paid again nor cancelled. Three things can cause that:
+
+- **The provider times out** after the request was sent: it may or may not have
+  charged.
+- **The app stops** between the provider's answer and recording it.
+- **Recording the answer fails** (the database is briefly unreachable) after the
+  provider approved.
+
+In every case the provider knows what happened. Reconciliation asks it.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant J as PaymentReconciliationJob (ShedLock)
+    participant R as PaymentReconciler
+    participant DB as MySQL
+    participant G as Provider
+    J->>R: payments PROCESSING for over 2 minutes
+    R->>DB: is payment 7 still PROCESSING?
+    R->>G: findCharge(pay_7), no transaction open
+    alt the provider charged it
+        G-->>R: approved
+        R->>DB: payment 7 SUCCEEDED, order PAID (one transaction)
+    else the provider declined it
+        G-->>R: declined
+        R->>DB: payment 7 FAILED with the reason
+    else the provider never received it
+        G-->>R: no such charge
+        R->>DB: payment 7 FAILED: nothing was charged
+    end
+```
+
+- **The provider is the source of truth.** The payment's key, `pay_<payment id>`,
+  is what the charge was sent under, so the provider can say exactly what happened
+  to that attempt. If the provider is unavailable, the payment stays `PROCESSING`
+  until the next run.
+- **Only after 2 minutes.** A request may still be waiting on the provider; 2
+  minutes is well past any request's provider timeout, so the job never settles an
+  attempt the request is still settling. If both get there anyway, they settle it
+  from the same answer, and recording an outcome that is already recorded does
+  nothing.
+- **A timeout is answered, not failed.** A timed-out charge isn't retried inside
+  the request (each try could take the full timeout, holding the customer's
+  request) and isn't marked failed (it may have charged). The request answers
+  `202 Accepted` with the payment `PROCESSING`; the storefront shows that the
+  payment is being confirmed, and updates once the job settles it.
+- **"Never received" is safe to fail** only because of the 2 minutes: by then a
+  request that hasn't reached the provider never will.
+
+Two new test methods make the cases reproducible: `test_timeout_charged` (the
+provider charges, and then the answer is lost) and `test_timeout_not_charged` (the
+request never reaches the provider). Like the fake provider's other answers, what
+it charged is kept in memory, so after a restart it reports every earlier charge as
+never received; a real provider remembers.
+
+No new columns: the job's query (`status = 'PROCESSING' and created_at < ?`) uses
+the `status`-led index from `V12`.
+
+## 6. Roadmap
+
+- **Phase 1:** everything in sections 1 to 3, the pay step on the storefront's
   order page, and tests (unit, integration against MySQL, end-to-end).
-- **Phase 2:** refunds when a paid order is cancelled (section 4), then a
-  reconciliation job for payments stuck in `PROCESSING`, and expiry of orders left
-  unpaid for 30 minutes.
+- **Phase 2:** refunds when a paid order is cancelled (section 4), reconciliation of
+  payments stuck in `PROCESSING` (section 5), then expiry of orders left unpaid for
+  30 minutes.
 - **Phase 3:** provider webhooks with a signature check, and an adapter for a real
   provider's test mode.
