@@ -610,7 +610,8 @@ ADMIN_EMAIL=loadadmin@load.test ADMIN_PASSWORD=<the same> docker run --rm -e ADM
 ```
 
 Results on a laptop (Apple M1, 8 cores; MySQL in Docker on the same machine; one run each
-of 2m20s; numbers from another machine will differ):
+of 2m20s, with the pool settings from before the tuning below; numbers from another machine
+will differ):
 
 | | Provider answers at once | Provider takes 300 ms per call |
 |---|---|---|
@@ -629,6 +630,42 @@ of 2m20s; numbers from another machine will differ):
   at peaks and requests briefly queue for one, which is Hikari's back-pressure: latency
   stays low and nothing fails. Every request also looks its user up in the database
   (the JWT filter), so that lookup is the first thing to cache if the shop needed more.
+
+### Tuning the connection pool
+
+The pool's settings in `application.yml`, with the reason for each beside it: a
+fixed-size pool of `DB_POOL_SIZE` (10 by default; size it at about the database server's
+CPU cores × 2 + 1, with every instance's pool together under MySQL's `max_connections`);
+a 5-second wait for a connection, after which the request gets a **503 with
+`Retry-After`** instead of hanging for HikariCP's default 30 seconds; connections retired
+after 30 minutes (under MySQL's `wait_timeout`) and kept alive every 2 minutes (under the
+idle timeouts of firewalls in front of a managed database); and the MySQL driver caching
+prepared statements. `DataSourcePoolTest` checks the pool really runs with them.
+
+Measured with the load test above (provider instant, same machine, runs back to back;
+the same configuration varied by about ±5% between runs, so only differences that held
+across runs count):
+
+| Configuration | Throughput | p95 pay | Requests waiting for a connection (avg) |
+|---|---|---|---|
+| Before: `minimum-idle: 5`, 30 s timeout, driver defaults (2 runs) | 120–136 req/s | 206–397 ms | 3.9–7.7 |
+| New pool settings, driver defaults | 138 req/s | 171 ms | 3.1 |
+| New, with statements prepared on the server | 145 req/s | 135 ms | 2.3 |
+| **New, with statements cached on the client (the setting chosen, 3 runs)** | 139–145 req/s | 118–176 ms | 1.4–3.3 |
+| The same with 15 connections | 136 req/s | 181 ms | 2.2 |
+| The same with 20 connections | 145 req/s | 116 ms | 0.5 |
+
+- The old settings were the slowest in every round; statement caching was the biggest
+  single gain.
+- Statements prepared on the server measured no faster than cached on the client, and
+  each one counts against MySQL's global `max_prepared_stmt_count`, which instances ×
+  pool size × 250 cached statements can reach; so they stay on the client.
+- **More connections didn't add throughput.** With 20 the queue for a connection all but
+  vanished, but throughput and latency matched 10: the database and the CPU are the
+  limit, not the pool. So the default stays 10.
+- Two runs had 1 or 2 payments (of about 3,500) fail; the API logged no error for them,
+  and they didn't recur once the test logged each failure's status, so they were most
+  likely network blips between the k6 container and the host.
 
 ## CI/CD pipeline
 
