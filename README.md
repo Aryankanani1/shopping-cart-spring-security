@@ -464,11 +464,15 @@ and the app refuses to start with a live key):
    STRIPE_SECRET_KEY=sk_test_...
    ```
 3. For Stripe's webhooks, have the [Stripe CLI](https://docs.stripe.com/stripe-cli)
-   forward them to the API, and set `PAYMENT_WEBHOOK_SECRET` in `.env` to the
-   `whsec_...` secret it prints:
+   forward them to the API. Set `PAYMENT_WEBHOOK_SECRET` in `.env` to the `whsec_...`
+   secret that `--print-secret` shows, then keep `stripe listen` running while you
+   test. It forwards the four events the shop handles; the CLI (1.54 and later)
+   insists they be named.
    ```bash
    brew install stripe/stripe-cli/stripe && stripe login
-   stripe listen --forward-to localhost:8082/api/v1/payments/webhooks
+   stripe listen --print-secret
+   stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,refund.created,refund.updated \
+     --forward-to localhost:8082/api/v1/payments/webhooks
    ```
 4. Restart the API (`docker compose up -d app`) and pay with `test_visa`,
    `test_mastercard`, `test_declined` or `test_insufficient_funds`: the payments

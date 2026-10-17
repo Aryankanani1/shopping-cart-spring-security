@@ -673,8 +673,10 @@ several `v1` values, which Stripe sends while a secret is being rotated.
 
 From there the processor, the recorders and the exactly-once rules of section 7
 are unchanged. Stripe can't reach a laptop, so locally the Stripe CLI relays them:
-`stripe listen --forward-to localhost:8082/api/v1/payments/webhooks` prints the
-`whsec_` secret to use. A `payment_intent` event doesn't name the card, so a payment
+`stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,refund.created,refund.updated --forward-to localhost:8082/api/v1/payments/webhooks`,
+with the `whsec_` secret that `stripe listen --print-secret` shows. Tried that way,
+each of those events was answered `200`, and one Stripe sent again was recognised
+as a duplicate. A `payment_intent` event doesn't name the card, so a payment
 that a webhook settles first is shown without its brand and last four digits.
 
 ### Test cards
