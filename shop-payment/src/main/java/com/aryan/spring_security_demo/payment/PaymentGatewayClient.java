@@ -31,8 +31,8 @@ public class PaymentGatewayClient {
 
     /** Ask the provider what it did with a charge, retrying the same way as {@link #charge}. */
     @Retryable(includes = PaymentProviderUnavailableException.class, maxRetries = 2, delay = 100, multiplier = 2)
-    public Optional<ChargeResult> findCharge(String idempotencyKey) {
-        return gateway.findCharge(idempotencyKey);
+    public Optional<ChargeResult> findCharge(ChargeRequest request) {
+        return gateway.findCharge(request);
     }
 
     /** Refund through the provider, retrying the same way as {@link #charge}. */

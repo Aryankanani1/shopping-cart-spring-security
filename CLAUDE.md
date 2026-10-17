@@ -81,7 +81,7 @@ There is no app-wide component scan: `SpringSecurityDemoApplication` `@Import`s 
 - Never trust a user id sent by the client to decide whose data to act on; take it from `AuthUtils`.
 - Passwords are hashed only through the `PasswordEncoder` bean; passwords, JWTs and refresh tokens are never logged, and refresh tokens are stored only as hashes.
 - No secrets in committed files (`application*.yml`, `Dockerfile`, `docker-compose.yml`, `.env.example`); secrets come from environment variables.
-- An endpoint another system calls without a user token (a payment provider's webhook) is authenticated by a signature over the raw request body, an HMAC with a secret from the environment, checked with a constant-time comparison (`MessageDigest.isEqual`) and a timestamp tolerance against replays, as `PaymentWebhookService` does; its `permitAll()` says so. It records what it has processed, in the same transaction as the change it makes, so a repeated delivery changes nothing.
+- An endpoint another system calls without a user token (a payment provider's webhook) is authenticated by a signature over the raw request body, an HMAC with a secret from the environment, checked with a constant-time comparison (`MessageDigest.isEqual`) and a timestamp tolerance against replays, as `WebhookSignature` does for each provider's `WebhookReader`; its `permitAll()` says so. It records what it has processed, in the same transaction as the change it makes, so a repeated delivery changes nothing.
 
 ### Persistence and transactions
 - `open-in-view` is off: convert entities to DTOs inside the `@Transactional` service method, and never let a controller accept or return a JPA entity in a new endpoint.

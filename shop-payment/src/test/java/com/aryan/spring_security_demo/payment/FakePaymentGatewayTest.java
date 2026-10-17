@@ -80,7 +80,7 @@ class FakePaymentGatewayTest {
         assertThatThrownBy(() -> gateway.charge(request("pay_1", FakePaymentGateway.TIMEOUT_CHARGED)))
                 .isInstanceOf(PaymentOutcomeUnknownException.class);
 
-        assertThat(gateway.findCharge("pay_1")).hasValueSatisfying(answer ->
+        assertThat(gateway.findCharge(request("pay_1", FakePaymentGateway.TIMEOUT_CHARGED))).hasValueSatisfying(answer ->
                 assertThat(answer).isInstanceOf(ChargeResult.Approved.class));
     }
 
@@ -89,15 +89,15 @@ class FakePaymentGatewayTest {
         assertThatThrownBy(() -> gateway.charge(request("pay_1", FakePaymentGateway.TIMEOUT_NOT_CHARGED)))
                 .isInstanceOf(PaymentOutcomeUnknownException.class);
 
-        assertThat(gateway.findCharge("pay_1")).isEmpty();
+        assertThat(gateway.findCharge(request("pay_1", FakePaymentGateway.TIMEOUT_NOT_CHARGED))).isEmpty();
     }
 
     @Test
     void findCharge_reportsEachKeysAnswer() {
         ChargeResult declined = gateway.charge(request("pay_1", FakePaymentGateway.DECLINED));
 
-        assertThat(gateway.findCharge("pay_1")).contains(declined);
-        assertThat(gateway.findCharge("pay_2")).isEmpty();
+        assertThat(gateway.findCharge(request("pay_1", FakePaymentGateway.DECLINED))).contains(declined);
+        assertThat(gateway.findCharge(request("pay_2", FakePaymentGateway.VISA))).isEmpty();
     }
 
     @Test
@@ -186,7 +186,7 @@ class FakePaymentGatewayTest {
 
         properties.getFake().setLatency(Duration.ofMillis(300));
         ChargeResult.Approved charge = (ChargeResult.Approved) gateway.charge(request("pay_2", FakePaymentGateway.VISA));
-        gateway.findCharge("pay_2");
+        gateway.findCharge(request("pay_2", FakePaymentGateway.VISA));
         gateway.refund(refund("refund_2", charge.providerReference()));
 
         assertThat(waits).containsExactly(Duration.ofMillis(300), Duration.ofMillis(300), Duration.ofMillis(300));

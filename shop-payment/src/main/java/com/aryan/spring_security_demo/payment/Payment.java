@@ -45,6 +45,9 @@ import java.util.Optional;
 }, indexes = @Index(name = "idx_payment_status_refund_requested", columnList = "status, refund_requested_at"))
 public class Payment {
 
+    /** How long {@code failure_reason} may be (V11). */
+    static final int MAX_FAILURE_REASON = 255;
+
     static final String CHARGE_KEY_PREFIX = "pay_";
     static final String REFUND_KEY_PREFIX = "refund_";
 
@@ -89,7 +92,7 @@ public class Payment {
     private String cardLast4;
 
     /** Why the attempt failed, in words the customer can be shown. */
-    @Column(name = "failure_reason")
+    @Column(name = "failure_reason", length = MAX_FAILURE_REASON)
     private String failureReason;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -161,7 +164,15 @@ public class Payment {
     public void fail(String reason, Instant now) {
         moveTo(PaymentStatus.FAILED);
         this.completedAt = now;
-        this.failureReason = reason;
+        this.failureReason = fitted(reason);
+    }
+
+    /** A reason cut to fit its column: a provider's explanation can be longer. */
+    private static String fitted(String reason) {
+        if (reason == null || reason.length() <= MAX_FAILURE_REASON) {
+            return reason;
+        }
+        return reason.substring(0, MAX_FAILURE_REASON - 1) + "…";
     }
 
     /** The order was cancelled: the money is owed back, and the provider is yet to refund it. */

@@ -13,6 +13,7 @@ import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
 import com.aryan.spring_security_demo.order.OrderRepository;
 import com.aryan.spring_security_demo.order.OrderStatus;
+import com.aryan.spring_security_demo.payment.ChargeRequest;
 import com.aryan.spring_security_demo.payment.ChargeResult;
 import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
@@ -269,7 +270,9 @@ class PaymentWebhookIntegrationTest {
 
     /** The provider's real record of the charge, reported as charge.succeeded. */
     private String chargeSucceeded(String eventId, Long paymentId) {
-        ChargeResult.Approved charge = (ChargeResult.Approved) gateway.findCharge("pay_" + paymentId).orElseThrow();
+        // The fake looks a charge up by its key alone.
+        ChargeResult.Approved charge = (ChargeResult.Approved) gateway.findCharge(
+                new ChargeRequest("pay_" + paymentId, null, null, null)).orElseThrow();
         return event(eventId, "charge.succeeded", "{\"idempotencyKey\":\"pay_" + paymentId + "\",\"providerReference\":\""
                 + charge.providerReference() + "\",\"cardBrand\":\"Visa\",\"cardLast4\":\"4242\"}");
     }

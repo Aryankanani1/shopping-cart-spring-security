@@ -3,10 +3,9 @@ package com.aryan.spring_security_demo.payment;
 import java.util.Optional;
 
 /**
- * The boundary with the payment provider. {@link FakePaymentGateway} is the only
- * implementation: this project simulates its money. A real provider would be
- * another implementation calling its HTTPS API, with its key read from the
- * environment.
+ * The boundary with the payment provider: {@link FakePaymentGateway}, simulated in
+ * the app, or {@link StripePaymentGateway}, Stripe's API in test mode
+ * ({@code app.payment.provider}).
  *
  * <p>Never called inside a database transaction (CLAUDE.md): a call can take
  * seconds, and a rollback can't undo a charge.
@@ -27,13 +26,15 @@ public interface PaymentGateway {
     ChargeResult charge(ChargeRequest request);
 
     /**
-     * What the provider did with the charge sent under {@code idempotencyKey}: its
-     * answer, or empty if it never received one. How a payment whose outcome was
-     * lost gets settled.
+     * What the provider did with {@code request}, a charge sent before: its answer,
+     * or empty if it never received one. How a payment whose outcome was lost gets
+     * settled. It takes the whole request, the same as was sent, because a provider
+     * may look a charge up by sending it again (Stripe replays a request only if its
+     * parameters match); doing so must never charge.
      *
      * @throws PaymentProviderUnavailableException if the provider couldn't be reached
      */
-    Optional<ChargeResult> findCharge(String idempotencyKey);
+    Optional<ChargeResult> findCharge(ChargeRequest request);
 
     /**
      * Ask the provider to refund a charge in full. Refunding the same

@@ -8,4 +8,9 @@ import java.math.BigDecimal;
  * attempt, so the provider charges that attempt at most once.
  */
 public record ChargeRequest(String idempotencyKey, BigDecimal amount, String currency, String paymentMethod) {
+
+    /** The request for one payment attempt; the same every time it is built for that attempt. */
+    static ChargeRequest forPayment(Long paymentId, BigDecimal amount, String currency, String paymentMethod) {
+        return new ChargeRequest(Payment.chargeKey(paymentId), amount, currency, paymentMethod);
+    }
 }

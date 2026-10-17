@@ -33,21 +33,22 @@ class PaymentWebhookServiceTest {
     @BeforeEach
     void setUp() {
         properties.setWebhookSecret(SECRET);
-        service = new PaymentWebhookService(properties, processor, events, JsonMapper.builder().build(),
+        WebhookReader reader = new FakeWebhookReader(properties, JsonMapper.builder().build(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new PaymentWebhookService(properties, reader, processor, events);
     }
 
     @Test
     void aSignedEvent_isProcessed_unknownFieldsAndAll() {
         when(processor.process(any())).thenReturn(PaymentWebhookProcessor.Outcome.APPLIED);
 
-        assertThat(service.receive(WebhookSignature.sign(SECRET, NOW, EVENT), EVENT))
+        assertThat(receive(WebhookSignature.sign(SECRET, NOW, EVENT), EVENT))
                 .isEqualTo(PaymentWebhookProcessor.Outcome.APPLIED);
     }
 
     @Test
     void anUnsignedEvent_isRefused_beforeAnyProcessing() {
-        assertThatThrownBy(() -> service.receive(null, EVENT)).isInstanceOf(InvalidWebhookSignatureException.class);
+        assertThatThrownBy(() -> receive(null, EVENT)).isInstanceOf(InvalidWebhookSignatureException.class);
 
         verifyNoInteractions(processor);
     }
@@ -56,7 +57,7 @@ class PaymentWebhookServiceTest {
     void withNoSecretConfigured_everyWebhookIsRefused() {
         properties.setWebhookSecret("");
 
-        assertThatThrownBy(() -> service.receive(WebhookSignature.sign(SECRET, NOW, EVENT), EVENT))
+        assertThatThrownBy(() -> receive(WebhookSignature.sign(SECRET, NOW, EVENT), EVENT))
                 .isInstanceOf(InvalidWebhookSignatureException.class);
     }
 
@@ -64,7 +65,7 @@ class PaymentWebhookServiceTest {
     void aSignedBodyThatIsNotAnEvent_is400() {
         for (String body : new String[] {"not json", "{}", "{\"id\":\"evt_1\"}", "{\"id\":\" \",\"type\":\"x\"}"}) {
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-            assertThatThrownBy(() -> service.receive(WebhookSignature.sign(SECRET, NOW, bytes), bytes))
+            assertThatThrownBy(() -> receive(WebhookSignature.sign(SECRET, NOW, bytes), bytes))
                     .isInstanceOf(InvalidWebhookException.class);
         }
     }
@@ -73,7 +74,7 @@ class PaymentWebhookServiceTest {
     void anOversizedBody_isRefused_beforeTheSignatureIsComputed() {
         byte[] huge = new byte[PaymentWebhookService.MAX_BODY_BYTES + 1];
 
-        assertThatThrownBy(() -> service.receive("t=1,v1=00", huge)).isInstanceOf(InvalidWebhookException.class);
+        assertThatThrownBy(() -> receive("t=1,v1=00", huge)).isInstanceOf(InvalidWebhookException.class);
     }
 
     // Two deliveries at once: the other recorded the event first, and this one rolled back.
@@ -82,7 +83,7 @@ class PaymentWebhookServiceTest {
         when(processor.process(any())).thenThrow(new DataIntegrityViolationException("uk_payment_webhook_event_event_id"));
         when(events.existsByEventId("evt_1")).thenReturn(true);
 
-        assertThat(service.receive(WebhookSignature.sign(SECRET, NOW, EVENT), EVENT))
+        assertThat(receive(WebhookSignature.sign(SECRET, NOW, EVENT), EVENT))
                 .isEqualTo(PaymentWebhookProcessor.Outcome.DUPLICATE);
     }
 
@@ -91,7 +92,12 @@ class PaymentWebhookServiceTest {
         when(processor.process(any())).thenThrow(new DataIntegrityViolationException("something else"));
         when(events.existsByEventId("evt_1")).thenReturn(false);
 
-        assertThatThrownBy(() -> service.receive(WebhookSignature.sign(SECRET, NOW, EVENT), EVENT))
+        assertThatThrownBy(() -> receive(WebhookSignature.sign(SECRET, NOW, EVENT), EVENT))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    /** A delivery from the fake provider, which signs in the Payment-Signature header. */
+    private PaymentWebhookProcessor.Outcome receive(String signature, byte[] body) {
+        return service.receive(new WebhookHeaders(signature, null), body);
     }
 }

@@ -525,7 +525,9 @@ class PaymentIntegrationTest {
         assertThat(settled.getStatus()).isEqualTo(PaymentStatus.SUCCEEDED);
         assertThat(settled.getProviderReference()).startsWith("ch_");
         assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PAID);
-        verify(gateway).findCharge("pay_" + settled.getId());
+        // Looked up with the same request it was charged with, as Stripe needs.
+        verify(gateway).findCharge(new ChargeRequest("pay_" + settled.getId(), settled.getAmount(),
+                settled.getCurrency(), settled.getPaymentMethod()));
         verify(gateway, times(1)).charge(any());  // looked up, never charged again
     }
 

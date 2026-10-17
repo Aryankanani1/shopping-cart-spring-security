@@ -104,10 +104,18 @@ public class PaymentRecorder {
         return PaymentDto.from(payment);
     }
 
-    /** Whether the attempt is still waiting for its outcome. */
+    /**
+     * The charge the attempt was sent to the provider as, while it is still waiting
+     * for its outcome; empty once it is settled.
+     */
     @Transactional(readOnly = true)
-    public boolean isProcessing(Long paymentId) {
-        return load(paymentId).getStatus() == PaymentStatus.PROCESSING;
+    public Optional<ChargeRequest> processingCharge(Long paymentId) {
+        Payment payment = load(paymentId);
+        if (payment.getStatus() != PaymentStatus.PROCESSING) {
+            return Optional.empty();
+        }
+        return Optional.of(ChargeRequest.forPayment(
+                paymentId, payment.getAmount(), payment.getCurrency(), payment.getPaymentMethod()));
     }
 
     /** The attempts still waiting for their outcome since before {@code startedBefore}, oldest first. */
