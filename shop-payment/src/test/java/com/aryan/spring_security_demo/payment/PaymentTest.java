@@ -129,6 +129,17 @@ class PaymentTest {
         assertThat(payment.getCompletedAt()).isEqualTo(SETTLED);
     }
 
+    // Stripe's 280-character refusal once failed the save (the column holds 255),
+    // which left the payment PROCESSING and answered the customer with a 409.
+    @Test
+    void fail_shortensAReasonLongerThanItsColumn() {
+        Payment payment = started();
+
+        payment.fail("x".repeat(280), SETTLED);
+
+        assertThat(payment.getFailureReason()).hasSize(255).endsWith("…");  // failure_reason varchar(255), V11
+    }
+
     @Test
     void aSettledOutcome_neverChanges() {
         Payment payment = started();
