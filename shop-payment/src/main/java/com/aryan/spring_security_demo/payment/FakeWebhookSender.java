@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.payment;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
@@ -25,6 +26,7 @@ import java.util.UUID;
  * they are for.
  */
 @Component
+@ConditionalOnProperty(name = "app.payment.provider", havingValue = "fake", matchIfMissing = true)
 @Slf4j
 public class FakeWebhookSender {
 

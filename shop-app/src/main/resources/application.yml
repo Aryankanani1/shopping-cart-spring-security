@@ -229,6 +229,10 @@ app:
     unpaid-expiry: ${APP_ORDERS_UNPAID_EXPIRY:30m}
     unpaid-expiry-cron: ${APP_ORDERS_UNPAID_EXPIRY_CRON:45 * * * * *}
   payment:
+    # Which provider takes the payments: fake (the default; simulated in the app, and
+    # what the tests, CI and staging use) or stripe (Stripe's test mode, which needs
+    # STRIPE_SECRET_KEY). docs/payment-design.md, section 8.
+    provider: ${APP_PAYMENT_PROVIDER:fake}
     refund-retry-cron: ${APP_PAYMENT_REFUND_RETRY_CRON:30 * * * * *}
     # Settles payments still PROCESSING after 2 minutes (PaymentReconciliationJob)
     # by asking the provider what happened. Every minute, at :15; ShedLock too.
@@ -245,6 +249,10 @@ app:
       # How long each of its calls takes, like a real provider's round trip. 0 (the
       # default) answers at once; the load test (load/checkout.js) raises it.
       latency: ${APP_PAYMENT_FAKE_LATENCY:0ms}
+    stripe:
+      # A test-mode key only (sk_test_... or rk_test_...): startup refuses any other,
+      # so this project can't move real money. From the environment (.env), never here.
+      secret-key: ${STRIPE_SECRET_KEY:}
   startup:
     seed:
       enabled: true

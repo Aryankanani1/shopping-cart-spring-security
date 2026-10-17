@@ -402,10 +402,11 @@ path carries a user id.
 ### Payments
 
 Orders are paid for before they are fulfilled: checkout leaves an order `PENDING`
-with its stock reserved, and a successful payment moves it to `PAID`. The money
-is simulated, by a fake provider inside the app with test payment methods
-(`test_visa`, `test_declined`, `test_insufficient_funds`, `test_flaky`,
-`test_provider_down`, ...). The design, with its diagrams and trade-offs, is in
+with its stock reserved, and a successful payment moves it to `PAID`. No real
+money moves: by default a fake provider inside the app takes the payments, with
+test payment methods (`test_visa`, `test_declined`, `test_insufficient_funds`,
+`test_flaky`, `test_provider_down`, ...), and Stripe's test mode can take its place
+([below](#stripe-in-test-mode)). The design, with its diagrams and trade-offs, is in
 [docs/payment-design.md](docs/payment-design.md).
 
 | Endpoint | Purpose |
@@ -413,7 +414,7 @@ is simulated, by a fake provider inside the app with test payment methods
 | `POST /orders/{orderId}/payments` | Pay, with an `Idempotency-Key` header and `{"paymentMethod": "test_visa"}`: `201` for a new attempt (`SUCCEEDED`, or `FAILED` with the reason), `202` with `PROCESSING` when the provider didn't answer in time, `200` with the first answer when the key was already used |
 | `GET /orders/{orderId}/payments` | The order's attempts, oldest first |
 | `GET /orders/{orderId}/payments/{paymentId}` | One attempt |
-| `POST /payments/webhooks` | Events from the payment provider (`charge.succeeded`, `charge.failed`, `refund.succeeded`), with no user token: authenticated by their `Payment-Signature` |
+| `POST /payments/webhooks` | Events from the payment provider (`charge.succeeded`, `charge.failed`, `refund.succeeded`, or Stripe's equivalents), with no user token: authenticated by their `Payment-Signature` (or Stripe's `Stripe-Signature`) |
 
 - **Never charged twice.** A repeated request with the same key gets the first
   answer; the order row is locked while an attempt starts, so two attempts take
@@ -448,6 +449,34 @@ is simulated, by a fake provider inside the app with test payment methods
   above still cover a webhook that never arrives.
 - An order can't be cancelled while its payment is being processed, nor once it
   has shipped.
+
+#### Stripe in test mode
+
+The fake provider is the default, and what the tests, CI and staging use. To take
+payments through Stripe's real API in test mode instead (free: no real money moves,
+and the app refuses to start with a live key):
+
+1. Create a Stripe account, and copy the test-mode secret key (`sk_test_...`) from
+   **Developers → API keys** in the Stripe dashboard.
+2. Add to `.env`, which git ignores (the key goes nowhere else):
+   ```bash
+   APP_PAYMENT_PROVIDER=stripe
+   STRIPE_SECRET_KEY=sk_test_...
+   ```
+3. For Stripe's webhooks, have the [Stripe CLI](https://docs.stripe.com/stripe-cli)
+   forward them to the API, and set `PAYMENT_WEBHOOK_SECRET` in `.env` to the
+   `whsec_...` secret it prints:
+   ```bash
+   brew install stripe/stripe-cli/stripe && stripe login
+   stripe listen --forward-to localhost:8082/api/v1/payments/webhooks
+   ```
+4. Restart the API (`docker compose up -d app`) and pay with `test_visa`,
+   `test_mastercard`, `test_declined` or `test_insufficient_funds`: the payments
+   and refunds show up in the dashboard's test mode. The methods that simulate
+   timeouts and outages work only with the fake provider.
+
+How the adapter keeps Stripe's idempotency, failures and webhooks safe is in
+[docs/payment-design.md, section 8](docs/payment-design.md#8-stripe-in-test-mode).
 
 ## Startup pipeline
 

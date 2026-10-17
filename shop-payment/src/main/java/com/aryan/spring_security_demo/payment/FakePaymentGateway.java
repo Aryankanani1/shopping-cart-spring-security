@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.payment;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -39,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * are on.
  */
 @Component
+@ConditionalOnProperty(name = "app.payment.provider", havingValue = "fake", matchIfMissing = true)
 public class FakePaymentGateway implements PaymentGateway {
 
     public static final String VISA = "test_visa";
@@ -105,9 +107,9 @@ public class FakePaymentGateway implements PaymentGateway {
     }
 
     @Override
-    public Optional<ChargeResult> findCharge(String idempotencyKey) {
+    public Optional<ChargeResult> findCharge(ChargeRequest request) {
         roundTrip();
-        return Optional.ofNullable(answers.get(idempotencyKey));
+        return Optional.ofNullable(answers.get(request.idempotencyKey()));
     }
 
     @Override

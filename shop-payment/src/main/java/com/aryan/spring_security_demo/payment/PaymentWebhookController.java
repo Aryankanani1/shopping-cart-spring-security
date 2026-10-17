@@ -31,8 +31,9 @@ public class PaymentWebhookController {
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ApiResponse<Void>> receive(
             @RequestHeader(value = WebhookSignature.HEADER, required = false) String signature,
+            @RequestHeader(value = StripeWebhookReader.SIGNATURE_HEADER, required = false) String stripeSignature,
             @RequestBody byte[] body) {
-        webhookService.receive(signature, body);
+        webhookService.receive(new WebhookHeaders(signature, stripeSignature), body);
         return ResponseEntity.ok(new ApiResponse<>("Webhook received", null));
     }
 }

@@ -4,14 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 
-import java.time.Clock;
 
 /**
- * Receives a webhook: checks that it comes from the provider, reads the event, and
- * has {@link PaymentWebhookProcessor} make its change. Not {@code @Transactional}:
+ * Receives a webhook: has the provider's {@link WebhookReader} check that it comes
+ * from the provider and read the event, then has {@link PaymentWebhookProcessor}
+ * make its change. Not {@code @Transactional}:
  * the signature and the body are checked before any database work, and a
  * duplicate that collided is recognised after its transaction has rolled back.
  */
@@ -24,21 +22,21 @@ public class PaymentWebhookService {
     static final int MAX_BODY_BYTES = 64 * 1024;
 
     private final PaymentProperties properties;
+    private final WebhookReader reader;
     private final PaymentWebhookProcessor processor;
     private final PaymentWebhookEventRepository events;
-    private final ObjectMapper objectMapper;
-    private final Clock clock;
 
-    public PaymentWebhookProcessor.Outcome receive(String signature, byte[] body) {
+    public PaymentWebhookProcessor.Outcome receive(WebhookHeaders headers, byte[] body) {
         if (!properties.isWebhooksEnabled()) {
             throw new InvalidWebhookSignatureException("Webhooks are not configured");
         }
         if (body.length > MAX_BODY_BYTES) {
             throw new InvalidWebhookException("The webhook body is too large");
         }
-        WebhookSignature.verify(properties.getWebhookSecret(), signature, body, clock.instant(),
-                properties.getWebhookTolerance());
-        WebhookEvent event = parse(body);
+        WebhookEvent event = reader.read(headers, body);
+        if (isBlankOrLong(event.id()) || isBlankOrLong(event.type())) {
+            throw new InvalidWebhookException("The webhook event needs an id and a type, of at most 64 characters");
+        }
         try {
             PaymentWebhookProcessor.Outcome outcome = processor.process(event);
             log.info("Webhook {} ({}): {}", event.id(), event.type(), outcome);
@@ -52,19 +50,6 @@ public class PaymentWebhookService {
             log.info("Webhook {} was processed by a delivery running at the same time", event.id());
             return PaymentWebhookProcessor.Outcome.DUPLICATE;
         }
-    }
-
-    private WebhookEvent parse(byte[] body) {
-        WebhookEvent event;
-        try {
-            event = objectMapper.readValue(body, WebhookEvent.class);
-        } catch (JacksonException e) {
-            throw new InvalidWebhookException("The webhook body isn't an event");
-        }
-        if (isBlankOrLong(event.id()) || isBlankOrLong(event.type())) {
-            throw new InvalidWebhookException("The webhook event needs an id and a type, of at most 64 characters");
-        }
-        return event;
     }
 
     private static boolean isBlankOrLong(String value) {

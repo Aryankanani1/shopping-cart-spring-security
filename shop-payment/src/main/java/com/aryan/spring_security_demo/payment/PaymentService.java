@@ -42,8 +42,8 @@ public class PaymentService implements PaymentServiceInterface {
     }
 
     private PaymentDto chargeAndRecord(PaymentDto payment) {
-        ChargeRequest request = new ChargeRequest(
-                Payment.chargeKey(payment.id()), payment.amount(), payment.currency(), payment.paymentMethod());
+        ChargeRequest request = ChargeRequest.forPayment(
+                payment.id(), payment.amount(), payment.currency(), payment.paymentMethod());
         ChargeResult result;
         try {
             result = gateway.charge(request);

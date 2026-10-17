@@ -217,13 +217,14 @@ class PaymentRecorderTest {
     }
 
     @Test
-    void isProcessing_untilTheAttemptIsSettled() {
+    void processingCharge_isTheChargeAsSent_untilTheAttemptIsSettled() {
         Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);
         when(paymentRepository.findById(PAYMENT_ID)).thenReturn(Optional.of(payment));
 
-        assertThat(recorder.isProcessing(PAYMENT_ID)).isTrue();
+        assertThat(recorder.processingCharge(PAYMENT_ID)).contains(new ChargeRequest(
+                "pay_" + PAYMENT_ID, payment.getAmount(), "USD", FakePaymentGateway.VISA));
         payment.fail("declined", NOW);
-        assertThat(recorder.isProcessing(PAYMENT_ID)).isFalse();
+        assertThat(recorder.processingCharge(PAYMENT_ID)).isEmpty();
     }
 
     @Test

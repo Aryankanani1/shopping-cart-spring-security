@@ -31,12 +31,13 @@ public class PaymentReconciler {
      *         {@code PROCESSING} for the next run
      */
     public boolean reconcile(Long paymentId) {
-        if (!recorder.isProcessing(paymentId)) {
+        Optional<ChargeRequest> charge = recorder.processingCharge(paymentId);
+        if (charge.isEmpty()) {
             return true;  // settled since, by its request or an earlier run
         }
         Optional<ChargeResult> answer;
         try {
-            answer = gateway.findCharge(Payment.chargeKey(paymentId));
+            answer = gateway.findCharge(charge.get());
         } catch (PaymentProviderUnavailableException e) {
             // No transaction is open here, so catching it hides nothing from a rollback.
             log.warn("Reconciling payment {}: provider unavailable, will try again", paymentId, e);

@@ -25,6 +25,24 @@ class WebhookSignatureTest {
                 .doesNotThrowAnyException();
     }
 
+    // While a secret is being rotated, Stripe signs under the old and the new one.
+    @Test
+    void anyOfSeveralV1Signatures_mayMatch() {
+        String current = WebhookSignature.sign(SECRET, NOW, BODY);
+        String old = WebhookSignature.sign("test-only-older-webhook-secret-000000000000000", NOW, BODY);
+        String header = old + "," + current.substring(current.indexOf("v1=")) + ",v0=0000";
+
+        assertThatCode(() -> WebhookSignature.verify(SECRET, header, BODY, NOW, TOLERANCE))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void severalV1Signatures_noneMatching_isRefused() {
+        String old = WebhookSignature.sign("test-only-older-webhook-secret-000000000000000", NOW, BODY);
+
+        assertRefused(old + ",v1=00ff", BODY, NOW);
+    }
+
     @Test
     void aChangedBody_isRefused() {
         String header = WebhookSignature.sign(SECRET, NOW, BODY);

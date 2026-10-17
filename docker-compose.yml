@@ -88,6 +88,12 @@ services:
       # simulated provider then delivers them to the API itself.
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
       APP_PAYMENT_FAKE_WEBHOOK_URL: http://localhost:8080/api/v1/payments/webhooks
+      # The simulated payment provider, unless .env sets APP_PAYMENT_PROVIDER=stripe
+      # and a test-mode STRIPE_SECRET_KEY (README, "Stripe in test mode"); Stripe's
+      # webhooks then use the whsec_ secret `stripe listen` prints, as
+      # PAYMENT_WEBHOOK_SECRET.
+      APP_PAYMENT_PROVIDER: ${APP_PAYMENT_PROVIDER:-fake}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       # Prometheus scrape account (HTTP Basic, /actuator/prometheus only). Off
       # unless enabled in .env; the monitoring profile's Prometheus uses it.
       PROMETHEUS_SCRAPE_ENABLED: ${PROMETHEUS_SCRAPE_ENABLED:-false}

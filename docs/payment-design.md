@@ -1,10 +1,11 @@
 # Payment service design
 
-This is a portfolio project, so the money is simulated. There is no real payment
-provider and no card data: a fake provider inside the app stands in for one (much
-like a provider's test mode), behind the same interface a real provider would sit
-behind. Everything around it (the transactions, idempotency, locking and failure
-handling) is built the way a real payment flow needs it.
+This is a portfolio project, so the money is simulated, and the server never sees
+card data. By default a fake provider inside the app stands in for a real one (much
+like a provider's test mode), behind the same interface a real provider sits behind;
+Stripe, in test mode, can take its place (section 8). Everything around the provider
+(the transactions, idempotency, locking and failure handling) is built the way a
+real payment flow needs it.
 
 ## 1. Requirements
 
@@ -36,8 +37,8 @@ handling) is built the way a real payment flow needs it.
 
 ### Out of scope
 
-Real providers and card data (PCI DSS), partial refunds, several currencies, saved
-cards, 3-D Secure and payouts.
+Live payments and card data (PCI DSS), partial refunds, several currencies, saved
+cards, 3-D Secure and payouts. Stripe is used in test mode only (section 8).
 
 ## 2. High-level design
 
@@ -54,7 +55,7 @@ flowchart LR
         O -.->|OrderCancellingEvent| P
     end
     API --> DB[(MySQL)]
-    P -->|charge, retried| G[PaymentGateway<br/>FakePaymentGateway runs in the app;<br/>a real provider is an HTTPS API]
+    P -->|charge, retried| G[PaymentGateway<br/>FakePaymentGateway runs in the app;<br/>StripePaymentGateway calls Stripe's test mode]
 ```
 
 - `shop-payment` is a new module that depends on `shop-order` (and on
@@ -63,8 +64,8 @@ flowchart LR
   `shop-payment` handles inside the same transaction, the way `UserDeletingEvent`
   already works.
 - `PaymentGateway` is the boundary with the provider. `FakePaymentGateway`
-  implements it inside the app; a real provider would be another implementation,
-  with its API key coming only from an environment variable.
+  implements it inside the app; `StripePaymentGateway` implements it with Stripe's
+  API in test mode (section 8), its key coming only from an environment variable.
 
 ### Order lifecycle (changed)
 
@@ -512,4 +513,213 @@ and the URL are set: staging and production send them to the API itself.
 as a plain column, not a foreign key, since an event can name a payment the shop
 doesn't know.
 
-## 8. Roadmap
+## 8. Stripe in test mode
+
+The fake provider shows the design; this section plugs in a real provider, Stripe,
+in **test mode**: its real API and real webhooks, with test cards and no real
+money. `app.payment.provider` chooses:
+
+- `fake` (the default): the tests, CI, staging and the E2E tests. It needs no
+  network and no secret, and it can simulate what a real provider won't do on
+  request: timeouts, outages and a refund that fails a few times.
+- `stripe`: a developer's machine, with a test key in `.env`.
+
+Only the edges change: `PaymentGateway` gets a second implementation, and the
+webhook endpoint a second reader. The pay flow, the recorders, the jobs and the
+tables stay as they are.
+
+```mermaid
+flowchart LR
+    C[PaymentGatewayClient<br/>@Retryable] --> G{{PaymentGateway}}
+    G --> F[FakePaymentGateway]
+    G --> S[StripePaymentGateway<br/>RestClient] -->|HTTPS, Idempotency-Key| API[Stripe API, test mode]
+    API -->|webhook| CLI[stripe listen<br/>on the developer's machine]
+    CLI -->|Stripe-Signature| W[POST /api/v1/payments/webhooks]
+    W --> R[StripeWebhookReader] --> P[PaymentWebhookProcessor]
+```
+
+### Test mode only
+
+The app refuses to start with `provider: stripe` unless `STRIPE_SECRET_KEY` is a
+test-mode key (`sk_test_...` or a restricted `rk_test_...`), so this project can't
+move real money however it is configured. The key comes only from the environment:
+`.env` locally, which git ignores, and the local hooks refuse to commit.
+
+### Charging in two idempotent steps
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as PaymentService (no transaction)
+    participant G as StripePaymentGateway
+    participant API as Stripe
+    S->>G: charge(pay_7, 25.00 USD, test_visa)
+    G->>API: POST /v1/payment_intents<br/>amount=2500, currency=usd, payment_method=pm_card_visa,<br/>automatic_payment_methods (no redirects), metadata<br/>Idempotency-Key: <installation>-pay_7
+    API-->>G: pi_123, requires_confirmation (nothing charged yet)
+    G->>API: POST /v1/payment_intents/pi_123/confirm<br/>Idempotency-Key: <installation>-pay_7-confirm
+    API-->>G: succeeded, Visa 4242 (or 402, card_declined)
+    G-->>S: approved (pi_123, Visa, 4242)
+```
+
+A PaymentIntent is Stripe's record of one payment. Creating it charges nothing;
+confirming it charges the card. Splitting the two is what lets a lost answer be
+looked up safely (below). Every request carries a key Stripe deduplicates by, so the
+retries of `PaymentGatewayClient` repeat the same two requests and Stripe answers
+them from its first result.
+
+What each failure means:
+
+| Step | Failure | Card charged? | Result |
+|---|---|---|---|
+| create | can't connect, timeout, `401`/`403` (a bad key), `429`, `5xx` | no: nothing is confirmed yet | unavailable: retried, then `FAILED` |
+| create | another `4xx`, such as an amount under Stripe's minimum | no | declined, with a plain reason (Stripe's message goes to the log) |
+| confirm | can't connect | no: the request never left | unavailable: retried with the same keys |
+| confirm | `402`, a card error | no | declined, with Stripe's message (`Your card was declined.`) |
+| confirm | another `4xx` | no | declined, with a plain reason (Stripe's message goes to the log) |
+| confirm | timeout, connection lost, `5xx` | maybe | outcome unknown: `PROCESSING`, `202`, settled by reconciliation |
+
+Amounts go to Stripe in the currency's smallest unit (cents for USD), worked out
+from the currency's decimal places, exactly or not at all. Stripe's messages can be
+longer than the 255 characters `failure_reason` holds, so a payment keeps the first
+254 and an ellipsis.
+
+Only Stripe's card errors (`card_error`) are shown to the customer: Stripe writes
+those for customers ("Your card was declined."), and its other messages for
+developers.
+
+The first run against Stripe's test mode found three faults that the unit tests,
+which replay answers written by hand, could not:
+
+- The account's API version no longer accepted `payment_method_types`, which the
+  adapter sent. The create request now sends `automatic_payment_methods` (Stripe
+  picks the methods, never one that redirects), and every request pins the API
+  version it was tried against.
+- That refusal (280 characters) was too long for `failure_reason`, so recording the
+  decline failed and left the payment `PROCESSING`, and its text was a developer's
+  message about a parameter. Long reasons are now cut to fit, and the customer sees
+  a plain reason.
+- Reconciliation then sent the fixed create under the old keys, which Stripe
+  refused as `idempotency_error`, and the adapter took that for a decline. Correct
+  that time (Stripe had refused those requests outright), but not in general: it is
+  now left for a person, as above.
+
+### Looking up a lost charge
+
+Stripe replays a request only if both its key and its parameters match the first
+one, so `findCharge` now takes the original `ChargeRequest` (the reconciler rebuilds
+it from the payment row) instead of just its key. It:
+
+1. Sends the create request again. Stripe answers with the PaymentIntent from the
+   first time, or creates it now if the first never arrived: unconfirmed either
+   way, so nothing is charged. If Stripe won't replay it (`idempotency_error`: the
+   request has changed since it was sent, after a deploy), that says nothing about
+   the charge, so the payment stays `PROCESSING` and an error asks a person to
+   settle it from the dashboard. Calling it declined could hide a charge.
+2. Reads the PaymentIntent's status:
+
+| Status | Meaning | Answer |
+|---|---|---|
+| `succeeded` | charged | approved |
+| `requires_payment_method`, with a payment error | declined | declined, with Stripe's message |
+| `requires_confirmation` | the confirm never arrived | cancel it, then "never received" |
+| `canceled` | | "never received" |
+| anything else (`processing`, ...) | still settling | unavailable: the next run asks again |
+
+Cancelling the unconfirmed PaymentIntent makes "never received" final: a confirm
+still on its way would now fail rather than charge. Stripe's Search API could find
+the PaymentIntent by its metadata instead, but it lags behind writes by up to a
+minute and isn't offered in every country.
+
+### Refunds
+
+`refund` sends `POST /v1/refunds` for the PaymentIntent and the payment's amount,
+under the key `<installation>-refund_7`. Can't connect, a timeout, a `401`/`403`,
+`429` or `5xx` is "unavailable": the refund stays `REFUND_PENDING`, and the retry job
+sends the same request again, which Stripe answers with the first refund. A refund
+Stripe accepts, whether succeeded or still pending while the card network carries
+the money back, is recorded as refunded. Any other error, or a refund Stripe
+reports as failed, is logged and left `REFUND_PENDING` for a person: retrying
+can't change Stripe's answer.
+
+### Keys that can't collide: the installation id
+
+Stripe remembers an idempotency key for 24 hours, per account, and sends webhooks
+about every payment in the account. But `pay_7` is unique only within one database.
+A local database wiped and created again starts at payment 1 again, and a second
+database (another developer's laptop) on the same Stripe account has its own
+payment 7. Unchecked, the new payment 7 could get the old one's answer for a day
+(approved without being charged), or have another database's webhook applied to it.
+
+So `V16__installation.sql` gives each database a random id, which MySQL generates
+once when the migration runs. The adapter starts every Stripe key with it and puts
+it in the metadata of every PaymentIntent and refund, and a webhook whose metadata
+names another installation is acknowledged and ignored. The fake provider keeps
+its answers in memory per app, so it doesn't need this.
+
+### Webhooks
+
+Stripe signs its webhooks the way the fake does: `Stripe-Signature: t=...,v1=...`,
+an HMAC-SHA256 over `<t>.<raw body>`, with a `whsec_...` secret that goes in
+`PAYMENT_WEBHOOK_SECRET`. `WebhookSignature` checks both, and now accepts any of
+several `v1` values, which Stripe sends while a secret is being rotated.
+`StripeWebhookReader` turns Stripe's events into the shop's:
+
+| Stripe event | Shop event | Payment found by |
+|---|---|---|
+| `payment_intent.succeeded` | `charge.succeeded` | the PaymentIntent's metadata, `shop_charge_key` |
+| `payment_intent.payment_failed` | `charge.failed` | the same |
+| `refund.created` or `refund.updated`, with status `succeeded` | `refund.succeeded` | the refund's metadata, `shop_refund_key` |
+| anything else | none: recorded and acknowledged | |
+
+From there the processor, the recorders and the exactly-once rules of section 7
+are unchanged. Stripe can't reach a laptop, so locally the Stripe CLI relays them:
+`stripe listen --forward-to localhost:8082/api/v1/payments/webhooks` prints the
+`whsec_` secret to use. A `payment_intent` event doesn't name the card, so a payment
+that a webhook settles first is shown without its brand and last four digits.
+
+### Test cards
+
+The storefront keeps its test methods; the adapter maps them to Stripe's test
+PaymentMethods. Real Stripe won't time out or go down on request, so the methods
+that simulate that stay with the fake: the adapter declines them, saying why,
+without calling Stripe.
+
+| Shop method | Stripe test PaymentMethod |
+|---|---|
+| `test_visa` | `pm_card_visa` |
+| `test_mastercard` | `pm_card_mastercard` |
+| `test_declined` | `pm_card_chargeDeclined` |
+| `test_insufficient_funds` | `pm_card_chargeDeclinedInsufficientFunds` |
+
+### Testing
+
+- Unit tests replay Stripe's responses through Spring's `MockRestServiceServer`:
+  every row of the failure table, each status of the lookup, refunds and the
+  webhook translation. They need no network and no key, so they run in CI.
+- CI, staging and the E2E tests keep the fake provider.
+- The README explains how to try it against Stripe's test mode by hand.
+
+### Key decisions
+
+| Decision | Why | Rejected alternative |
+|---|---|---|
+| Spring's `RestClient` against Stripe's HTTP API | Every request, key and error is visible in the code; `MockRestServiceServer` tests it without a network; no extra dependency to keep free of CVEs | Stripe's Java SDK |
+| Create, then confirm, each with its own key | A lost charge can be looked up without charging anyone | One create with `confirm=true`: asking again would charge |
+| Test-mode keys only, checked at startup | The project can't move real money, whatever its configuration | Trusting the configuration |
+| The fake stays the default | Tests and CI stay offline, deterministic and free of secrets, and keep their simulated failures | Stripe in CI |
+| An installation id in every key and in the metadata | Databases sharing a Stripe account can't receive each other's answers or events | `pay_<id>` alone |
+| Stripe's test PaymentMethods, chosen on the server | The API and webhooks are real without a card form in the browser | Stripe Elements now (on the roadmap) |
+| Every request pins `Stripe-Version: 2026-09-30.endive`, the version it was tried against | The account's default version changes when the account is upgraded, and a new version can drop a parameter the adapter sends (as `payment_method_types` was dropped) | The account's default version |
+
+## 9. Roadmap
+
+- **Phase 1**, done (#177): everything in sections 1 to 3, the pay step on the
+  storefront's order page, and tests (unit, integration against MySQL,
+  end-to-end).
+- **Phase 2**, done: refunds when a paid order is cancelled (section 4, #178),
+  reconciliation of payments stuck in `PROCESSING` (section 5, #179), and expiry of
+  orders left unpaid (section 6, #180).
+- **Phase 3**, done: provider webhooks with a signature check (section 7, #181),
+  and Stripe in test mode (section 8).
+- **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure;
+  partial refunds.
