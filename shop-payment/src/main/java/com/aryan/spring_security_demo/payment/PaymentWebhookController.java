@@ -1,6 +1,8 @@
 package com.aryan.spring_security_demo.payment;
 
 import com.aryan.spring_security_demo.common.web.ApiResponse;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +34,11 @@ public class PaymentWebhookController {
     public ResponseEntity<ApiResponse<Void>> receive(
             @RequestHeader(value = WebhookSignature.HEADER, required = false) String signature,
             @RequestHeader(value = StripeWebhookReader.SIGNATURE_HEADER, required = false) String stripeSignature,
+            // Read as the bytes that were signed, but documented as the event they hold,
+            // so the staging fuzzing generates events, not a base64 string. The
+            // simulated provider's event; with Stripe, the body is Stripe's.
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = WebhookEvent.class)))
             @RequestBody byte[] body) {
         webhookService.receive(new WebhookHeaders(signature, stripeSignature), body);
         return ResponseEntity.ok(new ApiResponse<>("Webhook received", null));

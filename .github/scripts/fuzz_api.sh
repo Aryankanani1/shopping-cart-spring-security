@@ -2,7 +2,9 @@
 # Fuzzes the staging API against its contract, docs/openapi.json, with Schemathesis:
 # thousands of generated requests, valid and malformed, and any 5xx fails the stage.
 # Run by pipeline.yml's staging stage after the E2E tests, against the staging setup
-# on https://localhost, with the admin's sign-in in E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD.
+# on https://localhost, with the admin's sign-in in E2E_ADMIN_EMAIL/E2E_ADMIN_PASSWORD
+# and the webhook secret in PAYMENT_WEBHOOK_SECRET: schemathesis_hooks.py signs each
+# generated webhook delivery with it, so they get past the signature check.
 #
 # With made-up ids, an operation on one order, cart or product stops at a 404 before
 # the code behind it. So the script first creates, through the API, a customer with
@@ -18,6 +20,7 @@
 set -euo pipefail
 
 base_url=${BASE_URL:-https://localhost}
+: "${PAYMENT_WEBHOOK_SECRET:?}"
 out=${RUNNER_TEMP:?}/schemathesis
 mkdir -p "$out"
 
@@ -149,6 +152,8 @@ fuzz() {
   mkdir -p "$out/$run"
   docker run --rm --network host --user "$(id -u):$(id -g)" \
     -v "$PWD/docs:/spec:ro" -v "$out/$user.toml:/config/schemathesis.toml:ro" -v "$out/$run:/work" -w /work \
+    -v "$PWD/.github/scripts/schemathesis_hooks.py:/hooks/schemathesis_hooks.py:ro" \
+    -e SCHEMATHESIS_HOOKS=/hooks/schemathesis_hooks.py -e PAYMENT_WEBHOOK_SECRET \
     "${SCHEMATHESIS_IMAGE:?}" --config-file /config/schemathesis.toml run /spec/openapi.json \
     --url "$base_url" --tls-verify false \
     --header "Authorization: Bearer $token" \

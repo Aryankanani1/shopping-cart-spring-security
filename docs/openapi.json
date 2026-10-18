@@ -34,6 +34,8 @@
           },
           "price" : {
             "exclusiveMinimum" : 0,
+            "maximum" : 9.9999999999999E11,
+            "multipleOf" : 0.01,
             "type" : "number"
           }
         },
@@ -720,6 +722,8 @@
           },
           "price" : {
             "exclusiveMinimum" : 0,
+            "maximum" : 9.9999999999999E11,
+            "multipleOf" : 0.01,
             "type" : "number"
           }
         },
@@ -814,9 +818,26 @@
         "type" : "object"
       },
       "RefundOrderRequest" : {
+        "oneOf" : [ {
+          "properties" : {
+            "items" : {
+              "minItems" : 1
+            }
+          },
+          "required" : [ "items" ]
+        }, {
+          "properties" : {
+            "restock" : {
+              "const" : false
+            }
+          },
+          "required" : [ "amount" ]
+        } ],
         "properties" : {
           "amount" : {
+            "maximum" : 9.9999999999999E11,
             "minimum" : 0.01,
+            "multipleOf" : 0.01,
             "type" : "number"
           },
           "items" : {
@@ -891,6 +912,48 @@
           }
         },
         "required" : [ "firstName", "lastName" ],
+        "type" : "object"
+      },
+      "WebhookEvent" : {
+        "properties" : {
+          "created" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "data" : {
+            "$ref" : "#/components/schemas/WebhookEventData"
+          },
+          "id" : {
+            "type" : "string"
+          },
+          "type" : {
+            "enum" : [ "charge.succeeded", "charge.failed", "refund.succeeded" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "WebhookEventData" : {
+        "properties" : {
+          "cardBrand" : {
+            "type" : "string"
+          },
+          "cardLast4" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "idempotencyKey" : {
+            "type" : "string"
+          },
+          "providerReference" : {
+            "type" : "string"
+          },
+          "refundReference" : {
+            "type" : "string"
+          }
+        },
         "type" : "object"
       },
       "WishlistAlertsRequest" : {
@@ -1432,6 +1495,11 @@
         "requestBody" : {
           "content" : {
             "multipart/form-data" : {
+              "encoding" : {
+                "files" : {
+                  "contentType" : "image/gif, image/jpeg, image/png, image/webp"
+                }
+              },
               "schema" : {
                 "properties" : {
                   "files" : {
@@ -1529,6 +1597,11 @@
         "requestBody" : {
           "content" : {
             "multipart/form-data" : {
+              "encoding" : {
+                "file" : {
+                  "contentType" : "image/gif, image/jpeg, image/png, image/webp"
+                }
+              },
               "schema" : {
                 "properties" : {
                   "file" : {
@@ -2083,8 +2156,7 @@
           "content" : {
             "application/json" : {
               "schema" : {
-                "format" : "byte",
-                "type" : "string"
+                "$ref" : "#/components/schemas/WebhookEvent"
               }
             }
           },

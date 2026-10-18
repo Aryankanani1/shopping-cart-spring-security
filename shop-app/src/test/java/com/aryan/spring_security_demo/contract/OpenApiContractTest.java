@@ -121,6 +121,52 @@ class OpenApiContractTest {
         assertThat(replace.at("/requestBody/content").fieldNames()).toIterable().containsExactly("multipart/form-data");
     }
 
+    @Test
+    @DisplayName("a product's price and a refund's amount have their @Digits limits")
+    void moneyFields_haveTheirLimits() throws Exception {
+        JsonNode schemas = generatedSpec().path("components").path("schemas");
+
+        for (JsonNode money : new JsonNode[] {schemas.at("/AddProductRequest/properties/price"),
+                schemas.at("/ProductUpdateRequest/properties/price"), schemas.at("/RefundOrderRequest/properties/amount")}) {
+            assertThat(money.path("maximum").decimalValue()).as(money.toString()).isEqualByComparingTo("999999999999.99");
+            assertThat(money.path("multipleOf").decimalValue()).as(money.toString()).isEqualByComparingTo("0.01");
+        }
+    }
+
+    @Test
+    @DisplayName("an image upload's file parts list the image types")
+    void imageUploads_listTheImageTypes() throws Exception {
+        JsonNode spec = generatedSpec();
+        String types = "image/gif, image/jpeg, image/png, image/webp";
+
+        assertThat(spec.at("/paths/~1api~1v1~1images/post/requestBody/content/multipart~1form-data/encoding/files/contentType")
+                .asText()).isEqualTo(types);
+        assertThat(spec.at("/paths/~1api~1v1~1images~1{imageId}/put/requestBody/content/multipart~1form-data/encoding/file/contentType")
+                .asText()).isEqualTo(types);
+    }
+
+    @Test
+    @DisplayName("a refund is of items or of an amount")
+    void aRefund_isOfItemsOrOfAnAmount() throws Exception {
+        JsonNode kinds = generatedSpec().at("/components/schemas/RefundOrderRequest/oneOf");
+
+        assertThat(kinds).hasSize(2);
+        assertThat(kinds.at("/0/required/0").asText()).isEqualTo("items");
+        assertThat(kinds.at("/1/required/0").asText()).isEqualTo("amount");
+        assertThat(kinds.at("/1/properties/restock/const").asBoolean(true)).isFalse();
+    }
+
+    @Test
+    @DisplayName("a webhook's body is an event")
+    void aWebhooksBody_isAnEvent() throws Exception {
+        JsonNode spec = generatedSpec();
+
+        assertThat(spec.at("/paths/~1api~1v1~1payments~1webhooks/post/requestBody/content/application~1json/schema/$ref")
+                .asText()).isEqualTo("#/components/schemas/WebhookEvent");
+        assertThat(spec.at("/components/schemas/WebhookEvent/properties/type/enum")).extracting(JsonNode::asText)
+                .containsExactlyInAnyOrder("charge.succeeded", "charge.failed", "refund.succeeded");
+    }
+
     /** The operation's parameter of that name, or a missing node. */
     private static JsonNode parameter(JsonNode operation, String name) {
         for (JsonNode parameter : operation.path("parameters")) {

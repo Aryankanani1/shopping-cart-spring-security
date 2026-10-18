@@ -48,4 +48,9 @@ public class OpenApiConfig {
     public PropertyCustomizer notBlankPropertyCustomizer() {
         return new NotBlankPropertyCustomizer();
     }
+
+    @Bean
+    public PropertyCustomizer digitsPropertyCustomizer() {
+        return new DigitsPropertyCustomizer();
+    }
 }

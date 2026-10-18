@@ -22,10 +22,16 @@ public class FakeWebhookReader implements WebhookReader {
     public WebhookEvent read(WebhookHeaders headers, byte[] body) {
         WebhookSignature.verify(properties.getWebhookSecret(), headers.paymentSignature(), body, clock.instant(),
                 properties.getWebhookTolerance());
+        WebhookEvent event;
         try {
-            return objectMapper.readValue(body, WebhookEvent.class);
+            event = objectMapper.readValue(body, WebhookEvent.class);
         } catch (JacksonException e) {
             throw new InvalidWebhookException("The webhook body isn't an event");
         }
+        // A body of null reads as no event at all, which was a 500 further on.
+        if (event == null) {
+            throw new InvalidWebhookException("The webhook body isn't an event");
+        }
+        return event;
     }
 }

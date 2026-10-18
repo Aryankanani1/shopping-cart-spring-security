@@ -83,7 +83,9 @@ public class ProductController {
         }
     }
 
-    @GetMapping("/{productId:\\d+}")
+    // A number only, so /products/count isn't read as an id; a negative one too, or it
+    // matched PUT and DELETE /products/{id} instead and got a 405.
+    @GetMapping("/{productId:-?\\d+}")
     public ResponseEntity<ApiResponse<?>> getProductById(@PathVariable("productId") Long id){
         return ResponseEntity.ok(new ApiResponse<>("Success!", productServiceInterface.getProductDtoById(id)));
     }

@@ -646,10 +646,17 @@ customer with a paid order, a refund, a cart item and a product with an image, s
 most requests to an operation on one record use a real id and reach the code behind the
 404 (the rest are still generated). It then fuzzes as that customer and as an admin,
 which also reaches the admin-only operations, with the deletes in runs of their own at
-the end, so they can't take those records away early. The spec has to be as strict as the
-API's validation, or the fuzzer spends its requests on bodies the API refuses; that is
-why a `@NotBlank` field is documented with a pattern (`NotBlankPropertyCustomizer`). To
-fuzz a local API (dev profile on :8082):
+the end, so they can't take those records away early. A Schemathesis hook
+([`schemathesis_hooks.py`](.github/scripts/schemathesis_hooks.py)) signs each generated
+webhook delivery with staging's webhook secret, so the fuzzer reaches the code that
+handles an event instead of stopping at the signature check.
+
+The spec has to be as strict as the API's validation, or the fuzzer spends its requests
+on bodies the API refuses. So a `@NotBlank` field is documented with a pattern
+(`NotBlankPropertyCustomizer`), a `@Digits` number with its largest value and decimals
+(`DigitsPropertyCustomizer`), a refund as items or an amount (`RefundRequestDocs`), and
+an upload's file parts with the image types (`ImageUploadDocs`). To fuzz a local API
+(dev profile on :8082):
 
 ```bash
 docker run --rm -v "$PWD/docs:/spec:ro" schemathesis/schemathesis:4.31.1 run /spec/openapi.json \
