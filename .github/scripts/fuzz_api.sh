@@ -10,14 +10,16 @@
 # with $1 of each refunded, and a cart item. The fuzzer uses their ids for most of
 # its requests; the rest are still generated, malformed ones included.
 #
-# Two runs, over every operation but deleteUser: as the customer, then as an admin,
-# which reaches the admin-only operations. The admin's goes last, so its deletes
-# can't take the data away from the customer's; staging is thrown away afterwards.
+# Four runs, over every operation but deleteUser: everything but the deletes as the
+# customer, then as an admin, which reaches the admin-only operations; then the
+# deletes, the customer's and then the admin's. Run among the rest, the deletes
+# took the records away early, so most of a run got 404s. Staging is thrown away
+# afterwards.
 set -euo pipefail
 
 base_url=${BASE_URL:-https://localhost}
 out=${RUNNER_TEMP:?}/schemathesis
-mkdir -p "$out/customer" "$out/admin"
+mkdir -p "$out"
 
 # In the pipeline, keeps a secret out of the log.
 mask() {
@@ -94,7 +96,7 @@ for id in "$user_id" "$category_id" "$product_id" "$image_id" "$cart_id" "$cart_
   [[ $id =~ ^[0-9]+$ ]] || { echo "The API returned '$id' for an id" >&2; exit 1; }
 done
 
-# A run's Schemathesis config, with the ids it uses. Written here because they have
+# A user's Schemathesis config, with the ids its runs use. Written here because they have
 # to be integers: Schemathesis's own ${VAR} gives a string, which an integer
 # parameter's schema rejects, so it would never be used.
 write_config() {
@@ -138,27 +140,35 @@ parameters = { "path.id" = { dictionary = "product", probability = 0.8 } }
 EOF
 }
 
-# One run, as whoever the token is for. It works in its own directory, where
+# One run, as the user (customer or admin) whose token and config it gets, over
+# the operations its other arguments select. It works in its own directory, where
 # Schemathesis writes its coverage report and examples database.
 fuzz() {
-  local run=$1 token=$2
+  local run=$1 user=$2 token=$3
+  shift 3
+  mkdir -p "$out/$run"
   docker run --rm --network host --user "$(id -u):$(id -g)" \
-    -v "$PWD/docs:/spec:ro" -v "$out/$run:/work" -w /work \
-    "${SCHEMATHESIS_IMAGE:?}" --config-file /work/schemathesis.toml run /spec/openapi.json \
+    -v "$PWD/docs:/spec:ro" -v "$out/$user.toml:/config/schemathesis.toml:ro" -v "$out/$run:/work" -w /work \
+    "${SCHEMATHESIS_IMAGE:?}" --config-file /config/schemathesis.toml run /spec/openapi.json \
     --url "$base_url" --tls-verify false \
     --header "Authorization: Bearer $token" \
     --checks not_a_server_error --max-examples 25 \
     --exclude-operation-id deleteUser \
-    --report junit --report-junit-path /work/junit.xml
+    --report junit --report-junit-path /work/junit.xml \
+    "$@"
 }
 
-write_config "${orders[0]}" "${payments[0]}" "${refunds[0]}" > "$out/customer/schemathesis.toml"
-write_config "${orders[1]}" "${payments[1]}" "${refunds[1]}" > "$out/admin/schemathesis.toml"
+write_config "${orders[0]}" "${payments[0]}" "${refunds[0]}" > "$out/customer.toml"
+write_config "${orders[1]}" "${payments[1]}" "${refunds[1]}" > "$out/admin.toml"
 
-# Both runs, even when the first finds a 5xx.
+# Every run, even when an earlier one finds a 5xx.
 status=0
 echo "=== Fuzzing as a customer"
-fuzz customer "$customer_token" || status=1
+fuzz customer customer "$customer_token" --exclude-method DELETE || status=1
 echo "=== Fuzzing as an admin"
-fuzz admin "$admin_token" || status=1
+fuzz admin admin "$admin_token" --exclude-method DELETE || status=1
+echo "=== Fuzzing the deletes as a customer"
+fuzz customer-deletes customer "$customer_token" --include-method DELETE || status=1
+echo "=== Fuzzing the deletes as an admin"
+fuzz admin-deletes admin "$admin_token" --include-method DELETE || status=1
 exit "$status"

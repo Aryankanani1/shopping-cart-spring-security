@@ -482,9 +482,9 @@ jobs:
       # Fuzz the running API against its committed contract (docs/openapi.json):
       # thousands of generated requests, valid and malformed, and any 5xx fails the
       # stage. The script first creates the records the operations on one order, cart
-      # or product need, so they get past a 404, then fuzzes as a customer and then as
-      # an admin (last, so its deletes can't take the customer's data away), never
-      # deleting an account.
+      # or product need, so they get past a 404, then fuzzes as a customer and as an
+      # admin, with the deletes last so they can't take those records away early;
+      # never deleting an account.
       - name: Fuzz the API (Schemathesis)
         run: .github/scripts/fuzz_api.sh
 

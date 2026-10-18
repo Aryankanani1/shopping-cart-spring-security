@@ -644,8 +644,9 @@ firewall rejects, a `page` so large its offset overflowed, a `%` in `sort`); the
 400s now. [`.github/scripts/fuzz_api.sh`](.github/scripts/fuzz_api.sh) first creates a
 customer with a paid order, a refund, a cart item and a product with an image, so that
 most requests to an operation on one record use a real id and reach the code behind the
-404 (the rest are still generated). It then fuzzes twice: as that customer, then as an
-admin, which also reaches the admin-only operations. The spec has to be as strict as the
+404 (the rest are still generated). It then fuzzes as that customer and as an admin,
+which also reaches the admin-only operations, with the deletes in runs of their own at
+the end, so they can't take those records away early. The spec has to be as strict as the
 API's validation, or the fuzzer spends its requests on bodies the API refuses; that is
 why a `@NotBlank` field is documented with a pattern (`NotBlankPropertyCustomizer`). To
 fuzz a local API (dev profile on :8082):
