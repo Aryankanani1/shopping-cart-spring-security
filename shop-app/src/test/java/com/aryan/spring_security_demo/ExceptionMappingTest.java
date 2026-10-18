@@ -11,6 +11,7 @@ import com.aryan.spring_security_demo.common.exception.AlreadyExistsException;
 import com.aryan.spring_security_demo.common.exception.GlobalExceptionHandler;
 import com.aryan.spring_security_demo.common.exception.InvalidSortException;
 import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
+import com.aryan.spring_security_demo.common.exception.ServiceUnavailableException;
 import com.aryan.spring_security_demo.identity.InvalidPasswordException;
 import com.aryan.spring_security_demo.identity.InvalidRefreshTokenException;
 import com.aryan.spring_security_demo.identity.UserNotFoundException;
@@ -25,6 +26,7 @@ import org.springframework.web.method.annotation.ExceptionHandlerMethodResolver;
 
 import java.lang.reflect.Method;
 import java.sql.SQLTransientConnectionException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -89,6 +91,22 @@ class ExceptionMappingTest {
                         "Malformed request", "The request parameters could not be decoded", null),
                 arguments(new RequestRejectedException("The parameter name \"x\" is not allowed"), 400,
                         "Malformed request", "The request was rejected", null));
+    }
+
+    // A dependency known to be failing (an open circuit breaker): refused, not tried,
+    // and the client is told when to come back.
+    @Test
+    void aServiceKnownToBeDown_is503_withItsRetryAfter_roundedUp() throws Exception {
+        ServiceUnavailableException exception = new ServiceUnavailableException(
+                "Payments are paused for a moment", Duration.ofMillis(29_500));
+        Method method = RESOLVER.resolveMethod(exception);
+        assertThat(method).isNotNull();
+
+        ResponseEntity<?> response = (ResponseEntity<?>) method.invoke(HANDLER, exception);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(503);
+        assertThat(response.getHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("30");
+        assertThat(((ProblemDetail) response.getBody()).getDetail()).isEqualTo("Payments are paused for a moment");
     }
 
     // An exhausted pool (or an unreachable database) is a 503 the client may retry,

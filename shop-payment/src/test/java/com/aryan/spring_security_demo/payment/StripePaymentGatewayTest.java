@@ -1,5 +1,7 @@
 package com.aryan.spring_security_demo.payment;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -17,6 +19,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.math.BigDecimal;
 import java.net.ConnectException;
 import java.net.http.HttpTimeoutException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -52,12 +55,13 @@ class StripePaymentGatewayTest {
 
     private final RestClient.Builder builder = RestClient.builder();
     private final MockRestServiceServer stripe = MockRestServiceServer.bindTo(builder).build();
+    private final CircuitBreaker breaker = CircuitBreaker.of(StripePaymentGateway.BREAKER, breakerConfig());
     private final StripePaymentGateway gateway = new StripePaymentGateway(properties(), new Installation(null) {
         @Override
         public String id() {
             return INSTALLATION;
         }
-    }, JsonMapper.builder().build(), builder);
+    }, JsonMapper.builder().build(), builder, breaker);
 
     @AfterEach
     void everyExpectedRequestWasSent() {
@@ -225,7 +229,7 @@ class StripePaymentGatewayTest {
         expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
         expectLookup().andRespond(withSuccess(intent("processing"), MediaType.APPLICATION_JSON));
 
-        assertThatThrownBy(() -> gateway.findCharge(visa())).isInstanceOf(PaymentProviderUnavailableException.class);
+        assertThatThrownBy(() -> gateway.findCharge(visa())).isInstanceOf(PaymentNotSettledException.class);
     }
 
     @Test
@@ -246,7 +250,7 @@ class StripePaymentGatewayTest {
                         {"error": {"type": "idempotency_error",
                                    "message": "Keys for idempotent requests can only be used with the same parameters."}}"""));
 
-        assertThatThrownBy(() -> gateway.findCharge(visa())).isInstanceOf(PaymentProviderUnavailableException.class);
+        assertThatThrownBy(() -> gateway.findCharge(visa())).isInstanceOf(PaymentNotSettledException.class);
     }
 
     @Test
@@ -310,6 +314,85 @@ class StripePaymentGatewayTest {
         assertThatThrownBy(() -> gateway.refund(refund())).isInstanceOf(IllegalStateException.class);
     }
 
+    // --- circuit breaker (docs/payment-design.md, section 9) ---------------------
+
+    @Test
+    void whileStripeKeepsFailing_theBreakerOpens_andCallsStopReachingIt() {
+        expectCreate().andRespond(withServerError());
+        expectCreate().andRespond(withServerError());
+        for (int call = 0; call < 2; call++) {
+            assertThatThrownBy(() -> gateway.charge(visa())).isInstanceOf(PaymentProviderUnavailableException.class);
+        }
+
+        assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+        // No request expected: verify() after each test fails on any that is sent.
+        assertThatThrownBy(() -> gateway.charge(visa())).isInstanceOf(PaymentProviderCircuitOpenException.class);
+        assertThatThrownBy(() -> gateway.refund(refund())).isInstanceOf(PaymentProviderCircuitOpenException.class);
+        assertThat(gateway.unavailableFor()).contains(Duration.ofSeconds(30));
+    }
+
+    @Test
+    void declines_areStripeAnswering_soTheyDontOpenTheBreaker() {
+        for (int call = 0; call < 3; call++) {
+            expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
+            expectConfirm().andRespond(withStatus(HttpStatus.PAYMENT_REQUIRED)
+                    .body(CARD_DECLINED).contentType(MediaType.APPLICATION_JSON));
+        }
+        for (int call = 0; call < 3; call++) {
+            gateway.charge(visa());
+        }
+
+        assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+        assertThat(breaker.getMetrics().getNumberOfFailedCalls()).isZero();
+        assertThat(gateway.unavailableFor()).isEmpty();
+    }
+
+    // Reconciliation looks a stuck payment up every minute: those answers mustn't add up.
+    @Test
+    void aLookupStripeAnswersWithoutSettling_isNotAFailure() {
+        expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
+        expectLookup().andRespond(withSuccess(intent("processing"), MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> gateway.findCharge(visa())).isInstanceOf(PaymentNotSettledException.class);
+
+        assertThat(breaker.getMetrics().getNumberOfFailedCalls()).isZero();
+    }
+
+    @Test
+    void aMethodOnlyTheFakeSimulates_isNotACallForTheBreaker() {
+        gateway.charge(new ChargeRequest("pay_7", new BigDecimal("25.00"), "USD", FakePaymentGateway.PROVIDER_DOWN));
+
+        assertThat(breaker.getMetrics().getNumberOfBufferedCalls()).isZero();
+    }
+
+    @Test
+    void halfOpen_trialCallsThatSucceed_closeTheBreakerAgain() {
+        breaker.transitionToOpenState();
+        breaker.transitionToHalfOpenState();  // as it does by itself after its wait
+        for (int call = 0; call < 2; call++) {
+            expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
+            expectConfirm().andRespond(withSuccess(SUCCEEDED, MediaType.APPLICATION_JSON));
+        }
+        for (int call = 0; call < 2; call++) {
+            gateway.charge(visa());
+        }
+
+        assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+    }
+
+    @Test
+    void halfOpen_trialCallsThatFail_openTheBreakerAgain() {
+        breaker.transitionToOpenState();
+        breaker.transitionToHalfOpenState();
+        expectCreate().andRespond(withServerError());
+        expectCreate().andRespond(withServerError());
+        for (int call = 0; call < 2; call++) {
+            assertThatThrownBy(() -> gateway.charge(visa())).isInstanceOf(PaymentProviderUnavailableException.class);
+        }
+
+        assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+    }
+
     // --- amounts -----------------------------------------------------------
 
     @Test
@@ -363,6 +446,23 @@ class StripePaymentGatewayTest {
 
     private static RefundRequest refund() {
         return new RefundRequest("refund_7", "pi_123", new BigDecimal("25.00"), "USD");
+    }
+
+    /**
+     * application.yml's rules for what counts (the context test checks they match),
+     * with a window small enough to fill in a test.
+     */
+    private static CircuitBreakerConfig breakerConfig() {
+        return CircuitBreakerConfig.custom()
+                .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
+                .slidingWindowSize(4)
+                .minimumNumberOfCalls(2)
+                .failureRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofSeconds(30))
+                .permittedNumberOfCallsInHalfOpenState(2)
+                .recordExceptions(PaymentProviderUnavailableException.class, PaymentOutcomeUnknownException.class)
+                .ignoreExceptions(PaymentNotSettledException.class)
+                .build();
     }
 
     private static PaymentProperties properties() {

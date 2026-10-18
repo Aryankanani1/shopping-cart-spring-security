@@ -284,6 +284,20 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         "The service is busy; please retry shortly"));
     }
 
+    /**
+     * 503 — something the request needs is known to be failing (an open circuit
+     * breaker), so it wasn't tried; Retry-After says when it is worth trying again,
+     * in whole seconds, rounded up.
+     */
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleServiceUnavailable(ServiceUnavailableException ex) {
+        log.warn("503 {}", ex.getMessage());
+        long seconds = Math.max(1, (ex.getRetryAfter().toMillis() + 999) / 1000);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
+                .body(problem(HttpStatus.SERVICE_UNAVAILABLE, "Service unavailable", ex.getMessage()));
+    }
+
     /** 500 — the catch-all for anything not handled above. */
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {

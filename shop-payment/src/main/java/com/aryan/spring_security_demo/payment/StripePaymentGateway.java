@@ -1,5 +1,8 @@
 package com.aryan.spring_security_demo.payment;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,10 +27,12 @@ import java.net.ConnectException;
 import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpConnectTimeoutException;
+import java.time.Duration;
 import java.util.Currency;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Stripe's API in test mode (docs/payment-design.md, section 8), over HTTPS with
@@ -40,6 +45,10 @@ import java.util.Optional;
  *
  * <p>The app doesn't start unless the key is a test-mode one
  * ({@link PaymentProperties#isStripeKeyForTestMode()}), so no real money moves.
+ *
+ * <p>Every call goes through the {@value #BREAKER} circuit breaker (section 9): when
+ * Stripe keeps failing, it opens, and calls fail at once with
+ * {@link PaymentProviderCircuitOpenException} instead of waiting for timeouts.
  */
 @Component
 @ConditionalOnProperty(name = "app.payment.provider", havingValue = "stripe")
@@ -70,21 +79,27 @@ public class StripePaymentGateway implements PaymentGateway {
     static final String REFUSED = "The payment provider couldn't take this payment; please try again later "
             + "or use another method.";
 
+    /** The circuit breaker's name; its settings are under {@code resilience4j.circuitbreaker.instances}. */
+    static final String BREAKER = "stripe";
+
     private static final String INTENTS = "/v1/payment_intents";
 
     private final RestClient http;
     private final Installation installation;
     private final ObjectMapper objectMapper;
+    private final CircuitBreaker breaker;
 
     @Autowired
-    public StripePaymentGateway(PaymentProperties properties, Installation installation, ObjectMapper objectMapper) {
+    public StripePaymentGateway(PaymentProperties properties, Installation installation, ObjectMapper objectMapper,
+                                CircuitBreakerRegistry breakers) {
         this(properties, installation, objectMapper,
-                RestClient.builder().requestFactory(requestFactory(properties.getStripe())));
+                RestClient.builder().requestFactory(requestFactory(properties.getStripe())),
+                breakers.circuitBreaker(BREAKER));
     }
 
-    /** Takes the builder, so that tests can bind a {@code MockRestServiceServer} to it. */
+    /** Takes the builder and the breaker, so that tests can bind a {@code MockRestServiceServer} and set the breaker up. */
     StripePaymentGateway(PaymentProperties properties, Installation installation, ObjectMapper objectMapper,
-                         RestClient.Builder builder) {
+                         RestClient.Builder builder, CircuitBreaker breaker) {
         PaymentProperties.Stripe stripe = properties.getStripe();
         this.http = builder.baseUrl(stripe.getApiBase())
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + stripe.getSecretKey())
@@ -92,14 +107,58 @@ public class StripePaymentGateway implements PaymentGateway {
                 .build();
         this.installation = installation;
         this.objectMapper = objectMapper;
+        this.breaker = breaker;
     }
 
     @Override
     public ChargeResult charge(ChargeRequest request) {
         String testCard = TEST_CARDS.get(request.paymentMethod());
         if (testCard == null) {
-            return new ChargeResult.Declined(NOT_ON_STRIPE);
+            return new ChargeResult.Declined(NOT_ON_STRIPE);  // never sent, so not a call for the breaker
         }
+        return guarded(() -> chargeOnce(request, testCard));
+    }
+
+    @Override
+    public Optional<ChargeResult> findCharge(ChargeRequest request) {
+        String testCard = TEST_CARDS.get(request.paymentMethod());
+        if (testCard == null) {
+            return Optional.of(new ChargeResult.Declined(NOT_ON_STRIPE));
+        }
+        return guarded(() -> lookUp(request, testCard));
+    }
+
+    @Override
+    public RefundResult refund(RefundRequest request) {
+        return guarded(() -> refundOnce(request));
+    }
+
+    /** While the breaker is open: at most its wait, after which it lets trial calls through. */
+    @Override
+    public Optional<Duration> unavailableFor() {
+        CircuitBreaker.State state = breaker.getState();
+        if (state != CircuitBreaker.State.OPEN && state != CircuitBreaker.State.FORCED_OPEN) {
+            return Optional.empty();
+        }
+        long waitMillis = breaker.getCircuitBreakerConfig().getWaitIntervalFunctionInOpenState().apply(1);
+        return Optional.of(Duration.ofMillis(waitMillis));
+    }
+
+    /**
+     * Runs {@code call} through the breaker, which counts what it threw: only
+     * "unavailable" and "outcome unknown" are failures (application.yml). While it is
+     * open, {@code call} doesn't run.
+     */
+    private <T> T guarded(Supplier<T> call) {
+        try {
+            return breaker.executeSupplier(call);
+        } catch (CallNotPermittedException e) {
+            throw new PaymentProviderCircuitOpenException(
+                    "Stripe isn't being called: its recent calls kept failing (circuit breaker open)", e);
+        }
+    }
+
+    private ChargeResult chargeOnce(ChargeRequest request, String testCard) {
         Answer created = create(request, testCard);
         if (!created.isSuccess()) {
             return refusedCreate(created);
@@ -133,12 +192,7 @@ public class StripePaymentGateway implements PaymentGateway {
      * PaymentIntent from the first time, or creates now if the first never arrived:
      * unconfirmed either way, so nothing is charged. Then reads where it got to.
      */
-    @Override
-    public Optional<ChargeResult> findCharge(ChargeRequest request) {
-        String testCard = TEST_CARDS.get(request.paymentMethod());
-        if (testCard == null) {
-            return Optional.of(new ChargeResult.Declined(NOT_ON_STRIPE));
-        }
+    private Optional<ChargeResult> lookUp(ChargeRequest request, String testCard) {
         Answer created = create(request, testCard);
         if (!created.isSuccess() && "idempotency_error".equals(created.errorType())) {
             // The create request has changed since it was sent (a deploy changed what
@@ -147,7 +201,7 @@ public class StripePaymentGateway implements PaymentGateway {
             log.error("Payment {} can't be looked up by its key: the create request has changed since it was "
                     + "sent. Settle it by hand from Stripe's dashboard (metadata {} = {})",
                     request.idempotencyKey(), CHARGE_KEY, request.idempotencyKey());
-            throw new PaymentProviderUnavailableException("Stripe won't replay the payment's create request");
+            throw new PaymentNotSettledException("Stripe won't replay the payment's create request");
         }
         if (!created.isSuccess()) {
             return Optional.of(refusedCreate(created));
@@ -172,13 +226,12 @@ public class StripePaymentGateway implements PaymentGateway {
                     : neverConfirmed(intentId, request);
             case "requires_confirmation" -> neverConfirmed(intentId, request);
             case "canceled" -> Optional.empty();
-            default -> throw new PaymentProviderUnavailableException(
+            default -> throw new PaymentNotSettledException(
                     "Stripe is still settling the payment (" + text(intent, "status") + ")");
         };
     }
 
-    @Override
-    public RefundResult refund(RefundRequest request) {
+    private RefundResult refundOnce(RefundRequest request) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
         form.add("payment_intent", request.providerReference());
         form.add("amount", Long.toString(minorUnits(request.amount(), request.currency())));
@@ -238,9 +291,13 @@ public class StripePaymentGateway implements PaymentGateway {
         } catch (ResourceAccessException e) {
             throw new PaymentProviderUnavailableException("Couldn't reach Stripe to cancel the payment", e);
         }
-        if (!cancelled.isSuccess()) {
-            // The next run looks again, and finds it cancelled, or charged after all.
+        if (isTransient(cancelled)) {
             throw unavailable(cancelled, "cancel the unconfirmed payment");
+        }
+        if (!cancelled.isSuccess()) {
+            // Such as confirmed after all, since the lookup: the next run looks again.
+            throw new PaymentNotSettledException("Stripe didn't cancel the unconfirmed payment: "
+                    + cancelled.errorMessage());
         }
         return Optional.empty();
     }

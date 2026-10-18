@@ -713,7 +713,93 @@ without calling Stripe.
 | Stripe's test PaymentMethods, chosen on the server | The API and webhooks are real without a card form in the browser | Stripe Elements now (on the roadmap) |
 | Every request pins `Stripe-Version: 2026-09-30.endive`, the version it was tried against | The account's default version changes when the account is upgraded, and a new version can drop a parameter the adapter sends (as `payment_method_types` was dropped) | The account's default version |
 
-## 9. Roadmap
+## 9. Circuit breaker on Stripe
+
+When Stripe is down, or so slow that its calls time out, every call still waits:
+up to 5 seconds to connect and 30 to answer, then twice more for the retries of
+`PaymentGatewayClient`. A payment request can then take a minute and a half,
+holding one of Tomcat's request threads the whole time, and the refund job and
+reconciliation do the same on every run. Nothing comes of it, since Stripe isn't
+answering. A **circuit breaker** (Resilience4j's) notices that Stripe keeps
+failing and stops calling it for a while, answering at once through the paths the
+shop already has for "provider unavailable". Then it lets a couple of calls
+through to see whether Stripe is back.
+
+```mermaid
+stateDiagram-v2
+    [*] --> CLOSED
+    CLOSED --> OPEN: of the last 10 calls (at least 5), half or more failed, or took over 10 s
+    OPEN --> HALF_OPEN: 30 seconds later
+    HALF_OPEN --> CLOSED: both trial calls succeed
+    HALF_OPEN --> OPEN: a trial call fails
+```
+
+### What counts as a failure
+
+Only what says Stripe is unwell. An answer, even a refusal, is Stripe working.
+
+| Outcome of a Stripe call | For the breaker |
+|---|---|
+| Unavailable: can't connect, `401`/`403`, `429`, a `5xx` | failure |
+| Outcome unknown: a timeout, or a `5xx` while confirming | failure |
+| Slower than 10 seconds | slow, which counts like a failure |
+| Approved, declined, refunded | success |
+| A refund Stripe refuses (`4xx`) | success: Stripe answered (and the error is logged, as before) |
+| A lookup Stripe answers without settling the payment: still processing, or a changed request it won't replay (`PaymentNotSettledException`) | ignored: Stripe is working, and one stuck payment, looked up every minute, mustn't open the breaker on a quiet shop |
+
+### The fallback: the paths that already exist
+
+While the breaker is open, no request goes to Stripe: the call throws
+`PaymentProviderCircuitOpenException`, a kind of "provider unavailable", which
+every caller already handles without losing money:
+
+| Caller | While the breaker is open |
+|---|---|
+| Paying | Refused before an attempt is recorded: `503` with `Retry-After: 30`, so an outage doesn't use up the order's 5 attempts |
+| Refunding a cancelled order | Stays `REFUND_PENDING`; the retry job tries again on a later run |
+| Reconciliation | The payment stays `PROCESSING`; the next run asks again |
+| Webhooks | Unaffected: Stripe calls the shop, not the other way round |
+
+### Where it sits
+
+- **One breaker, `stripe`, for every Stripe call**: charges, lookups and refunds
+  share one view of Stripe's health.
+- **Inside the Stripe adapter, under the retries** of `PaymentGatewayClient`, so
+  every try counts, and a call the open breaker refuses isn't retried
+  (`@Retryable(excludes = ...)`): retrying it would only be refused again. Nor is a
+  lookup Stripe answered without settling.
+- **Not around the fake provider.** Its failures are simulated per payment method
+  (`test_provider_down`), so a breaker there would let one customer's test close
+  payments for everyone.
+- **Out of the health checks.** An open breaker must not make the API look down.
+  Caddy, `deploy.sh` and the pipeline's staging check all go by
+  `/actuator/health/readiness`, so a breaker added to readiness (as some guides
+  suggest) would take the shop out of the load balancer whenever Stripe is down.
+  Its health indicator is off, and its state goes to Prometheus instead
+  (`resilience4j_circuitbreaker_*`), on the Grafana dashboard.
+- **It half-opens on its own** after 30 seconds. Paying only reads the breaker's
+  state before it starts, so without that nothing might try Stripe again while
+  payments are being refused.
+
+Tried against a Stripe that can't be reached (its address pointed at a closed
+port): the first payment's three tries failed, and it was recorded as failed; the
+second payment's fifth failure opened the breaker, and its last try was refused and
+not retried; the third payment got `503` with `Retry-After: 30`, and no attempt was
+recorded. Readiness stayed `UP` throughout, and 30 seconds later the breaker was
+half-open by itself.
+
+### Key decisions
+
+| Decision | Why | Rejected alternative |
+|---|---|---|
+| Resilience4j's breaker, called from code, configured in `application.yml` | Where it sits relative to the retries is plain to see, and it is unit-tested without Spring | The `@CircuitBreaker` annotation: two aspects, whose order would decide whether retries count |
+| Only "Stripe is unwell" outcomes are failures | A decline or a refused request is Stripe working; counting them would let customers' cards open the breaker | Counting every exception |
+| While open, a payment is refused before it is recorded (`503`, `Retry-After`) | An outage doesn't use up the customer's attempts, and the client is told when to come back | Recording a `FAILED` attempt each time |
+| The existing "unavailable" paths are the fallback | Each already keeps the money safe; nothing new can guess wrong | A fallback that guesses, such as approving now and settling later |
+| No health indicator | An outage at Stripe mustn't take the shop out of the load balancer | The breaker's state in readiness |
+| No fallback URL | Stripe has one API host, and sending an unanswered charge elsewhere could charge twice | A list of backup URLs |
+
+## 10. Roadmap
 
 - **Phase 1**, done (#177): everything in sections 1 to 3, the pay step on the
   storefront's order page, and tests (unit, integration against MySQL,
@@ -722,6 +808,6 @@ without calling Stripe.
   reconciliation of payments stuck in `PROCESSING` (section 5, #179), and expiry of
   orders left unpaid (section 6, #180).
 - **Phase 3**, done: provider webhooks with a signature check (section 7, #181),
-  and Stripe in test mode (section 8).
+  Stripe in test mode (section 8, #185), and a circuit breaker on Stripe (section 9).
 - **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure;
   partial refunds.

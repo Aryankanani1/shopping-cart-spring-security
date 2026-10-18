@@ -20,6 +20,11 @@
 			<groupId>com.aryan</groupId>
 			<artifactId>shop-order</artifactId>
 		</dependency>
+		<!-- The circuit breaker on Stripe (docs/payment-design.md, section 9). -->
+		<dependency>
+			<groupId>io.github.resilience4j</groupId>
+			<artifactId>resilience4j-spring-boot4</artifactId>
+		</dependency>
 	</dependencies>
 
 </project>
