@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.payment;
 
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -45,4 +46,13 @@ public interface PaymentGateway {
      *         reached; nothing was refunded, and it may be retried with the same key
      */
     RefundResult refund(RefundRequest request);
+
+    /**
+     * Empty while the provider may be called. While it is known to be failing (its
+     * circuit breaker is open), at most how long until it is tried again: a payment
+     * is then refused before an attempt is recorded.
+     */
+    default Optional<Duration> unavailableFor() {
+        return Optional.empty();
+    }
 }

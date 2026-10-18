@@ -482,6 +482,16 @@ and the app refuses to start with a live key):
 How the adapter keeps Stripe's idempotency, failures and webhooks safe is in
 [docs/payment-design.md, section 8](docs/payment-design.md#8-stripe-in-test-mode).
 
+**A circuit breaker guards the calls to Stripe** (Resilience4j;
+[section 9](docs/payment-design.md#9-circuit-breaker-on-stripe)). When half or more
+of the last 10 calls failed or took over 10 seconds, it opens for 30 seconds:
+Stripe isn't called, a payment gets `503` with `Retry-After: 30` instead of using
+up one of the order's attempts, and refunds and reconciliation wait for their next
+run. Then 2 trial calls go through, and it closes when they succeed. A decline
+doesn't count, since that is Stripe answering. Its state is on the Grafana
+dashboard, and it stays out of the health checks, so an outage at Stripe never
+takes the shop offline.
+
 ## Startup pipeline
 
 Initial setup is handled by ordered `ApplicationRunner` / `CommandLineRunner`

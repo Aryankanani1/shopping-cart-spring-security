@@ -4,15 +4,23 @@ import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.FakeWebhookSender;
 import com.aryan.spring_security_demo.payment.Installation;
 import com.aryan.spring_security_demo.payment.PaymentGateway;
+import com.aryan.spring_security_demo.payment.PaymentNotSettledException;
+import com.aryan.spring_security_demo.payment.PaymentOutcomeUnknownException;
+import com.aryan.spring_security_demo.payment.PaymentProviderUnavailableException;
 import com.aryan.spring_security_demo.payment.StripePaymentGateway;
 import com.aryan.spring_security_demo.payment.StripeWebhookReader;
 import com.aryan.spring_security_demo.payment.WebhookReader;
 import com.aryan.spring_security_demo.payment.WebhookSignature;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.health.actuate.endpoint.HealthEndpoint;
+import org.springframework.boot.health.contributor.Status;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.ApplicationContext;
@@ -23,6 +31,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -51,6 +60,8 @@ class StripeProviderContextTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private Clock clock;
+    @Autowired private CircuitBreakerRegistry breakers;
+    @Autowired private HealthEndpoint health;
 
     @AfterEach
     void forgetTheEvent() {
@@ -64,6 +75,43 @@ class StripeProviderContextTest {
         assertThat(context.getBean(WebhookReader.class)).isInstanceOf(StripeWebhookReader.class);
         assertThat(context.getBeanNamesForType(FakePaymentGateway.class)).isEmpty();
         assertThat(context.getBeanNamesForType(FakeWebhookSender.class)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("the stripe breaker has the settings in application.yml, and counts only Stripe being unwell")
+    void theStripeBreaker_hasTheDesignedSettings() {
+        CircuitBreakerConfig config = breakers.circuitBreaker("stripe").getCircuitBreakerConfig();
+
+        assertThat(config.getSlidingWindowType()).isEqualTo(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED);
+        assertThat(config.getSlidingWindowSize()).isEqualTo(10);
+        assertThat(config.getMinimumNumberOfCalls()).isEqualTo(5);
+        assertThat(config.getFailureRateThreshold()).isEqualTo(50f);
+        assertThat(config.getSlowCallDurationThreshold()).isEqualTo(Duration.ofSeconds(10));
+        assertThat(config.getSlowCallRateThreshold()).isEqualTo(50f);
+        assertThat(config.getWaitIntervalFunctionInOpenState().apply(1)).isEqualTo(30_000L);
+        assertThat(config.isAutomaticTransitionFromOpenToHalfOpenEnabled()).isTrue();
+        assertThat(config.getPermittedNumberOfCallsInHalfOpenState()).isEqualTo(2);
+        // The rules StripePaymentGatewayTest's breaker copies.
+        assertThat(config.getRecordExceptionPredicate().test(new PaymentProviderUnavailableException("down"))).isTrue();
+        assertThat(config.getRecordExceptionPredicate().test(new PaymentOutcomeUnknownException("timeout"))).isTrue();
+        assertThat(config.getRecordExceptionPredicate().test(new IllegalStateException("refund refused"))).isFalse();
+        assertThat(config.getIgnoreExceptionPredicate().test(new PaymentNotSettledException("processing"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("an open Stripe breaker leaves health and readiness as they were: Stripe down mustn't take the shop down")
+    void anOpenBreaker_leavesTheApiHealthyAndReady() {
+        CircuitBreaker stripe = breakers.circuitBreaker("stripe");
+        Status healthBefore = health.health().getStatus();
+        Status readinessBefore = health.healthForPath("readiness").getStatus();
+        try {
+            stripe.transitionToForcedOpenState();
+
+            assertThat(health.health().getStatus()).isEqualTo(healthBefore);
+            assertThat(health.healthForPath("readiness").getStatus()).isEqualTo(readinessBefore);
+        } finally {
+            stripe.reset();
+        }
     }
 
     @Test

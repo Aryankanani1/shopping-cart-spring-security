@@ -264,3 +264,37 @@ app:
       timeout-ms: 3000
     cache:
       warmup-enabled: true
+
+# The circuit breaker on the calls to Stripe (StripePaymentGateway;
+# docs/payment-design.md, section 9). Only outcomes that say Stripe is unwell count
+# as failures; while it is open, calls fail at once, and every caller takes its
+# existing "provider unavailable" path.
+resilience4j:
+  circuitbreaker:
+    instances:
+      stripe:
+        # Opens when half or more of the last 10 calls (once there are 5) failed, or
+        # took over 10 seconds.
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 10s
+        slow-call-rate-threshold: 50
+        # Stays open 30 seconds (the Retry-After a refused payment is given), then
+        # lets 2 trial calls through. It half-opens by itself: paying only reads its
+        # state before it starts, so nothing else might try Stripe again.
+        wait-duration-in-open-state: 30s
+        automatic-transition-from-open-to-half-open-enabled: true
+        permitted-number-of-calls-in-half-open-state: 2
+        # A decline or a refused request is Stripe answering, so it isn't a failure.
+        record-exceptions:
+          - com.aryan.spring_security_demo.payment.PaymentProviderUnavailableException
+          - com.aryan.spring_security_demo.payment.PaymentOutcomeUnknownException
+        # A lookup Stripe answered but that doesn't settle the payment yet: Stripe is
+        # working, and one stuck payment, looked up every minute, mustn't open it.
+        ignore-exceptions:
+          - com.aryan.spring_security_demo.payment.PaymentNotSettledException
+        # Out of the health checks: an outage at Stripe mustn't take the API out of the
+        # load balancer. Its state goes to Prometheus (resilience4j_circuitbreaker_*).
+        register-health-indicator: false

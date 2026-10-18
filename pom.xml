@@ -55,6 +55,7 @@
 		<shedlock.version>7.10.1</shedlock.version>
 		<springdoc-openapi.version>3.1.1</springdoc-openapi.version>
 		<modelmapper.version>3.2.7</modelmapper.version>
+		<resilience4j.version>2.4.0</resilience4j.version>
 		<!-- Not 13.0.0: it sends an empty NVD API key when none is set, so its
 		     update fails without a key (dependency-check/DependencyCheck#8715, fixed
 		     after 13.0.0). Dependabot skips 13.0.0 and will offer the next 13.x. -->
@@ -156,6 +157,22 @@
 				<version>${springdoc-openapi.version}</version>
 				<type>pom</type>
 				<scope>import</scope>
+			</dependency>
+			<!-- Manages only Resilience4j's own artifacts (no parent pom), so it moves
+			     nothing else. -->
+			<dependency>
+				<groupId>io.github.resilience4j</groupId>
+				<artifactId>resilience4j-bom</artifactId>
+				<version>${resilience4j.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+			<!-- The Spring Boot 4 starter isn't in resilience4j-bom 2.4.0 (it lists the
+			     Boot 3 one only), so it is managed here, at the same version. -->
+			<dependency>
+				<groupId>io.github.resilience4j</groupId>
+				<artifactId>resilience4j-spring-boot4</artifactId>
+				<version>${resilience4j.version}</version>
 			</dependency>
 
 			<!-- JJWT is listed module by module rather than through jjwt-bom: that BOM

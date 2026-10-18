@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -46,6 +47,19 @@ class PaymentServiceTest {
     @Mock private OrderServiceInterface orderService;
 
     @InjectMocks private PaymentService paymentService;
+
+    // An outage at the provider shouldn't use up the order's 5 attempts.
+    @Test
+    void whileTheProvidersBreakerIsOpen_aPaymentIsRefused_beforeAnythingIsRecorded() {
+        when(gateway.unavailableFor()).thenReturn(Optional.of(Duration.ofSeconds(30)));
+
+        assertThatThrownBy(() -> paymentService.pay(ORDER_ID, KEY, FakePaymentGateway.VISA))
+                .isInstanceOfSatisfying(PaymentProviderDownException.class,
+                        e -> assertThat(e.getRetryAfter()).isEqualTo(Duration.ofSeconds(30)));
+
+        verifyNoInteractions(recorder);
+        verify(gateway, never()).charge(any());
+    }
 
     @Test
     void pay_recordsTheAttempt_chargesIt_thenRecordsTheApproval() {
@@ -131,7 +145,7 @@ class PaymentServiceTest {
 
         assertThat(result.created()).isFalse();
         assertThat(result.payment().status()).isEqualTo(PaymentStatus.SUCCEEDED);
-        verifyNoInteractions(gateway);
+        verify(gateway, never()).charge(any());  // it only read whether the provider is available
     }
 
     @Test

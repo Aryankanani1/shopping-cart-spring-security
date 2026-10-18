@@ -7,7 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -31,9 +33,17 @@ public class PaymentService implements PaymentServiceInterface {
      * stays {@code PROCESSING}, which blocks another payment and a cancellation of
      * the order until {@link PaymentReconciler} settles it; the order can't end up
      * charged twice, or charged and cancelled.
+     *
+     * <p>While the provider's circuit breaker is open, the payment is refused before
+     * anything is recorded (503, {@link PaymentProviderDownException}): an outage
+     * shouldn't use up the order's attempts.
      */
     @Override
     public PayResult pay(Long orderId, String idempotencyKey, String paymentMethod) {
+        Optional<Duration> providerDown = gateway.unavailableFor();
+        if (providerDown.isPresent()) {
+            throw new PaymentProviderDownException(providerDown.get());
+        }
         PaymentRecorder.Attempt attempt = recorder.start(orderId, idempotencyKey, paymentMethod);
         if (attempt.repeated()) {
             return new PayResult(attempt.payment(), false);
