@@ -35,22 +35,24 @@ public class PaymentReconciler {
         if (charge.isEmpty()) {
             return true;  // settled since, by its request or an earlier run
         }
-        Optional<ChargeResult> answer;
-        try {
-            answer = gateway.findCharge(charge.get());
-        } catch (PaymentProviderUnavailableException e) {
-            // No transaction is open here, so catching it hides nothing from a rollback.
-            log.warn("Reconciling payment {}: provider unavailable, will try again", paymentId, e);
+        ChargeLookup lookup = gateway.findCharge(charge.get());
+        if (lookup instanceof ChargeLookup.Unanswered unanswered) {
+            // The client's fallback: the payment stays PROCESSING for the next run.
+            log.warn("Reconciling payment {}: no answer from the provider ({}), will try again",
+                    paymentId, unanswered.reason());
             return false;
         }
-        if (answer.isEmpty()) {
+        if (lookup instanceof ChargeLookup.NeverReceived) {
             // Safe only because the attempt is old enough that a request which hasn't
             // reached the provider by now never will (see PaymentReconciliationJob).
             recorder.recordFailure(paymentId, NEVER_RECEIVED);
-        } else if (answer.get() instanceof ChargeResult.Approved approved) {
+            return true;
+        }
+        ChargeResult answer = ((ChargeLookup.Found) lookup).result();
+        if (answer instanceof ChargeResult.Approved approved) {
             recorder.recordSuccess(paymentId, approved);
         } else {
-            recorder.recordFailure(paymentId, ((ChargeResult.Declined) answer.get()).reason());
+            recorder.recordFailure(paymentId, ((ChargeResult.Declined) answer).reason());
         }
         return true;
     }

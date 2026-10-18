@@ -37,7 +37,7 @@ class RefundProcessorTest {
     @Test
     void refund_asksTheProvider_thenRecordsTheRefund() {
         when(recorder.pendingRefund(7L)).thenReturn(Optional.of(OWED));
-        when(gateway.refund(OWED)).thenReturn(new RefundResult("re_1"));
+        when(gateway.refund(OWED)).thenReturn(new RefundAttempt.Refunded(new RefundResult("re_1")));
 
         assertThat(processor.refund(7L)).isTrue();
 
@@ -58,7 +58,7 @@ class RefundProcessorTest {
     @Test
     void refund_whileTheProviderIsDown_isLeftPendingForTheJob() {
         when(recorder.pendingRefund(7L)).thenReturn(Optional.of(OWED));
-        when(gateway.refund(OWED)).thenThrow(new PaymentProviderUnavailableException("down"));
+        when(gateway.refund(OWED)).thenReturn(new RefundAttempt.StillOwed("down"));
 
         assertThat(processor.refund(7L)).isFalse();
 
@@ -70,7 +70,7 @@ class RefundProcessorTest {
         when(recorder.refundsPendingSince(CUTOFF)).thenReturn(List.of(7L, 8L, 9L));
         when(recorder.pendingRefund(7L)).thenThrow(new IllegalStateException("database hiccup"));
         when(recorder.pendingRefund(8L)).thenReturn(Optional.of(OWED));
-        when(gateway.refund(OWED)).thenReturn(new RefundResult("re_8"));
+        when(gateway.refund(OWED)).thenReturn(new RefundAttempt.Refunded(new RefundResult("re_8")));
         when(recorder.pendingRefund(9L)).thenReturn(Optional.empty());
 
         assertThat(processor.retryPendingRefunds(CUTOFF)).isEqualTo(2);
@@ -82,7 +82,7 @@ class RefundProcessorTest {
     void retryPendingRefunds_withTheProviderDown_countsNone() {
         when(recorder.refundsPendingSince(CUTOFF)).thenReturn(List.of(7L));
         when(recorder.pendingRefund(7L)).thenReturn(Optional.of(OWED));
-        doThrow(new PaymentProviderUnavailableException("down")).when(gateway).refund(OWED);
+        when(gateway.refund(OWED)).thenReturn(new RefundAttempt.StillOwed("down"));
 
         assertThat(processor.retryPendingRefunds(CUTOFF)).isZero();
     }

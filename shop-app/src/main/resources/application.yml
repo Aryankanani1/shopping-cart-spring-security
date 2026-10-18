@@ -120,13 +120,23 @@ management:
       max-permitted: read-only
     web:
       exposure:
-        include: health, info, metrics, prometheus
+        # circuitbreakers/retries (+ their events): Resilience4j's (docs/payment-design.md,
+        # section 10). Admin-only like the rest (ShopConfig); internal in production.
+        include: health, info, metrics, prometheus, circuitbreakers, circuitbreakerevents, retries, retryevents
   endpoint:
     info:
       access: read-only
     metrics:
       access: read-only
     prometheus:
+      access: read-only
+    circuitbreakers:
+      access: read-only
+    circuitbreakerevents:
+      access: read-only
+    retries:
+      access: read-only
+    retryevents:
       access: read-only
     health:
       access: read-only
@@ -138,6 +148,10 @@ management:
       roles: ROLE_ADMIN
   # What /actuator/info shows, besides the build info (version, build time) that
   # the spring-boot-maven-plugin build-info goal writes.
+  health:
+    # Resilience4j's breakers in the health details (never failing; see resilience4j below).
+    circuitbreakers:
+      enabled: true
   info:
     java:
       enabled: true            # Java version and vendor
@@ -295,6 +309,74 @@ resilience4j:
         # working, and one stuck payment, looked up every minute, mustn't open it.
         ignore-exceptions:
           - com.aryan.spring_security_demo.payment.PaymentNotSettledException
-        # Out of the health checks: an outage at Stripe mustn't take the API out of the
-        # load balancer. Its state goes to Prometheus (resilience4j_circuitbreaker_*).
-        register-health-indicator: false
+        # In the health details (admins), but never DOWN: open shows as CIRCUIT_OPEN,
+        # a status Spring Boot leaves out of the overall one, and readiness (which Caddy
+        # and deploy.sh go by) never includes it, so an outage at Stripe can't take the
+        # API out of the load balancer. Its state also goes to Prometheus.
+        register-health-indicator: true
+        allow-health-indicator-to-fail: false
+        # The last events, for /actuator/circuitbreakerevents.
+        event-consumer-buffer-size: 50
+      # The fake provider's webhook delivery to the API itself (FakeWebhookSender): when
+      # deliveries keep failing, they are skipped for 30 s; the jobs settle the rest.
+      webhook-delivery:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        automatic-transition-from-open-to-half-open-enabled: true
+        permitted-number-of-calls-in-half-open-state: 2
+        record-exceptions:
+          - java.io.IOException
+        register-health-indicator: true
+        allow-health-indicator-to-fail: false
+        event-consumer-buffer-size: 50
+  # The retries of the payment provider's calls (PaymentGatewayClient;
+  # docs/payment-design.md, section 10): three tries, 100 ms and 200 ms apart, then
+  # the call's fallback. Only "unavailable" is retried: not a timeout (it may have
+  # charged; reconciliation finds out), not a call the open breaker refused, not a
+  # lookup the provider answered without settling.
+  retry:
+    configs:
+      payment-provider:
+        max-attempts: 3
+        wait-duration: 100ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - com.aryan.spring_security_demo.payment.PaymentProviderUnavailableException
+        ignore-exceptions:
+          - com.aryan.spring_security_demo.payment.PaymentProviderCircuitOpenException
+          - com.aryan.spring_security_demo.payment.PaymentNotSettledException
+        # The last events, for /actuator/retryevents.
+        event-consumer-buffer-size: 50
+      # The app's internal calls (section 10): the fake provider's webhook delivery to
+      # the API itself, and the startup check of configured external endpoints. Only a
+      # connection error, a timeout or a 5xx (all IOExceptions) is retried, not a 4xx.
+      internal-call:
+        max-attempts: 3
+        wait-duration: 1s
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - java.io.IOException
+        event-consumer-buffer-size: 50
+    instances:
+      payment-charge:
+        base-config: payment-provider
+      payment-lookup:
+        base-config: payment-provider
+      payment-refund:
+        base-config: payment-provider
+      webhook-delivery:
+        base-config: internal-call
+      # Not on internal-call: "enable-exponential-backoff: false" doesn't undo a base
+      # config's backoff in Resilience4j, so the settings are its own. 1 s apart, not
+      # doubling: it holds up startup.
+      startup-check:
+        max-attempts: 3
+        wait-duration: 1s
+        retry-exceptions:
+          - java.io.IOException
+        event-consumer-buffer-size: 50

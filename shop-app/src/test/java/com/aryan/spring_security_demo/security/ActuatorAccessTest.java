@@ -1,5 +1,7 @@
 package com.aryan.spring_security_demo.security;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItems;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -26,7 +29,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class ActuatorAccessTest {
 
+    /** Resilience4j's endpoints (docs/payment-design.md, section 10): admin-only, like the rest. */
+    private static final String[] RESILIENCE_ENDPOINTS =
+            {"circuitbreakers", "circuitbreakerevents", "retries", "retryevents"};
+
     @Autowired private MockMvc mockMvc;
+    @Autowired private CircuitBreakerRegistry breakers;
 
     @Test
     @DisplayName("anonymous: health probes answer UP without details; info and metrics need sign-in")
@@ -41,6 +49,9 @@ class ActuatorAccessTest {
         mockMvc.perform(get("/actuator/info")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/actuator/metrics")).andExpect(status().isUnauthorized());
         mockMvc.perform(get("/actuator/prometheus")).andExpect(status().isUnauthorized());
+        for (String endpoint : RESILIENCE_ENDPOINTS) {
+            mockMvc.perform(get("/actuator/" + endpoint)).andExpect(status().isUnauthorized());
+        }
     }
 
     @Test
@@ -57,6 +68,9 @@ class ActuatorAccessTest {
         mockMvc.perform(get("/actuator/metrics")).andExpect(status().isForbidden());
         mockMvc.perform(get("/actuator/metrics/jvm.memory.used")).andExpect(status().isForbidden());
         mockMvc.perform(get("/actuator/prometheus")).andExpect(status().isForbidden());
+        for (String endpoint : RESILIENCE_ENDPOINTS) {
+            mockMvc.perform(get("/actuator/" + endpoint)).andExpect(status().isForbidden());
+        }
     }
 
     @Test
@@ -77,6 +91,44 @@ class ActuatorAccessTest {
         mockMvc.perform(get("/actuator/metrics/jvm.memory.used"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.measurements[0].value").isNumber());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("admin: the circuit breakers and retries, their events, and the breakers in the health details")
+    void admin_resilience() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.components.circuitBreakers.details.stripe.details.state").value("CLOSED"));
+        mockMvc.perform(get("/actuator/circuitbreakers"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.circuitBreakers.stripe.state").value("CLOSED"));
+        mockMvc.perform(get("/actuator/retries"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.retries").value(hasItems("payment-charge", "payment-lookup", "payment-refund")));
+        mockMvc.perform(get("/actuator/circuitbreakerevents")).andExpect(status().isOk());
+        mockMvc.perform(get("/actuator/retryevents")).andExpect(status().isOk());
+    }
+
+    // Caddy and deploy.sh go by readiness: an outage at Stripe mustn't take the shop offline.
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    @DisplayName("admin: an open breaker shows as CIRCUIT_OPEN in the details, and health and readiness stay UP")
+    void anOpenBreaker_showsInTheDetails_withoutTurningHealthDown() throws Exception {
+        CircuitBreaker stripe = breakers.circuitBreaker("stripe");
+        try {
+            stripe.transitionToOpenState();
+
+            mockMvc.perform(get("/actuator/health"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("UP"))
+                    .andExpect(jsonPath("$.components.circuitBreakers.details.stripe.status").value("CIRCUIT_OPEN"));
+            mockMvc.perform(get("/actuator/health/readiness"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.status").value("UP"));
+        } finally {
+            stripe.reset();
+        }
     }
 
     @Test

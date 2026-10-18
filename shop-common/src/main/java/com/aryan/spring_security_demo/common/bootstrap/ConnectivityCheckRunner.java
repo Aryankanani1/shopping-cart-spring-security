@@ -1,6 +1,8 @@
 package com.aryan.spring_security_demo.common.bootstrap;
 
 import com.aryan.spring_security_demo.common.config.StartupProperties;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -9,6 +11,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -38,13 +41,31 @@ import java.util.List;
 @Slf4j
 public class ConnectivityCheckRunner implements ApplicationRunner {
 
+    /** The retry's name; its settings are under {@code resilience4j.retry.instances}. */
+    static final String RETRY = "startup-check";
+
     private final DataSource dataSource;
     private final StartupProperties startupProperties;
+    private final RetryRegistry retries;
 
     @Override
     public void run(ApplicationArguments args) {
         checkDatabase();
         checkExternalEndpoints();
+    }
+
+    /** The endpoint's answer to a HEAD; a {@code 5xx} is thrown, so that it is tried again. */
+    private int headStatus(HttpClient client, String endpoint) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(endpoint))
+                .timeout(Duration.ofMillis(timeoutMs()))
+                .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                .build();
+        int status = client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+        if (status >= 500) {
+            throw new IOException("HTTP " + status);
+        }
+        return status;
     }
 
     private long timeoutMs() {
@@ -85,23 +106,25 @@ public class ConnectivityCheckRunner implements ApplicationRunner {
         }
     }
 
-    private void ping(HttpClient client, String endpoint) {
+    /**
+     * Up to three tries ({@value #RETRY}, 1 s apart) while the endpoint can't be
+     * reached or answers {@code 5xx}; then the fallback, a warning, and startup goes on.
+     */
+    void ping(HttpClient client, String endpoint) {
+        Retry retry = retries.retry(RETRY);
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(endpoint))
-                    .timeout(Duration.ofMillis(timeoutMs()))
-                    .method("HEAD", HttpRequest.BodyPublishers.noBody())
-                    .build();
-
-            HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
-            int status = response.statusCode();
+            int status = retry.executeCallable(() -> headStatus(client, endpoint));
             if (status < 400) {
                 log.info("[health] External   : OK  {} -> HTTP {}", endpoint, status);
             } else {
                 log.warn("[health] External   : DEGRADED {} -> HTTP {}", endpoint, status);
             }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            log.warn("[health] External   : NOT CHECKED {} — interrupted", endpoint);
         } catch (Exception ex) {
-            log.warn("[health] External   : UNREACHABLE {} — {}", endpoint, ex.getMessage());
+            log.warn("[health] External   : UNREACHABLE {} — {} (after {} tries)", endpoint, ex.getMessage(),
+                    retry.getRetryConfig().getMaxAttempts());
         }
     }
 }
