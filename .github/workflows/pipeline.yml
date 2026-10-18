@@ -481,27 +481,12 @@ jobs:
 
       # Fuzz the running API against its committed contract (docs/openapi.json):
       # thousands of generated requests, valid and malformed, and any 5xx fails the
-      # stage. As a customer, not an admin (an admin's fuzzed deletes would empty the
-      # catalogue), and never deleting that customer's own account.
+      # stage. The script first creates the records the operations on one order, cart
+      # or product need, so they get past a 404, then fuzzes as a customer and then as
+      # an admin (last, so its deletes can't take the customer's data away), never
+      # deleting an account.
       - name: Fuzz the API (Schemathesis)
-        run: |
-          email="fuzz-$(date +%s)@staging.test"
-          password=$(openssl rand -hex 12)
-          echo "::add-mask::$password"
-          curl -sSfk https://localhost/api/v1/users -H 'Content-Type: application/json' \
-            -d "{\"firstName\":\"Fuzz\",\"lastName\":\"Tester\",\"email\":\"$email\",\"password\":\"$password\"}" > /dev/null
-          token=$(curl -sSfk https://localhost/api/v1/auth/login -H 'Content-Type: application/json' \
-            -d "{\"email\":\"$email\",\"password\":\"$password\"}" | jq -r .data.token)
-          echo "::add-mask::$token"
-          mkdir -p "$RUNNER_TEMP/schemathesis"
-          docker run --rm --network host --user "$(id -u):$(id -g)" \
-            -v "$PWD/docs:/spec:ro" -v "$RUNNER_TEMP/schemathesis:/out" \
-            "$SCHEMATHESIS_IMAGE" run /spec/openapi.json \
-            --url https://localhost --tls-verify false \
-            --header "Authorization: Bearer $token" \
-            --checks not_a_server_error --max-examples 25 \
-            --exclude-operation-id deleteUser \
-            --report junit --report-junit-path /out/junit.xml
+        run: .github/scripts/fuzz_api.sh
 
       - if: failure()
         name: Staging logs

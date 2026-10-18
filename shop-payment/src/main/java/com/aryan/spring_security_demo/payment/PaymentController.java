@@ -28,8 +28,13 @@ import java.util.List;
 @Validated
 public class PaymentController {
 
-    /** Long enough to be unique (the storefront sends a UUID), short enough to store. */
-    static final String IDEMPOTENCY_KEY = "[A-Za-z0-9_-]{8,64}";
+    /**
+     * Long enough to be unique (the storefront sends a UUID), short enough to store.
+     * Anchored for the spec: {@code @Pattern} matches the whole value either way, but
+     * a pattern in OpenAPI matches anywhere in it, so without the anchors the spec
+     * allowed any header with 8 such characters in a row.
+     */
+    static final String IDEMPOTENCY_KEY = "^[A-Za-z0-9_-]{8,64}$";
     static final String IDEMPOTENCY_KEY_MESSAGE = "Idempotency-Key must be 8 to 64 letters, digits, '-' or '_'";
 
     private final PaymentServiceInterface paymentService;
