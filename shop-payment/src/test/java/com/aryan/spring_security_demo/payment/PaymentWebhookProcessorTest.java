@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,9 +29,12 @@ class PaymentWebhookProcessorTest {
 
     @Mock private PaymentWebhookEventRepository events;
     @Mock private PaymentRepository payments;
+    @Mock private RefundRepository refunds;
     @Mock private PaymentRecorder paymentRecorder;
     @Mock private RefundRecorder refundRecorder;
-    @Spy private Clock clock = Clock.fixed(Instant.parse("2026-10-16T12:00:00Z"), ZoneOffset.UTC);
+    private static final Instant NOW = Instant.parse("2026-10-16T12:00:00Z");
+
+    @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @InjectMocks private PaymentWebhookProcessor processor;
 
@@ -55,12 +59,23 @@ class PaymentWebhookProcessorTest {
     }
 
     @Test
-    void refundSucceeded_recordsTheRefund_inThisTransaction() {
-        when(payments.existsById(7L)).thenReturn(true);
+    void refundSucceeded_recordsTheRefund_foundByItsKey_inThisTransaction() {
+        // refund_7: a key V17 kept, from before partial refunds; new ones start rfd_.
+        when(refunds.findRefundOf("refund_7")).thenReturn(Optional.of(new RefundRepository.RefundOf(11L, 7L)));
 
         processor.process(event(WebhookEvent.REFUND_SUCCEEDED, "refund_7"));
 
-        verify(refundRecorder).recordRefundedInCurrentTransaction(7L, new RefundResult("re_1"));
+        verify(refundRecorder).recordRefundedInCurrentTransaction(11L, new RefundResult("re_1"));
+        verify(events).saveAndFlush(argThat(recorded -> Long.valueOf(7L).equals(recorded.getPaymentId())));
+    }
+
+    @Test
+    void aRefundEventForARefundTheShopDoesntKnow_isIgnored() {
+        when(refunds.findRefundOf("rfd_unknown")).thenReturn(Optional.empty());
+
+        assertThat(processor.process(event(WebhookEvent.REFUND_SUCCEEDED, "rfd_unknown")))
+                .isEqualTo(PaymentWebhookProcessor.Outcome.IGNORED);
+        verifyNoInteractions(refundRecorder);
     }
 
     @Test
@@ -90,6 +105,7 @@ class PaymentWebhookProcessorTest {
         verify(events, times(3)).saveAndFlush(argThat(saved -> saved.getPaymentId() == null));
     }
 
+    /** A refund owed from a payment, with the ids saving would give them. */
     private static WebhookEvent event(String type, String key) {
         return new WebhookEvent("evt_1", type, 1_760_616_000L, new WebhookEvent.Data(
                 key, "ch_1", "Visa", "4242", "Your card was declined.", "re_1"));

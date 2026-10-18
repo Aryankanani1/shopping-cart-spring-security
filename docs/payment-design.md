@@ -901,7 +901,177 @@ Resilience4j, so `startup-check` has settings of its own.
 | Webhook retries scheduled, not slept | The scheduler's one thread also runs the payment jobs | Blocking retries on that thread |
 | The breaker in the health details, never `DOWN` | Visible at a glance, but an outage elsewhere can't take the API out of the load balancer | No health details, or a breaker that fails health |
 
-## 11. Roadmap
+## 11. Partial refunds
+
+Until now a refund was all or nothing: cancelling a paid order refunded the whole
+payment. Now an admin can also refund **part** of a paid order: items the customer
+sent back, or an amount (a goodwill gesture, a damaged item kept), as often as
+there is money left, on a paid order in any state until it is cancelled, shipped
+and delivered ones included, since that is where returns happen.
+
+| Kind | The admin gives | Amount | Stock |
+|---|---|---|---|
+| `ITEMS` | order items and quantities, and a reason | worked out by the server: each quantity times the unit price the customer paid | back in stock if the admin says so |
+| `AMOUNT` | an amount and a reason | as given, at most what is left | unchanged |
+| `CANCELLATION` (as before) | nothing: cancelling the order | what is left | the items not already refunded go back |
+
+### The rules
+
+- **Never more in total than was paid.** The payment row is locked
+  (`SELECT ... FOR UPDATE`) while a refund is added, and what is left is the amount
+  paid minus every refund owed or made, a running total kept on that row. Two
+  admins at once take turns, and a check constraint on the row refuses a total over
+  the amount paid, whatever the code does ("Taking turns", below).
+- **An item can't be refunded more times than it was bought.** Each order item
+  counts its refunded quantity (`orderitems.refunded_quantity`, in the order module,
+  which owns items and stock), checked and raised in the same transaction.
+- **Only a payment that succeeded, of an order not cancelled**: not while it is
+  `PROCESSING`, and not once the order is cancelled (its refund is under way).
+- **Admins only** (`ShopConfig`), and the request carries an `Idempotency-Key`, as
+  paying does, so a double click refunds once.
+
+### Data model
+
+```mermaid
+erDiagram
+    payment ||--o{ refund : "refunded by"
+    refund ||--o{ refund_item : "returns"
+    orderitems ||--o{ refund_item : "returned in"
+```
+
+| `refund` column | |
+|---|---|
+| `payment_id` | the payment it gives money back from |
+| `kind` | `ITEMS`, `AMOUNT` or `CANCELLATION` |
+| `amount`, `currency` | what goes back |
+| `reason` | the admin's, shown to the customer |
+| `status` | `PENDING` (owed: the outbox row), then `REFUNDED` |
+| `idempotency_key` | the shop's key with the provider (unique) |
+| `request_key` | the admin's `Idempotency-Key`, unique per payment; none for a cancellation |
+| `provider_reference` | the provider's id for the refund (unique) |
+| `requested_by` | the admin's email at the time (a record, not a foreign key, so it outlives the account) |
+| `requested_at`, `refunded_at` | |
+
+`refund_item` lists an `ITEMS` refund's order items and quantities. The payment
+gains two running totals: `refund_requested_amount` (every refund owed or made) and
+`refunded_amount` (the ones the provider has made), with a check that
+`refunded_amount <= refund_requested_amount <= amount`.
+`V17__partial_refunds.sql` creates the tables and columns, adds `refunded_quantity`
+to `orderitems`, moves each payment's existing refund into a `CANCELLATION` row
+(and into the totals), and drops the payment's old refund columns.
+
+### Lifecycle
+
+A refund is `PENDING` until the provider refunds it, then `REFUNDED`. The payment
+keeps saying where its money stands: `SUCCEEDED` while it is kept, even in part;
+`REFUND_PENDING` once its order is cancelled (the rest is owed back); `REFUNDED`
+once every cent is back, which partial refunds can now reach on their own.
+
+```mermaid
+stateDiagram-v2
+    SUCCEEDED --> SUCCEEDED: part refunded
+    SUCCEEDED --> REFUNDED: partial refunds reach the amount paid
+    SUCCEEDED --> REFUND_PENDING: order cancelled; a refund for what is left
+    REFUND_PENDING --> REFUNDED: refunded
+```
+
+### The flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant A as Admin
+    participant R as RefundService
+    participant DB as MySQL
+    participant G as PaymentGatewayClient
+    A->>R: POST /orders/42/refunds (items or amount, reason), Idempotency-Key k
+    rect rgb(230, 240, 255)
+    note over R,DB: one transaction
+    R->>DB: lock the order's payment (SELECT ... FOR UPDATE), before any other read
+    R->>DB: a refund with key k already? return it
+    R->>DB: items: check and raise refunded quantities, restock if asked
+    R->>DB: amount <= paid - refund_requested_amount, else 409
+    R->>DB: INSERT refund (PENDING): the outbox row; raise refund_requested_amount
+    end
+    R-->>A: 201, refund PENDING
+    R->>G: after the commit: refund (its key rfd_..., amount)
+    G-->>R: refunded, or still owed (the retry job tries again)
+    R->>DB: lock the payment, then the refund: REFUNDED, raise refunded_amount; payment REFUNDED if every cent is back
+```
+
+From the commit on, a partial refund goes the way a cancellation's always has: the
+after-commit listener sends it (sections 4 and 10), the retry job retries what is
+still `PENDING`, and a `refund.succeeded` webhook settles it, now found by its
+idempotency key rather than by a payment id read out of the key.
+
+### Keys
+
+A new refund's key with the provider is `rfd_` and a random UUID, made with the
+refund: the key is part of the row it is saved in, so it can't wait for the row's id.
+The refunds `V17` moves keep their old key, `refund_<payment id>`: one still pending
+must be repeated under the key it was first sent with, or the provider would refund
+it twice. The prefixes differ, so the two kinds can't collide.
+
+### Cancelling after partial refunds
+
+A cancellation refunds only what is left (and none, if nothing is), and restocks
+only the quantities not already refunded as items: those that were restocked went
+back when they were refunded.
+
+### Taking turns
+
+Everything that refunds a payment locks its row first: an admin's refund, a
+cancellation, and recording a refund (from the after-commit listener, the retry job
+or a webhook, which then lock the refund's row too). Locking the payment before the
+order (a refund of items raises the order's version, as paying does) and products
+in id order keeps them from deadlocking with each other or with checkout.
+
+The lock alone isn't enough under MySQL's default isolation, `REPEATABLE READ`: a
+transaction's plain reads return the database as it was at the first of them, even
+once it holds a lock. Only a locking read returns what is committed now. A
+cancellation has read its order by the time it locks the payment, and a webhook its
+event; refunds they then loaded and summed could be older than the lock, missing
+one its last holder had just committed, and owe back too much, or never mark the
+payment refunded. So the totals live on the payment row, which every one of them
+reads with its lock, and a refund being recorded is read with a lock of its own. The
+admin's refund takes the payment's lock as its first read, so the order, its items
+and earlier refunds it reads afterwards are as fresh. `RefundIntegrationTest` holds a
+transaction open across another's commit to show each case.
+
+### API
+
+| Method | Path | Who | Result |
+|---|---|---|---|
+| `POST` | `/api/v1/orders/{orderId}/refunds` | admins | `201` with `Location` and the refund (`PENDING`); `200` with the first one when the `Idempotency-Key` was used for this order before; `409` when the order can't be refunded, or for more than is left; `400` for a body that is neither items nor an amount |
+| `GET` | `/api/v1/orders/{orderId}/refunds` | the order's owner or an admin | the order's refunds, oldest first |
+| `GET` | `/api/v1/orders/{orderId}/refunds/{refundId}` | the order's owner or an admin | one of them (the `Location` of a new one) |
+
+```json
+{"items": [{"orderItemId": 12, "quantity": 1}], "restock": true, "reason": "Returned: wrong size"}
+{"amount": 5.00, "reason": "The box arrived damaged"}
+```
+
+A payment now reports `refundedAmount`, what its refunds have given back so far. The
+single refund's reference and dates it used to carry belong to each refund instead,
+and an order item reports its `id` (what a refund of items names) and its
+`refundedQuantity`.
+
+### Key decisions
+
+| Decision | Why | Rejected alternative |
+|---|---|---|
+| A `refund` table, one row per refund | Many refunds per payment, each with its own key, status and record | Refund columns on the payment: one refund only |
+| The server prices item refunds | What goes back for a returned item is what was paid for it; only an admin's goodwill amount is typed in, and it is capped | Amounts sent by the client for every refund |
+| Lock the payment row while adding a refund | Two refunds at once can't add up to more than was paid | Checking after the fact |
+| Running totals on the payment row, with a check constraint | Read under the lock, they are always current; summing refund rows read after the lock missed concurrent refunds under `REPEATABLE READ` (found by the concurrency tests) | Summing the refunds; `READ COMMITTED`, which each caller's transaction (the order module's cancellation among them) would have to remember |
+| Refunded quantities on the order item | The order module owns items and stock, and cancelling must not restock what was already refunded | Counting `refund_item` rows from the order module, which can't see payments |
+| Migrated refunds keep their key | A refund retried after the migration must repeat its first key | New keys for all |
+| An order's status doesn't change | An order with a returned item is still delivered; its refunds are listed beside it | A `PARTIALLY_REFUNDED` order status |
+
+Built in two pull requests: the model, the API and the money rules first; then the
+admin's refund form, the customer's view of their refunds, and the E2E test.
+
+## 12. Roadmap
 
 - **Phase 1**, done (#177): everything in sections 1 to 3, the pay step on the
   storefront's order page, and tests (unit, integration against MySQL,
@@ -912,5 +1082,5 @@ Resilience4j, so `startup-check` has settings of its own.
 - **Phase 3**, done: provider webhooks with a signature check (section 7, #181),
   Stripe in test mode (section 8, #185), a circuit breaker on Stripe (section 9,
   #187), and Resilience4j retries with explicit fallbacks (section 10).
-- **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure;
-  partial refunds.
+- **Partial refunds** (section 11), in progress.
+- **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure.

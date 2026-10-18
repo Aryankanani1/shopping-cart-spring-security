@@ -7,6 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -16,98 +17,126 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
-/** The database steps of a refund, with the repository mocked. */
+/** The database steps of a refund, with the repositories mocked. */
 @ExtendWith(MockitoExtension.class)
 class RefundRecorderTest {
 
     private static final Instant NOW = Instant.parse("2026-10-16T09:00:00Z");
+    private static final Long PAYMENT_ID = 7L;
+    private static final Long REFUND_ID = 11L;
 
     @Mock private PaymentRepository paymentRepository;
+    @Mock private RefundRepository refundRepository;
     @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @InjectMocks private RefundRecorder recorder;
 
     @Test
-    void requestRefunds_marksTheOrdersSucceededPaymentsAsOwed() {
+    void requestRefunds_owesWhatIsLeftOfEachPaidOrder_underThePaymentsLock() {
         Payment paid = paid();
-        when(paymentRepository.findByOrdersAndStatus(List.of(9L), PaymentStatus.SUCCEEDED)).thenReturn(List.of(paid));
+        when(paymentRepository.findByOrdersAndStatusForUpdate(List.of(9L), PaymentStatus.SUCCEEDED))
+                .thenReturn(List.of(paid));
+        when(refundRepository.saveAll(anyList())).thenAnswer(invocation -> {
+            List<Refund> owed = invocation.getArgument(0);
+            owed.forEach(refund -> ReflectionTestUtils.setField(refund, "id", REFUND_ID));
+            return owed;
+        });
 
-        recorder.requestRefunds(List.of(9L));
+        assertThat(recorder.requestRefunds(List.of(9L))).containsExactly(REFUND_ID);
 
         assertThat(paid.getStatus()).isEqualTo(PaymentStatus.REFUND_PENDING);
-        assertThat(paid.getRefundRequestedAt()).isEqualTo(NOW);
-    }
-
-    @Test
-    void pendingRefund_asksForTheWholeCharge_underAKeyOfItsOwn() {
-        Payment owed = paid();
-        owed.requestRefund(NOW);
-        when(paymentRepository.findById(7L)).thenReturn(Optional.of(owed));
-
-        assertThat(recorder.pendingRefund(7L)).hasValueSatisfying(request -> {
-            assertThat(request.providerReference()).isEqualTo("ch_1");
-            assertThat(request.amount()).isEqualByComparingTo("59.97");
-            assertThat(request.currency()).isEqualTo("USD");
-            // The payment's id is null here (never saved); the key carries whatever it is.
-            assertThat(request.idempotencyKey()).startsWith("refund_");
+        assertThat(paid.getRefunds()).singleElement().satisfies(refund -> {
+            assertThat(refund.getKind()).isEqualTo(Refund.Kind.CANCELLATION);
+            assertThat(refund.getAmount()).isEqualByComparingTo("59.97");
+            assertThat(refund.getRequestedAt()).isEqualTo(NOW);
         });
     }
 
     @Test
-    void pendingRefund_ofAPaymentNoLongerOwed_isEmpty() {
-        Payment refunded = paid();
-        refunded.requestRefund(NOW);
-        refunded.refunded("re_1", NOW);
-        when(paymentRepository.findById(7L)).thenReturn(Optional.of(refunded));
+    void pendingRefund_asksForTheRefundsAmount_underItsOwnKey() {
+        Refund refund = owed(paid(), "10.00");
+        when(refundRepository.findById(REFUND_ID)).thenReturn(Optional.of(refund));
 
-        assertThat(recorder.pendingRefund(7L)).isEmpty();
+        assertThat(recorder.pendingRefund(REFUND_ID)).hasValueSatisfying(request -> {
+            assertThat(request.providerReference()).isEqualTo("ch_1");
+            assertThat(request.amount()).isEqualByComparingTo("10.00");
+            assertThat(request.currency()).isEqualTo("USD");
+            assertThat(request.idempotencyKey()).isEqualTo(refund.getIdempotencyKey()).startsWith("rfd_");
+        });
     }
 
     @Test
-    void recordRefunded_settlesAnOwedRefund() {
-        Payment owed = paid();
-        owed.requestRefund(NOW);
-        when(paymentRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(owed));
+    void pendingRefund_ofARefundMadeAlready_isEmpty() {
+        Payment paid = paid();
+        Refund refund = owed(paid, "10.00");
+        paid.refunded(refund, "re_1", NOW);
+        when(refundRepository.findById(REFUND_ID)).thenReturn(Optional.of(refund));
 
-        recorder.recordRefunded(7L, new RefundResult("re_1"));
+        assertThat(recorder.pendingRefund(REFUND_ID)).isEmpty();
+    }
 
-        assertThat(owed.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
-        assertThat(owed.getRefundReference()).isEqualTo("re_1");
+    @Test
+    void recordRefunded_settlesTheRefund_underThePaymentsLock() {
+        Payment paid = paid();
+        Refund refund = owed(paid, "59.97");
+        lookedUp(paid, refund);
+
+        recorder.recordRefunded(REFUND_ID, new RefundResult("re_1"));
+
+        assertThat(refund.getStatus()).isEqualTo(Refund.Status.REFUNDED);
+        assertThat(refund.getProviderReference()).isEqualTo("re_1");
+        assertThat(paid.getStatus()).as("every cent back").isEqualTo(PaymentStatus.REFUNDED);
     }
 
     // The after-commit listener and the retry job can both get here for one refund.
     @Test
     void recordRefunded_twice_keepsTheFirst() {
-        Payment refunded = paid();
-        refunded.requestRefund(NOW);
-        refunded.refunded("re_1", NOW);
-        when(paymentRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(refunded));
+        Payment paid = paid();
+        Refund refund = owed(paid, "10.00");
+        lookedUp(paid, refund);
+        recorder.recordRefunded(REFUND_ID, new RefundResult("re_1"));
 
-        recorder.recordRefunded(7L, new RefundResult("re_2"));
+        recorder.recordRefunded(REFUND_ID, new RefundResult("re_2"));
 
-        assertThat(refunded.getRefundReference()).isEqualTo("re_1");
+        assertThat(refund.getProviderReference()).isEqualTo("re_1");
+        assertThat(paid.getRefundedAmount()).as("counted once").isEqualByComparingTo("10.00");
+        assertThat(paid.getStatus()).as("part of it kept").isEqualTo(PaymentStatus.SUCCEEDED);
     }
 
     // A webhook records its event and the refund in one transaction.
     @Test
-    void recordRefundedInCurrentTransaction_settlesAnOwedRefundTheSameWay() {
-        Payment owed = paid();
-        owed.requestRefund(NOW);
-        when(paymentRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(owed));
+    void recordRefundedInCurrentTransaction_settlesTheRefundTheSameWay() {
+        Payment paid = paid();
+        Refund refund = owed(paid, "10.00");
+        lookedUp(paid, refund);
 
-        recorder.recordRefundedInCurrentTransaction(7L, new RefundResult("re_1"));
+        recorder.recordRefundedInCurrentTransaction(REFUND_ID, new RefundResult("re_1"));
 
-        assertThat(owed.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(refund.getStatus()).isEqualTo(Refund.Status.REFUNDED);
     }
 
     @Test
-    void refundsPendingSince_asksForTheOwedOnesOnly() {
-        when(paymentRepository.findIdsByStatusRequestedBefore(PaymentStatus.REFUND_PENDING, NOW))
-                .thenReturn(List.of(7L, 8L));
+    void refundsPendingSince_asksForThePendingOnes() {
+        when(refundRepository.findIdsByStatusRequestedBefore(Refund.Status.PENDING, NOW)).thenReturn(List.of(11L, 12L));
 
-        assertThat(recorder.refundsPendingSince(NOW)).containsExactly(7L, 8L);
+        assertThat(recorder.refundsPendingSince(NOW)).containsExactly(11L, 12L);
+    }
+
+    private void lookedUp(Payment paid, Refund refund) {
+        when(refundRepository.findPaymentIdById(REFUND_ID)).thenReturn(Optional.of(PAYMENT_ID));
+        when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(paid));
+        when(refundRepository.findByIdForUpdate(REFUND_ID)).thenReturn(Optional.of(refund));
+    }
+
+    /** A refund owed from {@code payment}, with the id saving would give it. */
+    private static Refund owed(Payment payment, String amount) {
+        Refund refund = payment.refund(Refund.Kind.AMOUNT, new BigDecimal(amount), "Goodwill", "k1",
+                "admin@example.com", NOW);
+        ReflectionTestUtils.setField(refund, "id", REFUND_ID);
+        return refund;
     }
 
     private static Payment paid() {

@@ -151,6 +151,12 @@ public class ShopConfig {
                             // logged-in user could enumerate all customers' orders.
                             .requestMatchers(HttpMethod.GET,
                                     "/api/v1/orders/admin").hasAuthority("ROLE_ADMIN")
+                            // Refunding part of an order gives money back, so it is an
+                            // admin's decision (docs/payment-design.md, section 11). Seeing an
+                            // order's refunds (GET) falls through to "authenticated", and the
+                            // service checks the caller owns the order or is an admin.
+                            .requestMatchers(HttpMethod.POST,
+                                    "/api/v1/orders/*/refunds").hasAuthority("ROLE_ADMIN")
                             // Everything else — carts, orders, user management — requires
                             // authentication; object-level ownership is then enforced in
                             // the service layer (see AuthUtils / CartService).

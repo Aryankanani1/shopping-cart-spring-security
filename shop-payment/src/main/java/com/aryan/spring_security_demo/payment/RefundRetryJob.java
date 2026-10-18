@@ -12,7 +12,7 @@ import java.time.Duration;
 /**
  * Retries refunds still owed: ones the after-commit attempt couldn't finish (the
  * provider was down) or never started (the app stopped right after the
- * cancellation committed). Runs on {@code app.payment.refund-retry-cron}, on one
+ * transaction that owed them committed). Runs on {@code app.payment.refund-retry-cron}, on one
  * instance at a time (ShedLock).
  */
 @Component
@@ -31,7 +31,7 @@ public class RefundRetryJob {
     public void run() {
         int refunded = refundProcessor.retryPendingRefunds(clock.instant().minus(GRACE));
         if (refunded > 0) {
-            log.info("Refund retry: refunded {} payment(s)", refunded);
+            log.info("Refund retry: {} refund(s) made", refunded);
         }
     }
 }

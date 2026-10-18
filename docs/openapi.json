@@ -52,6 +52,20 @@
         },
         "type" : "object"
       },
+      "ApiResponseListRefundDto" : {
+        "properties" : {
+          "data" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RefundDto"
+            },
+            "type" : "array"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
       "ApiResponseListWishlistItemDto" : {
         "properties" : {
           "data" : {
@@ -124,6 +138,17 @@
         "properties" : {
           "data" : {
             "$ref" : "#/components/schemas/PaymentDto"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "ApiResponseRefundDto" : {
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/RefundDto"
           },
           "message" : {
             "type" : "string"
@@ -322,6 +347,10 @@
       },
       "OrderItemDto" : {
         "properties" : {
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
           "price" : {
             "type" : "number"
           },
@@ -336,6 +365,10 @@
             "type" : "string"
           },
           "quantity" : {
+            "format" : "int32",
+            "type" : "integer"
+          },
+          "refundedQuantity" : {
             "format" : "int32",
             "type" : "integer"
           }
@@ -551,16 +584,8 @@
           "providerReference" : {
             "type" : "string"
           },
-          "refundReference" : {
-            "type" : "string"
-          },
-          "refundRequestedAt" : {
-            "format" : "date-time",
-            "type" : "string"
-          },
-          "refundedAt" : {
-            "format" : "date-time",
-            "type" : "string"
+          "refundedAmount" : {
+            "type" : "number"
           },
           "status" : {
             "enum" : [ "PROCESSING", "SUCCEEDED", "FAILED", "REFUND_PENDING", "REFUNDED" ],
@@ -689,6 +714,108 @@
           }
         },
         "required" : [ "refreshToken" ],
+        "type" : "object"
+      },
+      "RefundDto" : {
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RefundItemDto"
+            },
+            "type" : "array"
+          },
+          "kind" : {
+            "enum" : [ "AMOUNT", "CANCELLATION", "ITEMS" ],
+            "type" : "string"
+          },
+          "paymentId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "refundedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "requestedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "status" : {
+            "enum" : [ "PENDING", "REFUNDED" ],
+            "type" : "string"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundItemDto" : {
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "orderItemId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "quantity" : {
+            "format" : "int32",
+            "type" : "integer"
+          }
+        },
+        "type" : "object"
+      },
+      "RefundLine" : {
+        "properties" : {
+          "orderItemId" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "quantity" : {
+            "format" : "int32",
+            "maximum" : 10000,
+            "minimum" : 1,
+            "type" : "integer"
+          }
+        },
+        "required" : [ "orderItemId", "quantity" ],
+        "type" : "object"
+      },
+      "RefundOrderRequest" : {
+        "properties" : {
+          "amount" : {
+            "minimum" : 0.01,
+            "type" : "number"
+          },
+          "items" : {
+            "items" : {
+              "$ref" : "#/components/schemas/RefundLine"
+            },
+            "maxItems" : 100,
+            "minItems" : 0,
+            "type" : "array"
+          },
+          "reason" : {
+            "maxLength" : 255,
+            "minLength" : 0,
+            "type" : "string"
+          },
+          "restock" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "reason" ],
         "type" : "object"
       },
       "SlicedResponseOrderDto" : {
@@ -1758,6 +1885,111 @@
           }
         },
         "tags" : [ "payment-controller" ]
+      }
+    },
+    "/api/v1/orders/{orderId}/refunds" : {
+      "get" : {
+        "operationId" : "getRefunds",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseListRefundDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "refund-controller" ]
+      },
+      "post" : {
+        "operationId" : "refund",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "header",
+          "name" : "Idempotency-Key",
+          "required" : true,
+          "schema" : {
+            "pattern" : "[A-Za-z0-9_-]{8,64}",
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RefundOrderRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "refund-controller" ]
+      }
+    },
+    "/api/v1/orders/{orderId}/refunds/{refundId}" : {
+      "get" : {
+        "operationId" : "getRefund",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "orderId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        }, {
+          "in" : "path",
+          "name" : "refundId",
+          "required" : true,
+          "schema" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponseRefundDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "refund-controller" ]
       }
     },
     "/api/v1/orders/{orderId}/status" : {

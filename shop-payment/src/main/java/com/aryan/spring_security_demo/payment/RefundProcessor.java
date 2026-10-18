@@ -24,24 +24,23 @@ public class RefundProcessor {
     private final PaymentGatewayClient gateway;
 
     /**
-     * Refund one payment, if it is still owed.
+     * Send one refund to the provider, if it is still owed.
      *
      * @return false if the provider is still unavailable after the retries; the
-     *         payment stays {@code REFUND_PENDING} for the retry job
+     *         refund stays {@code PENDING} for the retry job
      */
-    public boolean refund(Long paymentId) {
-        Optional<RefundRequest> owed = recorder.pendingRefund(paymentId);
+    public boolean refund(Long refundId) {
+        Optional<RefundRequest> owed = recorder.pendingRefund(refundId);
         if (owed.isEmpty()) {
             return true;  // refunded already, by the listener or the job
         }
         RefundAttempt attempt = gateway.refund(owed.get());
         if (attempt instanceof RefundAttempt.StillOwed stillOwed) {
-            // The client's fallback: the payment stays REFUND_PENDING for the retry job.
-            log.warn("Refund of payment {}: still owed ({}), the retry job will try again", paymentId,
-                    stillOwed.reason());
+            // The client's fallback: the refund stays PENDING for the retry job.
+            log.warn("Refund {}: still owed ({}), the retry job will try again", refundId, stillOwed.reason());
             return false;
         }
-        recorder.recordRefunded(paymentId, ((RefundAttempt.Refunded) attempt).refund());
+        recorder.recordRefunded(refundId, ((RefundAttempt.Refunded) attempt).refund());
         return true;
     }
 
@@ -53,13 +52,13 @@ public class RefundProcessor {
      */
     public int retryPendingRefunds(Instant requestedBefore) {
         int refunded = 0;
-        for (Long paymentId : recorder.refundsPendingSince(requestedBefore)) {
+        for (Long refundId : recorder.refundsPendingSince(requestedBefore)) {
             try {
-                if (refund(paymentId)) {
+                if (refund(refundId)) {
                     refunded++;
                 }
             } catch (RuntimeException e) {
-                log.warn("Refund of payment {} failed, the retry job will try again", paymentId, e);
+                log.warn("Refund {} failed, the retry job will try again", refundId, e);
             }
         }
         return refunded;

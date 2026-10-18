@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.cart.CartService;
 import com.aryan.spring_security_demo.catalog.InsufficientStockException;
 import com.aryan.spring_security_demo.catalog.Product;
 import com.aryan.spring_security_demo.catalog.ProductRepository;
+import com.aryan.spring_security_demo.common.exception.BadRequestException;
 import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.common.web.SlicedResponse;
 import com.aryan.spring_security_demo.identity.security.AuthUtils;
@@ -25,16 +26,24 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class OrderService implements OrderServiceInterface{
+
+    /** The states in which a paid order's items can be refunded. */
+    private static final Set<OrderStatus> REFUNDABLE = EnumSet.of(
+            OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED);
 
     private final OrderRepository orderRepository;
     private final ProductRepository  productRepository;
@@ -244,11 +253,63 @@ public class OrderService implements OrderServiceInterface{
                 .forEach(product -> entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE));
     }
 
-    /** Return each item's quantity to product inventory when an order is cancelled. */
+    /**
+     * Return each item's quantity to product inventory when an order is cancelled:
+     * all of it but what was refunded already, which a refund that restocked put
+     * back then (and one that didn't treated as gone: damaged, or kept).
+     */
     private void restock(Order order) {
         order.getOrderItems().forEach(item -> {
             Product product = item.getProduct();
-            product.setInventory(product.getInventory() + item.getQuantity());
+            product.setInventory(product.getInventory() + item.refundableQuantity());
+        });
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<RefundedItem> refundItems(Long orderId, Map<Long, Integer> quantities, boolean restock) {
+        Order order = loadOrderWithItems(orderId);
+        // Raises the order's version at commit, so a cancellation that read the order
+        // before this fails its version check (409) instead of restocking these items
+        // a second time. The caller locked the payment first, as a cancellation does,
+        // so the two can't deadlock.
+        entityManager.lock(order, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+        if (!REFUNDABLE.contains(order.getOrderStatus())) {
+            throw new InvalidOrderStateException(
+                    "An order that is " + order.getOrderStatus() + " can't have items refunded");
+        }
+        Map<Long, OrderItem> items = order.getOrderItems().stream()
+                .collect(Collectors.toMap(OrderItem::getId, Function.identity()));
+        List<RefundedItem> refunded = new ArrayList<>();
+        for (Map.Entry<Long, Integer> line : new TreeMap<>(quantities).entrySet()) {
+            OrderItem item = items.get(line.getKey());
+            if (item == null) {
+                throw new BadRequestException("Invalid refund", "Order item " + line.getKey() + " isn't in order " + orderId);
+            }
+            item.refund(line.getValue());
+            refunded.add(new RefundedItem(item.getId(), line.getValue(),
+                    item.getPrice().multiply(BigDecimal.valueOf(line.getValue()))));
+        }
+        if (restock) {
+            restockRefunded(refunded.stream().map(line -> items.get(line.orderItemId())).toList(), quantities);
+        }
+        return refunded;
+    }
+
+    /**
+     * Put refunded items back in stock. The products are locked and re-read first, in
+     * id order, as checkout and cancellation lock them, so none of the three can
+     * deadlock with another or restock from a stale read.
+     */
+    private void restockRefunded(List<OrderItem> items, Map<Long, Integer> quantities) {
+        items.stream()
+                .map(OrderItem::getProduct)
+                .distinct()
+                .sorted(Comparator.comparing(Product::getId))
+                .forEach(product -> entityManager.refresh(product, LockModeType.PESSIMISTIC_WRITE));
+        items.forEach(item -> {
+            Product product = item.getProduct();
+            product.setInventory(product.getInventory() + quantities.get(item.getId()));
         });
     }
 

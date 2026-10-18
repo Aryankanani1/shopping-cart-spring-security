@@ -4,8 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
  * An event the provider reports by webhook. {@code data.idempotencyKey} is the key
- * the shop sent the charge or refund under ({@code pay_<payment id>},
- * {@code refund_<payment id>}), which is how it finds the payment.
+ * the shop sent the charge or refund under: {@code pay_<payment id>}, which names
+ * the payment, or a refund's own key ({@code rfd_...}, or {@code refund_<payment id>}
+ * for one made before partial refunds), which the shop looks the refund up by.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)  // providers add fields over time
 public record WebhookEvent(String id, String type, long created, Data data) {

@@ -19,5 +19,8 @@ public class OrderMappings implements ModelMapperCustomizer {
             // Worked out by OrderService from the unpaid-order window, not a field.
             mapper.skip(OrderDto::setPayBy);
         });
+        // Explicit, since an item's order and product have ids too.
+        modelMapper.typeMap(OrderItem.class, OrderItemDto.class).addMappings(mapper ->
+                mapper.map(OrderItem::getId, OrderItemDto::setId));
     }
 }

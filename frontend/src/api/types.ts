@@ -60,10 +60,14 @@ export interface CartDto {
 }
 
 export interface OrderItemDto {
+  /** What a refund of items names. */
+  id: number
   productId: number
   productName: string
   productBrand: string
   quantity: number
+  /** How many of them have been refunded (RefundDto). */
+  refundedQuantity: number
   price: number
 }
 
@@ -116,11 +120,50 @@ export interface PaymentDto {
   /** ISO instants. */
   createdAt: string
   completedAt: string | null
-  /** Set once the order was cancelled and the money refunded. */
-  refundReference: string | null
-  refundRequestedAt: string | null
-  refundedAt: string | null
+  /** What the provider has refunded so far, in part or in full (RefundDto). */
+  refundedAmount: number
 }
+
+/** What a refund gives back for (docs/payment-design.md, section 11). */
+export type RefundKind = 'ITEMS' | 'AMOUNT' | 'CANCELLATION'
+
+/** PENDING until the payment provider has refunded it. */
+export type RefundStatus = 'PENDING' | 'REFUNDED'
+
+/** An order item a refund of items gave money back for. */
+export interface RefundItemDto {
+  orderItemId: number
+  quantity: number
+  /** What the customer paid for them. */
+  amount: number
+}
+
+/** A refund of part or all of an order's payment (RefundDto). */
+export interface RefundDto {
+  id: number
+  paymentId: number
+  kind: RefundKind
+  amount: number
+  currency: string
+  /** Why, in the admin's words; shown to the customer. */
+  reason: string | null
+  status: RefundStatus
+  /** ISO instants. */
+  requestedAt: string
+  refundedAt: string | null
+  /** For a refund of items; empty otherwise. */
+  items: RefundItemDto[]
+}
+
+/** An admin's refund (RefundOrderRequest): order items and quantities, or an amount. */
+export type RefundOrderRequest =
+  | {
+      items: { orderItemId: number; quantity: number }[]
+      /** Put the items back in stock. */
+      restock?: boolean
+      reason: string
+    }
+  | { amount: number; reason: string }
 
 /** Lightweight order row for the admin order list (no item breakdown). */
 export interface OrderSummaryDto {
