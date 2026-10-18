@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.catalog;
 
+import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -177,5 +178,37 @@ class ProductControllerValidationTest {
         mockMvc.perform(get("/api/v1/products").param("sort", "%"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.title").value("Invalid sort parameter"));
+    }
+
+    // Regression (found by the staging fuzzing): a price larger than its column
+    // (decimal(38,2)) failed in the database as a 409 "Data conflict", and a third
+    // decimal was rounded away.
+    @Test
+    void addAndUpdateProduct_withAPriceTooLargeOrTooPrecise_return400() throws Exception {
+        for (String price : new String[] {"1e40", "1234567890123", "9.999"}) {
+            String fields = """
+                    "name": "Keyboard", "price": %s, "brand": "Acme", "inventory": 5""".formatted(price);
+
+            mockMvc.perform(post("/api/v1/products").contentType(MediaType.APPLICATION_JSON)
+                            .content("{" + fields + ", \"category\": {\"name\": \"Electronics\"}}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.price").value("Price must have at most 12 digits and 2 decimals"));
+            mockMvc.perform(put("/api/v1/products/1").contentType(MediaType.APPLICATION_JSON)
+                            .content("{" + fields + "}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors.price").value("Price must have at most 12 digits and 2 decimals"));
+        }
+        verify(productService, never()).addProductAndConvert(any());
+        verify(productService, never()).updateProductAndConvert(any(), any());
+    }
+
+    // Regression (found by the staging fuzzing): a negative id didn't match the GET's
+    // digits-only pattern, so it matched PUT and DELETE /products/{id} and got a 405.
+    @Test
+    void getProduct_withANegativeId_is404() throws Exception {
+        when(productService.getProductDtoById(-1L)).thenThrow(new ResourceNotFoundException("Product not found!"));
+
+        mockMvc.perform(get("/api/v1/products/{productId}", -1))
+                .andExpect(status().isNotFound());
     }
 }

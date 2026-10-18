@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.catalog;
 
 import com.aryan.spring_security_demo.common.validation.NoProfanity;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -25,8 +26,12 @@ public abstract class ProductRequestFields {
     @NoProfanity(message = "Product name contains disallowed words")
     private String name;
 
+    // What the column (decimal(38,2)) can hold, to the same limit as a refund's amount:
+    // a larger price failed in the database as a 409 "Data conflict", and a third
+    // decimal was rounded away.
     @NotNull(message = "Price is required")
     @Positive(message = "Price must be greater than zero")
+    @Digits(integer = 12, fraction = 2, message = "Price must have at most 12 digits and 2 decimals")
     private BigDecimal price;
 
     @Size(max = Product.DESCRIPTION_MAX, message = "Description must be at most " + Product.DESCRIPTION_MAX + " characters")

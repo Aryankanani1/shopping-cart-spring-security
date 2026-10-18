@@ -21,7 +21,7 @@ public class ImageService implements ImageServiceInterface {
      * with its stored content type, so anything else (e.g. text/html) is refused
      * at upload rather than served back from the API's origin.
      */
-    private static final Set<String> ALLOWED_TYPES =
+    static final Set<String> ALLOWED_TYPES =
             Set.of("image/jpeg", "image/png", "image/webp", "image/gif");
 
     private final ImageRepository imageRepository;

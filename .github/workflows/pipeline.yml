@@ -455,6 +455,8 @@ jobs:
           EOF
           echo "E2E_ADMIN_EMAIL=admin@staging.test" >> "$GITHUB_ENV"
           echo "E2E_ADMIN_PASSWORD=$ADMIN_PASSWORD" >> "$GITHUB_ENV"
+          # For the fuzzing, which signs the webhook deliveries it generates.
+          echo "PAYMENT_WEBHOOK_SECRET=$PAYMENT_WEBHOOK_SECRET" >> "$GITHUB_ENV"
           # On master the images aren't here yet and are pulled from the registry.
           docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
           for _ in $(seq 60); do
