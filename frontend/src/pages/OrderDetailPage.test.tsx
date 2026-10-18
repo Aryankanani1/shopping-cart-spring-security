@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { OrderDetailPage } from './OrderDetailPage'
 import { ApiError } from '../api/client'
 import { renderPage } from '../test/renderPage'
-import { order, payment } from '../test/fixtures'
+import { order, payment, refund } from '../test/fixtures'
 import { queryKeys } from '../api/queryKeys'
 
 vi.mock('../context/AuthContext', () => ({ useAuth: vi.fn() }))
@@ -13,9 +13,11 @@ vi.mock('../api/payments', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/payments')>()),
   paymentsApi: { list: vi.fn(), pay: vi.fn() },
 }))
+vi.mock('../api/refunds', () => ({ refundsApi: { list: vi.fn() } }))
 import { useAuth } from '../context/AuthContext'
 import { ordersApi } from '../api/orders'
 import { paymentsApi } from '../api/payments'
+import { refundsApi } from '../api/refunds'
 
 const DECLINED = payment({
   status: 'FAILED',
@@ -36,6 +38,7 @@ beforeEach(() => {
   vi.mocked(ordersApi.cancel).mockReset()
   vi.mocked(paymentsApi.list).mockReset().mockResolvedValue([])
   vi.mocked(paymentsApi.pay).mockReset()
+  vi.mocked(refundsApi.list).mockReset().mockResolvedValue([])
 })
 
 afterEach(() => {
@@ -234,6 +237,45 @@ describe('OrderDetailPage', () => {
     await waitFor(() => expect(ordersApi.get).toHaveBeenCalledTimes(2))
     // Both the order's badge and the payment's tag now say so.
     await waitFor(() => expect(screen.getAllByText('paid')).toHaveLength(2))
+  })
+
+  it('shows the order’s refunds, and how many of each item were refunded', async () => {
+    const returned = refund({
+      kind: 'ITEMS',
+      amount: 24,
+      reason: 'Returned: wrong colour',
+      items: [{ orderItemId: 101, quantity: 1, amount: 24 }],
+    })
+    vi.mocked(ordersApi.get).mockResolvedValue(
+      order({ status: 'DELIVERED', items: [{ ...order().items[0], refundedQuantity: 1 }] }),
+    )
+    vi.mocked(paymentsApi.list).mockResolvedValue([payment({ refundedAmount: 24 })])
+    vi.mocked(refundsApi.list).mockResolvedValue([returned])
+    open()
+
+    const refunds = await screen.findByRole('region', { name: 'Refunds' })
+    expect(within(refunds).getByText('Returned: wrong colour')).toBeInTheDocument()
+    expect(within(refunds).getByText('1 × Desk Lamp')).toBeInTheDocument()
+    expect(screen.getByText('1 refunded')).toBeInTheDocument()
+    expect(screen.getByText('$24.00 refunded so far')).toBeInTheDocument()
+    expect(refundsApi.list).toHaveBeenCalledWith(55)
+  })
+
+  // Made by the provider after it is committed: the payment then says how much
+  // has gone back, so it's fetched again.
+  it('fetches the payment again once a pending refund is made', async () => {
+    vi.mocked(ordersApi.get).mockResolvedValue(order({ status: 'DELIVERED' }))
+    vi.mocked(paymentsApi.list).mockResolvedValue([payment()])
+    vi.mocked(refundsApi.list).mockResolvedValue([refund({ status: 'PENDING', refundedAt: null })])
+    const { queryClient } = open()
+    await screen.findByText('pending')
+    // Like the server once the provider has refunded it.
+    vi.mocked(paymentsApi.list).mockResolvedValue([payment({ refundedAmount: 5 })])
+
+    queryClient.setQueryData(queryKeys.orders.refunds(55), [refund()])
+
+    expect(await screen.findByText('$5.00 refunded so far')).toBeInTheDocument()
+    expect(paymentsApi.list).toHaveBeenCalledTimes(2)
   })
 
   it('shows someone else’s order as an error, not the order', async () => {

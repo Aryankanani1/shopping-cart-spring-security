@@ -26,6 +26,13 @@ export const NEXT_STATUSES: Record<string, string[]> = {
   CANCELLED: [],
 }
 
+/**
+ * The statuses of an order an admin may refund part of, once paid: until it is
+ * cancelled, shipped and delivered ones included, since that is where returns
+ * happen (OrderService.REFUNDABLE on the backend).
+ */
+export const REFUNDABLE_STATUSES: ReadonlySet<string> = new Set(['PAID', 'PROCESSING', 'SHIPPED', 'DELIVERED'])
+
 export const ordersApi = {
   /** Turn the signed-in user's cart into an order shipped to `address` (clears the cart server-side). */
   place: (address: ShippingAddress) => request<OrderDto>('/orders', { method: 'POST', body: address }),

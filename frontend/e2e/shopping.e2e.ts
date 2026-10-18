@@ -85,7 +85,9 @@ test('a new customer signs up, buys and pays for a product, cancels it for a ref
     page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: 'Cancel order' }).click()
     // The refund runs just after the cancellation commits; the page checks back until it's settled.
-    await expect(page.getByText('refunded', { exact: true })).toBeVisible({ timeout: 15_000 })
+    // The payment says so (its refund, listed under Refunds, does too).
+    const payments = page.getByRole('region', { name: 'Payments' })
+    await expect(payments.getByText('refunded', { exact: true })).toBeVisible({ timeout: 15_000 })
     expect(await inventoryOf(request, product.id)).toBe(4)
   })
 

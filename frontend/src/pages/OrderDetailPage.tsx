@@ -4,12 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ordersApi } from '../api/orders'
 import { paymentsApi } from '../api/payments'
 import { queryKeys } from '../api/queryKeys'
+import { refundsApi } from '../api/refunds'
 import { useAuth } from '../context/AuthContext'
 import { errMessage } from '../lib/errors'
 import { Loader, ErrorNote } from '../components/ui'
 import { StatusBadge } from '../components/ui/StatusBadge'
 import { PaymentPanel } from '../components/order/PaymentPanel'
 import { PaymentHistory, recheckInterval } from '../components/order/PaymentHistory'
+import { RefundList, refundRecheckInterval } from '../components/order/RefundList'
 import { formatDate, formatMoney } from '../lib/format'
 
 // Statuses from which the owner may still cancel — mirrors the server's rule
@@ -52,6 +54,24 @@ export function OrderDetailPage() {
     }
     wasConfirming.current = confirming
   }, [confirming, orderId, queryClient])
+
+  const { data: refunds } = useQuery({
+    queryKey: queryKeys.orders.refunds(orderId),
+    queryFn: () => refundsApi.list(orderId),
+    enabled: Number.isFinite(orderId),
+    refetchInterval: (query) => refundRecheckInterval(query.state.data),
+  })
+  // The provider makes a refund after it is committed. Once the last pending one is
+  // made, the payment says how much has gone back (and may be refunded in full), so
+  // fetch it again.
+  const refunding = refunds?.some((refund) => refund.status === 'PENDING') ?? false
+  const wasRefunding = useRef(false)
+  useEffect(() => {
+    if (wasRefunding.current && !refunding) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.orders.payments(orderId) })
+    }
+    wasRefunding.current = refunding
+  }, [refunding, orderId, queryClient])
 
   const cancel = useMutation({
     mutationFn: () => ordersApi.cancel(orderId),
@@ -137,10 +157,11 @@ export function OrderDetailPage() {
           <span className="eyebrow order-item__right">Total</span>
         </li>
         {(order.items ?? []).map((item) => (
-          <li className="order-item" key={item.productId}>
+          <li className="order-item" key={item.id}>
             <div className="order-item__info">
               <span className="order-item__name serif">{item.productName}</span>
               {item.productBrand && <span className="faint">{item.productBrand}</span>}
+              {item.refundedQuantity > 0 && <span className="faint">{item.refundedQuantity} refunded</span>}
             </div>
             <span>{item.quantity}</span>
             <span className="price">{formatMoney(item.price)}</span>
@@ -165,6 +186,7 @@ export function OrderDetailPage() {
       )}
 
       <PaymentHistory payments={payments} />
+      <RefundList refunds={refunds} items={order.items ?? []} />
     </div>
   )
 }

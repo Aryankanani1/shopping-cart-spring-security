@@ -5,6 +5,7 @@ import type {
   PagedResponse,
   PaymentDto,
   ProductDto,
+  RefundDto,
 } from '../api/types'
 
 export function product(overrides: Partial<ProductDto> = {}): ProductDto {
@@ -70,6 +71,23 @@ export function payment(overrides: Partial<PaymentDto> = {}): PaymentDto {
     createdAt: '2026-09-14T10:00:00Z',
     completedAt: '2026-09-14T10:00:01Z',
     refundedAmount: 0,
+    ...overrides,
+  }
+}
+
+/** A refund the provider has made, of an amount, from payment 7. */
+export function refund(overrides: Partial<RefundDto> = {}): RefundDto {
+  return {
+    id: 3,
+    paymentId: 7,
+    kind: 'AMOUNT',
+    amount: 5,
+    currency: 'USD',
+    reason: 'The box arrived damaged',
+    status: 'REFUNDED',
+    requestedAt: '2026-09-15T09:00:00Z',
+    refundedAt: '2026-09-15T09:00:01Z',
+    items: [],
     ...overrides,
   }
 }

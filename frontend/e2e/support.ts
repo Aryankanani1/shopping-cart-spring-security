@@ -68,6 +68,57 @@ export async function createProduct(
   return { id, name: product.name, price: product.price }
 }
 
+export interface Customer {
+  email: string
+  password: string
+  token: string
+}
+
+/** A new customer, registered and signed in through the API. */
+export async function createCustomer(request: APIRequestContext): Promise<Customer> {
+  const email = `${unique('e2e').replace(' ', '-')}@example.com`
+  const password = 'e2e-password-123'
+  const registered = await request.post('/api/v1/users', {
+    data: { firstName: 'Erin', lastName: 'Tester', email, password },
+  })
+  expect(registered.status(), await registered.text()).toBe(201)
+  const res = await request.post('/api/v1/auth/login', { data: { email, password } })
+  expect(res.status(), await res.text()).toBe(200)
+  return { email, password, token: (await res.json()).data.token }
+}
+
+/** The customer's order of `quantity` of `product`, paid with the simulated provider's test Visa; its id. */
+export async function createPaidOrder(
+  request: APIRequestContext,
+  customer: Customer,
+  product: CreatedProduct,
+  quantity: number,
+): Promise<number> {
+  const auth = { Authorization: `Bearer ${customer.token}` }
+  const added = await request.post('/api/v1/cartItems', { headers: auth, params: { productId: product.id, quantity } })
+  expect(added.status(), await added.text()).toBe(201)
+  const placed = await request.post('/api/v1/orders', {
+    headers: auth,
+    data: {
+      recipientName: 'Erin Tester',
+      addressLine1: '1 Test Street',
+      city: 'Testville',
+      state: 'TS',
+      postalCode: '12345',
+      country: 'US',
+    },
+  })
+  expect(placed.status(), await placed.text()).toBe(201)
+  const orderId: number = (await placed.json()).data.id
+  const paid = await request.post(`/api/v1/orders/${orderId}/payments`, {
+    headers: { ...auth, 'Idempotency-Key': unique('pay').replace(' ', '-') },
+    data: { paymentMethod: 'test_visa' },
+  })
+  expect(paid.status(), await paid.text()).toBe(201)
+  expect((await paid.json()).data.status).toBe('SUCCEEDED')
+  return orderId
+}
+
 export async function inventoryOf(request: APIRequestContext, productId: number): Promise<number> {
   const res = await request.get(`/api/v1/products/${productId}`)
   expect(res.status()).toBe(200)
