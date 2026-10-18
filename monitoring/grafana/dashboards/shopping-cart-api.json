@@ -642,6 +642,45 @@
           "placement": "bottom"
         }
       }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Retries by outcome",
+      "description": "Resilience4j's retries (docs/payment-design.md, section 10): the payment provider's calls (payment-charge, payment-lookup, payment-refund) and the internal ones (webhook-delivery, startup-check). failed_with_retry: the tries were used up and the call's fallback ran.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (name, kind) (increase(resilience4j_retry_calls_total{job=\"shopping-cart-api\"}[5m]))",
+          "legendFormat": "{{name}} {{kind}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
     }
   ]
 }

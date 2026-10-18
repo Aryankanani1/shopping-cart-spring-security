@@ -16,8 +16,6 @@ import java.util.Optional;
 @Slf4j
 public class PaymentService implements PaymentServiceInterface {
 
-    static final String PROVIDER_UNAVAILABLE = "The payment provider is unavailable; please try again in a moment";
-
     private final PaymentRecorder recorder;
     private final PaymentGatewayClient gateway;
     private final PaymentRepository paymentRepository;
@@ -57,12 +55,6 @@ public class PaymentService implements PaymentServiceInterface {
         ChargeResult result;
         try {
             result = gateway.charge(request);
-        } catch (PaymentProviderUnavailableException e) {
-            // Still unavailable once the retries ran out. No transaction is open
-            // here, so catching it hides nothing from a rollback: the provider never
-            // took the charge, and the attempt is recorded as failed.
-            log.warn("Payment {}: provider unavailable after retries", payment.id(), e);
-            return recorder.recordFailure(payment.id(), PROVIDER_UNAVAILABLE);
         } catch (PaymentOutcomeUnknownException e) {
             // It may have charged, so the attempt isn't failed: it stays PROCESSING
             // (the answer is 202), and PaymentReconciler settles it later from what
@@ -72,6 +64,11 @@ public class PaymentService implements PaymentServiceInterface {
         }
         if (result instanceof ChargeResult.Approved approved) {
             return recorder.recordSuccess(payment.id(), approved);
+        }
+        if (result instanceof ChargeResult.Unavailable unavailable) {
+            // The client's fallback, once the retries ran out or while the breaker is
+            // open: the provider never took the charge, so the attempt fails.
+            return recorder.recordFailure(payment.id(), unavailable.reason());
         }
         return recorder.recordFailure(payment.id(), ((ChargeResult.Declined) result).reason());
     }

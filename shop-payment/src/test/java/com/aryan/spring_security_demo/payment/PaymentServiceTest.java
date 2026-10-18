@@ -93,11 +93,11 @@ class PaymentServiceTest {
     }
 
     @Test
-    void pay_providerStillUnavailableAfterRetries_recordsAFailure() {
+    void pay_theClientsFallback_whenTheProviderStaysUnavailable_recordsAFailure() {
         when(recorder.start(ORDER_ID, KEY, FakePaymentGateway.VISA))
                 .thenReturn(new PaymentRecorder.Attempt(payment(PaymentStatus.PROCESSING), false));
-        when(gateway.charge(CHARGE)).thenThrow(new PaymentProviderUnavailableException("down"));
-        when(recorder.recordFailure(PAYMENT_ID, PaymentService.PROVIDER_UNAVAILABLE))
+        when(gateway.charge(CHARGE)).thenReturn(new ChargeResult.Unavailable(PaymentGatewayClient.PROVIDER_UNAVAILABLE));
+        when(recorder.recordFailure(PAYMENT_ID, PaymentGatewayClient.PROVIDER_UNAVAILABLE))
                 .thenReturn(payment(PaymentStatus.FAILED));
 
         assertThat(paymentService.pay(ORDER_ID, KEY, FakePaymentGateway.VISA).payment().status())

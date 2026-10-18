@@ -489,8 +489,20 @@ Stripe isn't called, a payment gets `503` with `Retry-After: 30` instead of usin
 up one of the order's attempts, and refunds and reconciliation wait for their next
 run. Then 2 trial calls go through, and it closes when they succeed. A decline
 doesn't count, since that is Stripe answering. Its state is on the Grafana
-dashboard, and it stays out of the health checks, so an outage at Stripe never
-takes the shop offline.
+dashboard and in the health details, as `CIRCUIT_OPEN`, which leaves health `UP`,
+and it is never part of readiness, so an outage at Stripe never takes the shop
+offline.
+
+**Retries and fallbacks** (Resilience4j's Retry;
+[section 10](docs/payment-design.md#10-retries-and-fallbacks-with-resilience4j)): a
+provider call that can't reach the provider is tried 3 times in all, 100 ms and
+200 ms apart. Then its fallback says what happened instead of throwing: a payment is
+recorded as failed ("try again in a moment"), a refund stays owed for the retry job,
+a lookup is asked again on the next run. A timeout isn't retried, since the provider
+may have charged; reconciliation finds out. The fake provider's webhook delivery
+and the startup check of external endpoints get retries too, and the delivery its
+own breaker. Admins can see them all at `/actuator/circuitbreakers`,
+`/actuator/circuitbreakerevents`, `/actuator/retries` and `/actuator/retryevents`.
 
 ## Startup pipeline
 

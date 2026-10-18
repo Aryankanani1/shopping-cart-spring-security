@@ -119,7 +119,7 @@ sequenceDiagram
     participant S as PaymentService (no transaction)
     participant R as PaymentRecorder
     participant DB as MySQL
-    participant G as PaymentGatewayClient (@Retryable)
+    participant G as PaymentGatewayClient (Retry)
     C->>S: POST /orders/42/payments, Idempotency-Key k1
     S->>R: start(42, k1, test_visa)
     rect rgb(230, 240, 255)
@@ -171,7 +171,7 @@ In `shop-payment`, package `com.aryan.spring_security_demo.payment`:
 | `PaymentController` | The endpoints; validates the `Idempotency-Key` and the body | none |
 | `PaymentService` | Runs the three steps of a payment; reads | none for `pay`, read-only for reads |
 | `PaymentRecorder` | `start`, `recordSuccess`, `recordFailure` | each a short `@Transactional` of its own (a separate bean, so the proxy applies) |
-| `PaymentGatewayClient` | Calls the gateway, `@Retryable` on `PaymentProviderUnavailableException` (2 retries, after 100 ms and 200 ms) | none, by design |
+| `PaymentGatewayClient` | Calls the gateway with Resilience4j's Retry on `PaymentProviderUnavailableException` (2 retries, after 100 ms and 200 ms), then a fallback (section 10) | none, by design |
 | `PaymentGateway` | The provider boundary: `charge(ChargeRequest)` returns a `ChargeResult` (`Approved` or `Declined`), or throws `PaymentProviderUnavailableException` | |
 | `FakePaymentGateway` | The test payment methods below; remembers each result by provider key, so a repeated key gets the first result | |
 | `Payment`, `PaymentStatus`, `PaymentRepository` | The entity, its state machine and its queries | |
@@ -530,7 +530,7 @@ tables stay as they are.
 
 ```mermaid
 flowchart LR
-    C[PaymentGatewayClient<br/>@Retryable] --> G{{PaymentGateway}}
+    C[PaymentGatewayClient<br/>Retry] --> G{{PaymentGateway}}
     G --> F[FakePaymentGateway]
     G --> S[StripePaymentGateway<br/>RestClient] -->|HTTPS, Idempotency-Key| API[Stripe API, test mode]
     API -->|webhook| CLI[stripe listen<br/>on the developer's machine]
@@ -764,19 +764,20 @@ every caller already handles without losing money:
 
 - **One breaker, `stripe`, for every Stripe call**: charges, lookups and refunds
   share one view of Stripe's health.
-- **Inside the Stripe adapter, under the retries** of `PaymentGatewayClient`, so
-  every try counts, and a call the open breaker refuses isn't retried
-  (`@Retryable(excludes = ...)`): retrying it would only be refused again. Nor is a
-  lookup Stripe answered without settling.
+- **Inside the Stripe adapter, under the retries** of `PaymentGatewayClient`
+  (section 10), so every try counts, and a call the open breaker refuses isn't
+  retried: retrying it would only be refused again. Nor is a lookup Stripe answered
+  without settling.
 - **Not around the fake provider.** Its failures are simulated per payment method
   (`test_provider_down`), so a breaker there would let one customer's test close
   payments for everyone.
-- **Out of the health checks.** An open breaker must not make the API look down.
-  Caddy, `deploy.sh` and the pipeline's staging check all go by
+- **Never in readiness, never `DOWN`.** An open breaker must not make the API look
+  down. Caddy, `deploy.sh` and the pipeline's staging check all go by
   `/actuator/health/readiness`, so a breaker added to readiness (as some guides
   suggest) would take the shop out of the load balancer whenever Stripe is down.
-  Its health indicator is off, and its state goes to Prometheus instead
-  (`resilience4j_circuitbreaker_*`), on the Grafana dashboard.
+  Its state shows in the health details instead, without changing the overall
+  status (section 10), and goes to Prometheus (`resilience4j_circuitbreaker_*`), on
+  the Grafana dashboard.
 - **It half-opens on its own** after 30 seconds. Paying only reads the breaker's
   state before it starts, so without that nothing might try Stripe again while
   payments are being refused.
@@ -796,10 +797,111 @@ half-open by itself.
 | Only "Stripe is unwell" outcomes are failures | A decline or a refused request is Stripe working; counting them would let customers' cards open the breaker | Counting every exception |
 | While open, a payment is refused before it is recorded (`503`, `Retry-After`) | An outage doesn't use up the customer's attempts, and the client is told when to come back | Recording a `FAILED` attempt each time |
 | The existing "unavailable" paths are the fallback | Each already keeps the money safe; nothing new can guess wrong | A fallback that guesses, such as approving now and settling later |
-| No health indicator | An outage at Stripe mustn't take the shop out of the load balancer | The breaker's state in readiness |
+| In the health details, but never `DOWN` and never in readiness | An outage at Stripe mustn't take the shop out of the load balancer | The breaker's state in readiness |
 | No fallback URL | Stripe has one API host, and sending an unanswered charge elsewhere could charge twice | A list of backup URLs |
 
-## 10. Roadmap
+## 10. Retries and fallbacks, with Resilience4j
+
+The retries move from Spring's `@Retryable` to Resilience4j's Retry, the library the
+circuit breaker already uses: one configuration (`application.yml`), one set of
+metrics and Actuator endpoints for both, and a **fallback** that is a method of its
+own, run when the tries are used up.
+
+```mermaid
+flowchart LR
+    S[PaymentService, PaymentReconciler,<br/>RefundProcessor] --> C
+    subgraph C[PaymentGatewayClient]
+        R[Retry: 3 tries,<br/>100 ms then 200 ms apart] -->|tries used up,<br/>or breaker open| F[fallback]
+    end
+    R --> G[StripePaymentGateway:<br/>circuit breaker] --> API[Stripe]
+    R --> FK[FakePaymentGateway]
+```
+
+### Retried
+
+Three tries in all: the first, then two more, 100 ms and 200 ms later.
+
+| What the provider said | Retried? | Why |
+|---|---|---|
+| Unavailable: can't connect, `401`/`403`, `429`, `5xx` | yes | Nothing happened; the same idempotency key makes a repeat safe |
+| Outcome unknown: a timeout, or a `5xx` while confirming | no | It may have charged; reconciliation finds out (section 5) |
+| The breaker is open | no | It would only be refused again |
+| A lookup answered without settling the payment | no | Asking again at once gets the same answer |
+| Declined, refunded, any other answer | no | It isn't a failure |
+
+### The fallbacks
+
+When the tries are used up, or the breaker is open, `PaymentGatewayClient` doesn't
+throw: it runs the operation's fallback, which returns what happened in so many
+words. The callers read it as a result, not an exception:
+
+| Call | Fallback result | What the caller does |
+|---|---|---|
+| `charge` | `ChargeResult.Unavailable` | Records the payment `FAILED`: "the payment provider is unavailable; please try again in a moment". Nothing was charged |
+| `findCharge` | `ChargeLookup.Unanswered` | Leaves the payment `PROCESSING`; the next reconciliation run asks again |
+| `refund` | `RefundAttempt.StillOwed` | Leaves the payment `REFUND_PENDING`; the retry job tries again |
+
+`findCharge` now returns one of three results, where an exception used to stand for
+the third: `Found` (the provider's answer), `NeverReceived` (nothing was charged, so
+the payment fails), and `Unanswered` (try again later). "Never received" and
+"couldn't ask" lead to opposite outcomes, so they are told apart by type, not by
+whether something was thrown. An outcome unknown is not a fallback: the charge may
+have happened, so it still reaches `PaymentService`, which leaves the payment
+`PROCESSING` (`202`).
+
+### The app's internal calls
+
+The same tools guard the app's other outgoing calls:
+
+| Call | Retry | Circuit breaker | Fallback |
+|---|---|---|---|
+| The fake provider's webhook delivery (to the API's own endpoint) | 3 tries, 1 s then 2 s apart, on a connection error or a `5xx`; not on a `4xx` (a wrong secret, a refused event), which won't change | `webhook-delivery`: when deliveries keep failing, they are skipped for 30 s | Logged: reconciliation and the refund job settle what the webhook would have |
+| The startup check of configured external endpoints | 3 tries, 1 s apart | none: it runs once, at startup | The `WARN` it logs today; startup goes on |
+
+A webhook delivery runs on the scheduler, whose one thread also runs the payment
+jobs, so its retries must not wait on that thread. Resilience4j's async retry
+context says how long to wait, and the next try is scheduled for then; the request
+itself is sent asynchronously.
+
+### Seeing it: Actuator
+
+| Endpoint | Shows |
+|---|---|
+| `/actuator/health` (details, admins only) | `circuitBreakers`: each breaker's state, failure rate and calls |
+| `/actuator/circuitbreakers`, `/actuator/circuitbreakerevents` | Each breaker's state, and its recent events: opened, refused, half-opened, closed |
+| `/actuator/retries`, `/actuator/retryevents` | Each retry, and its recent events: retried, gave up |
+
+Like the rest of the actuator, they are admin-only, and in production they are on
+the internal management port only. Production shows no health details to anyone
+(`application-prod.yml`), so there the breakers' state is read from
+`/actuator/circuitbreakers` and the Grafana dashboard. An open breaker shows in the health details as
+`CIRCUIT_OPEN`, a status Spring Boot leaves out of the overall one, so `/actuator/health`
+stays `UP`, and readiness, which Caddy and `deploy.sh` go by, never includes it.
+
+Tried against a Stripe that can't be reached (its address pointed at a closed port):
+each of the first two payments was tried three times and failed through the charge
+fallback; the breaker opened on the fifth failure, and the second payment's last
+try, refused by it, wasn't retried (an "ignored error" in `/actuator/retryevents`);
+the third payment got `503`. Meanwhile `/actuator/circuitbreakers` showed `stripe`
+`OPEN` (5 failed, 1 not permitted), its events the transition from `CLOSED` to
+`OPEN`, and `/actuator/health` stayed `UP` with `stripe` as `CIRCUIT_OPEN`.
+
+A context test checks each retry's and breaker's settings in `application.yml`
+against the rules the unit tests copy. It caught one: an instance's
+`enable-exponential-backoff: false` doesn't undo the `true` of its `base-config` in
+Resilience4j, so `startup-check` has settings of its own.
+
+### Key decisions
+
+| Decision | Why | Rejected alternative |
+|---|---|---|
+| Resilience4j's Retry, alongside its breaker | One configuration, one set of metrics and endpoints, and an explicit fallback | Spring's `@Retryable`, beside a second library |
+| A fallback per operation, returning a result | What happens when the provider can't be reached is in one class, and the callers can't mistake "couldn't ask" for "never charged" | Exceptions caught in three callers |
+| Three tries, 100 ms and 200 ms apart | A payment request waits at most a few hundred milliseconds longer when the provider is down | Longer waits, inside a customer's request |
+| Webhook retries scheduled, not slept | The scheduler's one thread also runs the payment jobs | Blocking retries on that thread |
+| The breaker in the health details, never `DOWN` | Visible at a glance, but an outage elsewhere can't take the API out of the load balancer | No health details, or a breaker that fails health |
+
+## 11. Roadmap
 
 - **Phase 1**, done (#177): everything in sections 1 to 3, the pay step on the
   storefront's order page, and tests (unit, integration against MySQL,
@@ -808,6 +910,7 @@ half-open by itself.
   reconciliation of payments stuck in `PROCESSING` (section 5, #179), and expiry of
   orders left unpaid (section 6, #180).
 - **Phase 3**, done: provider webhooks with a signature check (section 7, #181),
-  Stripe in test mode (section 8, #185), and a circuit breaker on Stripe (section 9).
+  Stripe in test mode (section 8, #185), a circuit breaker on Stripe (section 9,
+  #187), and Resilience4j retries with explicit fallbacks (section 10).
 - **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure;
   partial refunds.

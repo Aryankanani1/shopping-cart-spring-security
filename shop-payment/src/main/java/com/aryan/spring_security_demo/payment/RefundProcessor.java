@@ -34,15 +34,14 @@ public class RefundProcessor {
         if (owed.isEmpty()) {
             return true;  // refunded already, by the listener or the job
         }
-        RefundResult result;
-        try {
-            result = gateway.refund(owed.get());
-        } catch (PaymentProviderUnavailableException e) {
-            // No transaction is open here, so catching it hides nothing from a rollback.
-            log.warn("Refund of payment {}: provider unavailable, the retry job will try again", paymentId, e);
+        RefundAttempt attempt = gateway.refund(owed.get());
+        if (attempt instanceof RefundAttempt.StillOwed stillOwed) {
+            // The client's fallback: the payment stays REFUND_PENDING for the retry job.
+            log.warn("Refund of payment {}: still owed ({}), the retry job will try again", paymentId,
+                    stillOwed.reason());
             return false;
         }
-        recorder.recordRefunded(paymentId, result);
+        recorder.recordRefunded(paymentId, ((RefundAttempt.Refunded) attempt).refund());
         return true;
     }
 

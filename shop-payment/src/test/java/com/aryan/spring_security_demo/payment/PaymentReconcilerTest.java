@@ -36,7 +36,7 @@ class PaymentReconcilerTest {
     void theProviderCharged_soThePaymentSucceeds() {
         ChargeResult.Approved approved = new ChargeResult.Approved("ch_1", "Visa", "4242");
         when(recorder.processingCharge(7L)).thenReturn(Optional.of(CHARGE_7));
-        when(gateway.findCharge(CHARGE_7)).thenReturn(Optional.of(approved));
+        when(gateway.findCharge(CHARGE_7)).thenReturn(new ChargeLookup.Found(approved));
 
         assertThat(reconciler.reconcile(7L)).isTrue();
 
@@ -46,7 +46,7 @@ class PaymentReconcilerTest {
     @Test
     void theProviderDeclined_soThePaymentFailsWithItsReason() {
         when(recorder.processingCharge(7L)).thenReturn(Optional.of(CHARGE_7));
-        when(gateway.findCharge(CHARGE_7)).thenReturn(Optional.of(new ChargeResult.Declined("Your card was declined.")));
+        when(gateway.findCharge(CHARGE_7)).thenReturn(new ChargeLookup.Found(new ChargeResult.Declined("Your card was declined.")));
 
         reconciler.reconcile(7L);
 
@@ -56,7 +56,7 @@ class PaymentReconcilerTest {
     @Test
     void theProviderNeverReceivedIt_soNothingWasCharged() {
         when(recorder.processingCharge(7L)).thenReturn(Optional.of(CHARGE_7));
-        when(gateway.findCharge(CHARGE_7)).thenReturn(Optional.empty());
+        when(gateway.findCharge(CHARGE_7)).thenReturn(new ChargeLookup.NeverReceived());
 
         reconciler.reconcile(7L);
 
@@ -75,7 +75,7 @@ class PaymentReconcilerTest {
     @Test
     void whileTheProviderIsDown_thePaymentStaysProcessing() {
         when(recorder.processingCharge(7L)).thenReturn(Optional.of(CHARGE_7));
-        when(gateway.findCharge(CHARGE_7)).thenThrow(new PaymentProviderUnavailableException("down"));
+        when(gateway.findCharge(CHARGE_7)).thenReturn(new ChargeLookup.Unanswered("down"));
 
         assertThat(reconciler.reconcile(7L)).isFalse();
 
@@ -88,7 +88,7 @@ class PaymentReconcilerTest {
         when(recorder.stuckPayments(CUTOFF)).thenReturn(List.of(7L, 8L));
         when(recorder.processingCharge(7L)).thenThrow(new IllegalStateException("database hiccup"));
         when(recorder.processingCharge(8L)).thenReturn(Optional.of(charge(8L)));
-        when(gateway.findCharge(charge(8L))).thenReturn(Optional.empty());
+        when(gateway.findCharge(charge(8L))).thenReturn(new ChargeLookup.NeverReceived());
 
         assertThat(reconciler.reconcileStuckPayments(CUTOFF)).isEqualTo(1);
 
