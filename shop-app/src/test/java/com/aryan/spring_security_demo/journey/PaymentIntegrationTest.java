@@ -19,6 +19,8 @@ import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
 import com.aryan.spring_security_demo.payment.PaymentReconciler;
 import com.aryan.spring_security_demo.payment.PaymentRepository;
+import com.aryan.spring_security_demo.payment.Refund;
+import com.aryan.spring_security_demo.payment.RefundRepository;
 import com.aryan.spring_security_demo.payment.PaymentStatus;
 import com.aryan.spring_security_demo.payment.RefundProcessor;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -108,6 +110,7 @@ class PaymentIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private PaymentRepository paymentRepository;
+    @Autowired private RefundRepository refundRepository;
     @Autowired private OrderRepository orderRepository;
     @Autowired private CartItemRepository cartItemRepository;
     @Autowired private CartRepository cartRepository;
@@ -437,9 +440,13 @@ class PaymentIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"));
 
-        Payment refunded = awaitPayment(orderId, PaymentStatus.REFUNDED);
-        assertThat(refunded.getRefundReference()).startsWith("re_");
-        assertThat(refunded.getRefundedAt()).isNotNull();
+        awaitPayment(orderId, PaymentStatus.REFUNDED);
+        assertThat(refundRepository.findAllByOrder(orderId)).singleElement().satisfies(refund -> {
+            assertThat(refund.getKind()).isEqualTo(Refund.Kind.CANCELLATION);
+            assertThat(refund.getAmount()).isEqualByComparingTo(UNIT_PRICE.multiply(BigDecimal.valueOf(2)));
+            assertThat(refund.getProviderReference()).startsWith("re_");
+            assertThat(refund.getRefundedAt()).isNotNull();
+        });
         assertThat(inventoryOf(productId)).isEqualTo(100);
         assertThat(refundCalledInATransaction).containsExactly(false);
         assertThat(refundThreads).singleElement().isNotEqualTo(Thread.currentThread().getName());

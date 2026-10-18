@@ -18,9 +18,10 @@ import java.util.List;
  * <ul>
  *   <li>An order being paid for can't be cancelled: the provider may still take
  *       the money, and cancelling would then keep it for a cancelled order.</li>
- *   <li>A paid order's payment becomes {@code REFUND_PENDING}, the record that the
- *       money is owed back, and {@link RefundsRequestedEvent} has it refunded once
- *       the cancellation commits.</li>
+ *   <li>A paid order's payment becomes {@code REFUND_PENDING}, and a refund of what
+ *       is left of it (after any partial refunds) is owed: the record that the
+ *       money is due back. {@link RefundsRequestedEvent} has it refunded once the
+ *       cancellation commits.</li>
  * </ul>
  *
  * <p>A cancellation that read the order just before a payment started can't slip

@@ -6,6 +6,7 @@ import com.aryan.spring_security_demo.cart.CartService;
 import com.aryan.spring_security_demo.catalog.InsufficientStockException;
 import com.aryan.spring_security_demo.catalog.Product;
 import com.aryan.spring_security_demo.catalog.ProductRepository;
+import com.aryan.spring_security_demo.common.exception.BadRequestException;
 import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
 import com.aryan.spring_security_demo.common.web.SlicedResponse;
 import com.aryan.spring_security_demo.identity.User;
@@ -37,6 +38,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -581,6 +583,83 @@ class OrderServiceTest {
             @Override public Long getId() { return id; }
             @Override public Instant getCreatedAt() { return Instant.parse(createdAt); }
         };
+    }
+
+    // --- refunding items (docs/payment-design.md, section 11) -----------------
+
+    private static final long ITEM_ID = 21L;
+
+    /** The order paid for, with its one item (2 at 10) saved under ITEM_ID. */
+    private OrderItem paidOrderItem() {
+        order.setOrderStatus(OrderStatus.PAID);
+        OrderItem item = order.getOrderItems().iterator().next();
+        item.setId(ITEM_ID);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+        return item;
+    }
+
+    @Test
+    void refundItems_countsThemRefunded_pricedAtWhatWasPaid_andRaisesTheOrdersVersion() {
+        OrderItem item = paidOrderItem();
+
+        List<RefundedItem> refunded = orderService.refundItems(ORDER_ID, Map.of(ITEM_ID, 1), false);
+
+        assertThat(refunded).containsExactly(new RefundedItem(ITEM_ID, 1, BigDecimal.TEN));
+        assertThat(item.getRefundedQuantity()).isEqualTo(1);
+        assertThat(product.getInventory()).as("not restocked").isEqualTo(5);
+        // A cancellation that read the order before this fails its version check.
+        verify(entityManager).lock(order, LockModeType.PESSIMISTIC_FORCE_INCREMENT);
+    }
+
+    @Test
+    void refundItems_withRestock_putsThemBackInStock_afterLockingTheProduct() {
+        paidOrderItem();
+
+        orderService.refundItems(ORDER_ID, Map.of(ITEM_ID, 2), true);
+
+        assertThat(product.getInventory()).isEqualTo(7);
+        verify(entityManager).refresh(product, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    @Test
+    void refundItems_neverMoreThanWereBought() {
+        paidOrderItem();
+        orderService.refundItems(ORDER_ID, Map.of(ITEM_ID, 2), false);
+
+        assertThatThrownBy(() -> orderService.refundItems(ORDER_ID, Map.of(ITEM_ID, 1), false))
+                .isInstanceOf(InvalidOrderStateException.class)
+                .hasMessageContaining("Only 0");
+    }
+
+    @Test
+    void refundItems_anItemNotInTheOrder_isABadRequest() {
+        paidOrderItem();
+
+        assertThatThrownBy(() -> orderService.refundItems(ORDER_ID, Map.of(99L, 1), false))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void refundItems_ofAnOrderUnpaid_orCancelled_isRefused() {
+        paidOrderItem();
+        for (OrderStatus status : new OrderStatus[] {OrderStatus.PENDING, OrderStatus.CANCELLED}) {
+            order.setOrderStatus(status);
+
+            assertThatThrownBy(() -> orderService.refundItems(ORDER_ID, Map.of(ITEM_ID, 1), false))
+                    .as(status.name())
+                    .isInstanceOf(InvalidOrderStateException.class);
+        }
+    }
+
+    // Refunded items went back (or were written off) when they were refunded.
+    @Test
+    void cancelOrder_afterItemsWereRefunded_restocksOnlyTheRest() {
+        OrderItem item = paidOrderItem();
+        item.setRefundedQuantity(1);
+
+        orderService.cancelOrder(ORDER_ID);
+
+        assertThat(product.getInventory()).isEqualTo(6);  // 5 + the 1 unit not refunded
     }
 
     private static Order orderWithId(long id) {

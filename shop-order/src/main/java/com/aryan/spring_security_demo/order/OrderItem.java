@@ -28,6 +28,13 @@ public class OrderItem {
     private int quantity;
     private BigDecimal price;
 
+    /**
+     * How many have been refunded (returned), at most {@link #quantity} (V17;
+     * docs/payment-design.md, section 11). A cancellation restocks only the rest.
+     */
+    @Column(name = "refunded_quantity", nullable = false)
+    private int refundedQuantity;
+
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id")
@@ -42,6 +49,20 @@ public class OrderItem {
         this.quantity = quantity;
         this.price = price;
         this.product = product;
+    }
+
+    /** How many can still be refunded. */
+    public int refundableQuantity() {
+        return quantity - refundedQuantity;
+    }
+
+    /** Count {@code count} more of this item as refunded; never more than were bought. */
+    void refund(int count) {
+        if (count < 1 || count > refundableQuantity()) {
+            throw new InvalidOrderStateException("Only " + refundableQuantity()
+                    + " of order item " + id + " can still be refunded, not " + count);
+        }
+        refundedQuantity += count;
     }
 
     @Override

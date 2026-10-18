@@ -414,6 +414,8 @@ test payment methods (`test_visa`, `test_declined`, `test_insufficient_funds`,
 | `POST /orders/{orderId}/payments` | Pay, with an `Idempotency-Key` header and `{"paymentMethod": "test_visa"}`: `201` for a new attempt (`SUCCEEDED`, or `FAILED` with the reason), `202` with `PROCESSING` when the provider didn't answer in time, `200` with the first answer when the key was already used |
 | `GET /orders/{orderId}/payments` | The order's attempts, oldest first |
 | `GET /orders/{orderId}/payments/{paymentId}` | One attempt |
+| `POST /orders/{orderId}/refunds` | Admins only: refund part of a paid order, with an `Idempotency-Key` header and either items (`{"items": [{"orderItemId": 12, "quantity": 1}], "restock": true, "reason": "..."}`, priced at what the customer paid) or an amount (`{"amount": 5.00, "reason": "..."}`): `201` with the refund (`PENDING`), `200` with the first one when the key was already used, `409` for more than is left |
+| `GET /orders/{orderId}/refunds`, `GET /orders/{orderId}/refunds/{refundId}` | The order's refunds, for its owner or an admin |
 | `POST /payments/webhooks` | Events from the payment provider (`charge.succeeded`, `charge.failed`, `refund.succeeded`, or Stripe's equivalents), with no user token: authenticated by their `Payment-Signature` (or Stripe's `Stripe-Signature`) |
 
 - **Never charged twice.** A repeated request with the same key gets the first
@@ -423,12 +425,17 @@ test payment methods (`test_visa`, `test_declined`, `test_insufficient_funds`,
   called, and the answer recorded: two short transactions with the call between
   them, retried (with the same provider key) only while the provider is
   unavailable.
-- **Cancelling a paid order refunds it.** The cancellation's transaction marks the
-  payment `REFUND_PENDING` (an outbox row: owed if and only if the cancellation
-  commits); after the commit, a background thread asks the provider and records
-  `REFUNDED`. `RefundRetryJob` (`APP_PAYMENT_REFUND_RETRY_CRON`, every minute,
-  ShedLock) retries any refund still owed, with the same provider key, so it is
-  refunded once.
+- **Cancelling a paid order refunds what is left of it.** The cancellation's
+  transaction marks the payment `REFUND_PENDING` and owes a refund row (an outbox
+  row: owed if and only if the cancellation commits); after the commit, a
+  background thread asks the provider and records `REFUNDED`. `RefundRetryJob`
+  (`APP_PAYMENT_REFUND_RETRY_CRON`, every minute, ShedLock) retries any refund
+  still owed, with the same provider key, so it is refunded once.
+- **Partial refunds never add up to more than was paid.** An admin's refunds of
+  items or amounts go the same way, under the payment's row lock and against
+  running totals kept on that row, which a check constraint caps at the amount paid;
+  refunded items aren't restocked again when the order is cancelled
+  ([section 11](docs/payment-design.md#11-partial-refunds)).
 - **Lost outcomes are reconciled.** A payment still `PROCESSING` after 2 minutes
   (the provider timed out, or the app stopped before recording its answer) is
   settled by `PaymentReconciliationJob` (`APP_PAYMENT_RECONCILE_CRON`, every

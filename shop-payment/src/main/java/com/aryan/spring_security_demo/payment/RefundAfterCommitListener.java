@@ -28,13 +28,13 @@ public class RefundAfterCommitListener {
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onRefundsRequested(RefundsRequestedEvent event) {
-        for (Long paymentId : event.paymentIds()) {
+        for (Long refundId : event.refundIds()) {
             try {
-                refundProcessor.refund(paymentId);
+                refundProcessor.refund(refundId);
             } catch (RuntimeException e) {
-                // The cancellation has committed, so there is nothing to roll back:
-                // the payment stays REFUND_PENDING, and RefundRetryJob tries again.
-                log.warn("Refund of payment {} failed, the retry job will try again", paymentId, e);
+                // The transaction that owed it has committed, so there is nothing to
+                // roll back: the refund stays PENDING, and RefundRetryJob tries again.
+                log.warn("Refund {} failed, the retry job will try again", refundId, e);
             }
         }
     }

@@ -13,4 +13,8 @@ public class IdempotencyKeyReusedException extends ConflictException {
         super("Idempotency key reused",
                 "This Idempotency-Key was already used for a payment with a different payment method");
     }
+
+    public IdempotencyKeyReusedException(String message) {
+        super("Idempotency key reused", message);
+    }
 }

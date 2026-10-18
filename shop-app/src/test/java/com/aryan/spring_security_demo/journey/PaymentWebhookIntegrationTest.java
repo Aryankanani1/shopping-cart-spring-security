@@ -19,6 +19,7 @@ import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
 import com.aryan.spring_security_demo.payment.PaymentReconciler;
 import com.aryan.spring_security_demo.payment.PaymentRepository;
+import com.aryan.spring_security_demo.payment.RefundRepository;
 import com.aryan.spring_security_demo.payment.PaymentStatus;
 import com.aryan.spring_security_demo.payment.PaymentWebhookEventRepository;
 import com.aryan.spring_security_demo.payment.WebhookSignature;
@@ -90,6 +91,7 @@ class PaymentWebhookIntegrationTest {
     @Autowired private PaymentReconciler reconciler;
     @Autowired private PaymentWebhookEventRepository webhookEvents;
     @Autowired private PaymentRepository paymentRepository;
+    @Autowired private RefundRepository refundRepository;
     @Autowired private OrderRepository orderRepository;
     @Autowired private CartItemRepository cartItemRepository;
     @Autowired private CartRepository cartRepository;
@@ -239,19 +241,20 @@ class PaymentWebhookIntegrationTest {
     void refundSucceeded_settlesAPendingRefund() throws Exception {
         Long orderId = placeOrder();
         pay(orderId, FakePaymentGateway.REFUND_DOWN).andExpect(status().isCreated());
-        Long paymentId = paymentOf(orderId).getId();
         mockMvc.perform(post("/api/v1/orders/{orderId}/cancel", orderId).header("Authorization", bearer(token)))
                 .andExpect(status().isOk());
+        String refundKey = refundRepository.findAllByOrder(orderId).get(0).getIdempotencyKey();
         // Owed: the attempt after the commit is refused by this test card's provider
         // every time it tries (3 calls), so only the webhook can settle it here.
         assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUND_PENDING);
 
         deliver(event("evt_refunded", "refund.succeeded",
-                "{\"idempotencyKey\":\"refund_" + paymentId + "\",\"refundReference\":\"re_from_webhook\"}"))
+                "{\"idempotencyKey\":\"" + refundKey + "\",\"refundReference\":\"re_from_webhook\"}"))
                 .andExpect(status().isOk());
 
         assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUNDED);
-        assertThat(paymentOf(orderId).getRefundReference()).isEqualTo("re_from_webhook");
+        assertThat(refundRepository.findAllByOrder(orderId)).singleElement()
+                .satisfies(refund -> assertThat(refund.getProviderReference()).isEqualTo("re_from_webhook"));
     }
 
     @Test

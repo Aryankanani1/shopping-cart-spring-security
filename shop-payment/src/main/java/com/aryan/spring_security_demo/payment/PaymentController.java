@@ -29,7 +29,8 @@ import java.util.List;
 public class PaymentController {
 
     /** Long enough to be unique (the storefront sends a UUID), short enough to store. */
-    private static final String IDEMPOTENCY_KEY = "[A-Za-z0-9_-]{8,64}";
+    static final String IDEMPOTENCY_KEY = "[A-Za-z0-9_-]{8,64}";
+    static final String IDEMPOTENCY_KEY_MESSAGE = "Idempotency-Key must be 8 to 64 letters, digits, '-' or '_'";
 
     private final PaymentServiceInterface paymentService;
 
@@ -45,8 +46,7 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<PaymentDto>> pay(
             @PathVariable Long orderId,
             @RequestHeader("Idempotency-Key")
-            @Pattern(regexp = IDEMPOTENCY_KEY,
-                    message = "Idempotency-Key must be 8 to 64 letters, digits, '-' or '_'") String idempotencyKey,
+            @Pattern(regexp = IDEMPOTENCY_KEY, message = IDEMPOTENCY_KEY_MESSAGE) String idempotencyKey,
             @Valid @RequestBody PayOrderRequest request) {
         PaymentServiceInterface.PayResult result = paymentService.pay(orderId, idempotencyKey, request.getPaymentMethod());
         PaymentDto payment = result.payment();

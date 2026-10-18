@@ -48,7 +48,9 @@ export function order(overrides: Partial<OrderDto> = {}): OrderDto {
     state: 'LDN',
     postalCode: 'EC1A',
     country: 'UK',
-    items: [{ productId: 1, productName: 'Desk Lamp', productBrand: 'Acme', quantity: 2, price: 24 }],
+    items: [
+      { id: 101, productId: 1, productName: 'Desk Lamp', productBrand: 'Acme', quantity: 2, refundedQuantity: 0, price: 24 },
+    ],
     ...overrides,
   }
 }
@@ -67,9 +69,7 @@ export function payment(overrides: Partial<PaymentDto> = {}): PaymentDto {
     providerReference: 'ch_1',
     createdAt: '2026-09-14T10:00:00Z',
     completedAt: '2026-09-14T10:00:01Z',
-    refundReference: null,
-    refundRequestedAt: null,
-    refundedAt: null,
+    refundedAmount: 0,
     ...overrides,
   }
 }

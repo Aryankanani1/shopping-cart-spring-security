@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 
 /**
  * Makes the change a webhook event reports, exactly once. The event's id is
@@ -25,6 +26,7 @@ public class PaymentWebhookProcessor {
 
     private final PaymentWebhookEventRepository events;
     private final PaymentRepository payments;
+    private final RefundRepository refunds;
     private final PaymentRecorder paymentRecorder;
     private final RefundRecorder refundRecorder;
     private final Clock clock;
@@ -34,7 +36,8 @@ public class PaymentWebhookProcessor {
         if (events.existsByEventId(event.id())) {
             return Outcome.DUPLICATE;
         }
-        Long paymentId = paymentIdOf(event);
+        Optional<RefundRepository.RefundOf> refund = refundOf(event);
+        Long paymentId = refund.map(RefundRepository.RefundOf::paymentId).orElseGet(() -> chargedPaymentIdOf(event));
         // Flushed now: a delivery of the same event running at the same moment fails
         // here, on the unique key, before it has changed anything.
         events.saveAndFlush(new PaymentWebhookEvent(event.id(), event.type(), paymentId, Instant.now(clock)));
@@ -51,23 +54,30 @@ public class PaymentWebhookProcessor {
                     new ChargeResult.Approved(data.providerReference(), data.cardBrand(), data.cardLast4()));
             case WebhookEvent.CHARGE_FAILED -> paymentRecorder.recordFailure(paymentId,
                     data.failureReason() == null ? "The payment provider declined the payment" : data.failureReason());
-            case WebhookEvent.REFUND_SUCCEEDED -> refundRecorder.recordRefundedInCurrentTransaction(paymentId,
-                    new RefundResult(data.refundReference()));
+            case WebhookEvent.REFUND_SUCCEEDED -> refundRecorder.recordRefundedInCurrentTransaction(
+                    refund.orElseThrow().refundId(), new RefundResult(data.refundReference()));
             default -> throw new IllegalStateException("Unhandled webhook type " + event.type());
         }
         return Outcome.APPLIED;
     }
 
-    /** The payment the event is about, if it is a type this shop handles and the payment exists. */
-    private Long paymentIdOf(WebhookEvent event) {
-        String prefix = switch (event.type()) {
-            case WebhookEvent.CHARGE_SUCCEEDED, WebhookEvent.CHARGE_FAILED -> Payment.CHARGE_KEY_PREFIX;
-            case WebhookEvent.REFUND_SUCCEEDED -> Payment.REFUND_KEY_PREFIX;
-            default -> null;
-        };
-        if (prefix == null || event.data() == null) {
+    /** The refund a refund event is about, found by the shop's key with the provider. */
+    private Optional<RefundRepository.RefundOf> refundOf(WebhookEvent event) {
+        if (!WebhookEvent.REFUND_SUCCEEDED.equals(event.type()) || event.data() == null
+                || event.data().idempotencyKey() == null) {
+            return Optional.empty();
+        }
+        return refunds.findRefundOf(event.data().idempotencyKey());
+    }
+
+    /** The payment a charge event is about, if the payment exists. */
+    private Long chargedPaymentIdOf(WebhookEvent event) {
+        boolean charge = WebhookEvent.CHARGE_SUCCEEDED.equals(event.type())
+                || WebhookEvent.CHARGE_FAILED.equals(event.type());
+        if (!charge || event.data() == null) {
             return null;
         }
-        return Payment.idFromKey(event.data().idempotencyKey(), prefix).filter(payments::existsById).orElse(null);
+        return Payment.idFromKey(event.data().idempotencyKey(), Payment.CHARGE_KEY_PREFIX)
+                .filter(payments::existsById).orElse(null);
     }
 }

@@ -30,14 +30,24 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("select count(p) from Payment p where p.order.id = :orderId and p.status = :status")
     long countByOrderAndStatus(@Param("orderId") Long orderId, @Param("status") PaymentStatus status);
 
-    @Query("select p from Payment p where p.order.id in :orderIds and p.status = :status")
-    List<Payment> findByOrdersAndStatus(@Param("orderIds") Collection<Long> orderIds,
-                                        @Param("status") PaymentStatus status);
+    /**
+     * The orders' payments in {@code status}, row-locked in id order: a cancellation
+     * reads what is left to refund under the same lock a partial refund takes, so
+     * the two can't both count the same money.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payment p where p.order.id in :orderIds and p.status = :status order by p.id")
+    List<Payment> findByOrdersAndStatusForUpdate(@Param("orderIds") Collection<Long> orderIds,
+                                                 @Param("status") PaymentStatus status);
 
-    @Query("select p.id from Payment p where p.status = :status and p.refundRequestedAt < :before"
-            + " order by p.refundRequestedAt")
-    List<Long> findIdsByStatusRequestedBefore(@Param("status") PaymentStatus status,
-                                              @Param("before") Instant before);
+    /**
+     * An order's payment that hasn't failed (there is at most one, V11), row-locked:
+     * a refund is added to it under this lock, so two at once take turns.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payment p where p.order.id = :orderId"
+            + " and p.status <> com.aryan.spring_security_demo.payment.PaymentStatus.FAILED")
+    Optional<Payment> findLiveByOrderForUpdate(@Param("orderId") Long orderId);
 
     @Query("select p.id from Payment p where p.status = :status and p.createdAt < :before order by p.createdAt")
     List<Long> findIdsByStatusCreatedBefore(@Param("status") PaymentStatus status, @Param("before") Instant before);

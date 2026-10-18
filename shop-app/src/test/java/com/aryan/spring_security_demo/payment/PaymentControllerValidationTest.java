@@ -125,6 +125,6 @@ class PaymentControllerValidationTest {
 
     private static PaymentDto payment(PaymentStatus status) {
         return new PaymentDto(7L, 9L, status, new BigDecimal("59.97"), "USD", "test_visa",
-                null, null, null, null, Instant.parse("2026-10-15T12:00:00Z"), null, null, null, null);
+                null, null, null, null, Instant.parse("2026-10-15T12:00:00Z"), null, BigDecimal.ZERO);
     }
 }

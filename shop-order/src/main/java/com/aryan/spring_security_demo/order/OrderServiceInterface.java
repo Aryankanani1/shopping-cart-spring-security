@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public interface OrderServiceInterface {
 
@@ -65,6 +66,23 @@ public interface OrderServiceInterface {
      * restock the ones that can still be cancelled. Every order is kept.
      */
     void prepareForAccountDeletion(Long userId);
+
+    /**
+     * Refund some of a paid order's items (a return; docs/payment-design.md, section
+     * 11): check each quantity against what is left of that item, count them as
+     * refunded, and put them back in stock if {@code restock}. Inside the caller's
+     * transaction, which holds the order's payment row lock already.
+     *
+     * @param quantities how many of each order item, by order item id
+     * @return each item refunded, with what it cost the customer
+     * @throws com.aryan.spring_security_demo.common.exception.ResourceNotFoundException
+     *         if there is no such order
+     * @throws com.aryan.spring_security_demo.common.exception.BadRequestException if
+     *         an item isn't in the order
+     * @throws InvalidOrderStateException if the order can't have items refunded
+     *         (unpaid or cancelled), or an item has fewer left than asked
+     */
+    List<RefundedItem> refundItems(Long orderId, Map<Long, Integer> quantities, boolean restock);
 
     /**
      * One keyset (cursor) slice of the signed-in user's order history, newest first.
