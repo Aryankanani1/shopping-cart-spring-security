@@ -20,8 +20,10 @@ export const queryKeys = {
     all: ['orders'] as const,
     history: (userId: number | null) => ['orders', 'history', userId] as const,
     detail: (id: number) => ['orders', 'detail', id] as const,
-    // Under the order's detail key, so refreshing the order refreshes its payments.
+    // Under the order's detail key, so refreshing the order refreshes its payments
+    // and refunds.
     payments: (id: number) => ['orders', 'detail', id, 'payments'] as const,
+    refunds: (id: number) => ['orders', 'detail', id, 'refunds'] as const,
     adminList: (page: number) => ['orders', 'admin', page] as const,
   },
   admin: {

@@ -1092,6 +1092,43 @@
   flex: 1;
 }
 
+/* Refund form (opens under an order's row) --------------------------------- */
+.admin-table tbody tr.admin-table__detail:hover {
+  background: none;
+}
+.admin-table__detail .admin-form {
+  margin: 0.4rem 0;
+}
+.refund-form__kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.4rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+.refund-form__kinds legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+.refund-form__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.refund-form__items {
+  margin-bottom: 0.8rem;
+}
+.refund-form__items .field {
+  width: 5.5rem;
+  padding: 0.4rem 0.6rem;
+}
+.refund-form__amount,
+.refund-form__reason {
+  margin-top: 1rem;
+  max-width: 32rem;
+}
+
 /* Simple list (categories) ------------------------------------------------ */
 .admin-list {
   list-style: none;
@@ -1199,7 +1236,8 @@
 
 /* Paying for a pending order, and the order's payment attempts. */
 .payment-panel,
-.order-payments {
+.order-payments,
+.order-refunds {
   margin-top: 2rem;
   padding-top: 1.4rem;
   border-top: 1px solid var(--line);
@@ -1218,12 +1256,14 @@
   flex: 1 1 16rem;
   max-width: 24rem;
 }
-.order-payments__list {
+.order-payments__list,
+.order-refunds__list {
   list-style: none;
   margin: 0.5rem 0 0;
   padding: 0;
 }
-.order-payments__item {
+.order-payments__item,
+.order-refunds__item {
   display: grid;
   grid-template-columns: 1fr auto auto;
   align-items: center;

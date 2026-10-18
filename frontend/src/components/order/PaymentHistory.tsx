@@ -31,8 +31,10 @@ export function PaymentHistory({ payments }: { payments: PaymentDto[] | undefine
   if (!payments || payments.length === 0) return null
 
   return (
-    <div className="order-payments">
-      <span className="eyebrow">Payments</span>
+    <section className="order-payments" aria-labelledby="payments-heading">
+      <h2 id="payments-heading" className="eyebrow">
+        Payments
+      </h2>
       <ul className="order-payments__list">
         {payments.map((payment) => (
           <li className="order-payments__item" key={payment.id}>
@@ -40,6 +42,10 @@ export function PaymentHistory({ payments }: { payments: PaymentDto[] | undefine
               <div>{methodOf(payment)}</div>
               <div className="faint">{formatDateTime(payment.createdAt)}</div>
               {payment.failureReason && <div className="faint">{payment.failureReason}</div>}
+              {/* Kept, in part: partial refunds leave a payment SUCCEEDED (RefundList has each one). */}
+              {payment.status === 'SUCCEEDED' && payment.refundedAmount > 0 && (
+                <div className="faint">{formatMoney(payment.refundedAmount)} refunded so far</div>
+              )}
             </div>
             <span className={cx('tag', STATUS[payment.status].tone)}>
               <span className="dot" />
@@ -49,6 +55,6 @@ export function PaymentHistory({ payments }: { payments: PaymentDto[] | undefine
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   )
 }

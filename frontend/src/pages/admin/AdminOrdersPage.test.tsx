@@ -12,6 +12,10 @@ vi.mock('../../api/orders', async (importOriginal) => ({
   ordersApi: { adminList: vi.fn(), updateStatus: vi.fn() },
 }))
 import { ordersApi } from '../../api/orders'
+// The form has its own tests (RefundForm.test.tsx); here, only where it opens.
+vi.mock('./RefundForm', () => ({
+  RefundForm: ({ orderId }: { orderId: number }) => <p>Refund form for order {orderId}</p>,
+}))
 
 const PENDING = orderSummary({ id: 55, status: 'PENDING' })
 const DELIVERED = orderSummary({ id: 56, status: 'DELIVERED', userEmail: 'grace@example.com' })
@@ -90,6 +94,36 @@ describe('AdminOrdersPage', () => {
     fireEvent.change(within(rowFor(58)).getByRole('combobox'), { target: { value: 'PROCESSING' } })
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Cannot change order status')
+  })
+
+  it('offers a refund of a paid order until it is cancelled', async () => {
+    const cancelled = orderSummary({ id: 59, status: 'CANCELLED' })
+    vi.mocked(ordersApi.adminList).mockResolvedValue(paged([PENDING, DELIVERED, PAID, cancelled]))
+    renderPage(<AdminOrdersPage />)
+    await screen.findByText('#55')
+
+    // Delivered orders too: that is where returns happen.
+    expect(within(rowFor(56)).getByRole('button', { name: 'Refund' })).toBeInTheDocument()
+    expect(within(rowFor(58)).getByRole('button', { name: 'Refund' })).toBeInTheDocument()
+    // Unpaid, nothing to refund; cancelled, the whole payment is refunded already.
+    expect(within(rowFor(55)).queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument()
+    expect(within(rowFor(59)).queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument()
+  })
+
+  it('opens the refund form under an order, one at a time', async () => {
+    renderPage(<AdminOrdersPage />)
+    await screen.findByText('#55')
+
+    fireEvent.click(within(rowFor(58)).getByRole('button', { name: 'Refund' }))
+    expect(screen.getByText('Refund form for order 58')).toBeInTheDocument()
+    expect(within(rowFor(58)).getByRole('button', { name: 'Close' })).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(within(rowFor(56)).getByRole('button', { name: 'Refund' }))
+    expect(screen.getByText('Refund form for order 56')).toBeInTheDocument()
+    expect(screen.queryByText('Refund form for order 58')).not.toBeInTheDocument()
+
+    fireEvent.click(within(rowFor(56)).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByText(/^Refund form for/)).not.toBeInTheDocument()
   })
 
   it('pages through orders', async () => {
