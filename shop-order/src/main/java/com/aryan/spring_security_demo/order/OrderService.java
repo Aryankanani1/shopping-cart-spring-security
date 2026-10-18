@@ -106,8 +106,11 @@ public class OrderService implements OrderServiceInterface{
     public Page<OrderSummaryDto> getAllOrders(Pageable pageable) {
         // Admin-only listing (gated at the edge in ShopConfig); returns lightweight
         // summaries straight from a projection query — no per-order authz needed
-        // because an admin may see every order.
-        return orderRepository.findAllSummaries(pageable);
+        // because an admin may see every order. Drop any client sort: the order is
+        // fixed (newest first) by the query, and Spring Data would append a client's
+        // sort to its ORDER BY, so sorting by a property orders lack was a 500.
+        Pageable page = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        return orderRepository.findAllSummaries(page);
     }
 
     @Override

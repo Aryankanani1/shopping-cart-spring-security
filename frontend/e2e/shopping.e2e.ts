@@ -76,8 +76,10 @@ test('a new customer signs up, buys and pays for a product, cancels it for a ref
 
     await page.getByLabel('Test card').selectOption('test_visa')
     await pay.click()
-    // Paid: the attempt is listed, and there is nothing left to pay.
-    await expect(page.getByText('Visa ending 4242')).toBeVisible()
+    // Paid: the attempt is listed, and there is nothing left to pay. Exact, or it
+    // also matches the card picker's "Visa ending 4242 (approved)", which stays on
+    // the page until the order refetches as paid.
+    await expect(page.getByText('Visa ending 4242', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /^Pay / })).toHaveCount(0)
   })
 
@@ -114,8 +116,9 @@ test('a payment the provider is slow to confirm is settled by its webhook', asyn
   await page.getByLabel('Test card').selectOption('test_timeout_charged')
   await page.getByRole('button', { name: 'Pay $20.00' }).click()
   await expect(page.getByText(/confirming your payment with the provider/)).toBeVisible()
-  // The order badge and the payment both say paid once the webhook is in.
-  await expect(page.getByText('Visa ending 4242')).toBeVisible({ timeout: 15_000 })
+  // The order badge and the payment both say paid once the webhook is in. (Exact,
+  // as above: the card picker says "Visa ending 4242 (approved)".)
+  await expect(page.getByText('Visa ending 4242', { exact: true })).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('paid', { exact: true })).toHaveCount(2, { timeout: 15_000 })
 })
 

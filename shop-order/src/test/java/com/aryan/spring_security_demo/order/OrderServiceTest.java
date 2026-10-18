@@ -29,6 +29,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.math.BigDecimal;
@@ -116,6 +117,21 @@ class OrderServiceTest {
 
         assertThat(result.getContent()).containsExactly(summary);
         verify(orderRepository).findAllSummaries(pageable);
+    }
+
+    // Regression (found by the staging fuzzing): Spring Data appended a client's sort
+    // to the query's own ORDER BY, so ?sort=AAA was a 500.
+    @Test
+    void getAllOrders_dropsTheClientsSort_keepingThePage() {
+        when(orderRepository.findAllSummaries(any())).thenReturn(Page.empty());
+
+        orderService.getAllOrders(PageRequest.of(2, 15, Sort.by("AAA")));
+
+        ArgumentCaptor<Pageable> asked = ArgumentCaptor.forClass(Pageable.class);
+        verify(orderRepository).findAllSummaries(asked.capture());
+        assertThat(asked.getValue().getSort().isSorted()).isFalse();
+        assertThat(asked.getValue().getPageNumber()).isEqualTo(2);
+        assertThat(asked.getValue().getPageSize()).isEqualTo(15);
     }
 
     @Test

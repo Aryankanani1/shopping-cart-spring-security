@@ -19,10 +19,20 @@ public class CategoryController {
 
     private final CategoryServiceInterface categoryServiceInterface;
 
+    /**
+     * All categories, or with {@code ?name=} the one of that name (404 if there is
+     * none). One handler, not a second one mapped with {@code params = "name"}: the
+     * spec has one GET per path, and springdoc documented the pair as one operation
+     * that requires a name.
+     */
     @GetMapping
-    public ResponseEntity<ApiResponse<?>> getAllCategories(){
-        List<CategoryDto> categories = categoryServiceInterface.getAllCategoryDtos();
-        return ResponseEntity.ok(new ApiResponse<>("success!", categories));
+    public ResponseEntity<ApiResponse<?>> getCategories(@RequestParam(required = false) String name){
+        if (name == null) {
+            List<CategoryDto> categories = categoryServiceInterface.getAllCategoryDtos();
+            return ResponseEntity.ok(new ApiResponse<>("success!", categories));
+        }
+        Category category = categoryServiceInterface.getCategoryByName(name);
+        return ResponseEntity.ok(new ApiResponse<>("Success!", categoryServiceInterface.convertToDto(category)));
     }
 
     @PostMapping
@@ -34,15 +44,11 @@ public class CategoryController {
                 .body(new ApiResponse<>("Success!", categoryServiceInterface.convertToDto(category)));
     }
 
-    @GetMapping("/{id:\\d+}")
+    // Any id, as for PUT and DELETE: with only digits allowed, a negative id matched
+    // those two instead and got a 405.
+    @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<?>> getCategoryById(@PathVariable Long id){
         Category category = categoryServiceInterface.getCategoryById(id);
-        return ResponseEntity.ok(new ApiResponse<>("Success!", categoryServiceInterface.convertToDto(category)));
-    }
-
-    @GetMapping(params = "name")
-    public ResponseEntity<ApiResponse<?>> getCategoryByName(@RequestParam String name){
-        Category category = categoryServiceInterface.getCategoryByName(name);
         return ResponseEntity.ok(new ApiResponse<>("Success!", categoryServiceInterface.convertToDto(category)));
     }
 

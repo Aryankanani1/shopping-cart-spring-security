@@ -23,7 +23,9 @@ public class ImageController {
 
     private final ImageServiceInterface imageServiceInterface;
 
-    @PostMapping
+    // Multipart, said in the mapping so the spec documents the form: without it
+    // springdoc put the files in the query string, and the PUT's file in a JSON body.
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<?>> saveImages(@RequestParam List<MultipartFile> files, @RequestParam Long productId){
         List<ImageDto> imageDtos = imageServiceInterface.saveImages(files, productId);
         return ResponseEntity.status(CREATED).body(new ApiResponse<>("Uploaded Successfully", imageDtos));
@@ -44,7 +46,7 @@ public class ImageController {
     }
 
     /** Replace an image's file, sent as the multipart part {@code file}. */
-    @PutMapping("/{imageId}")
+    @PutMapping(value = "/{imageId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<?>> updateImage(@PathVariable Long imageId, @RequestParam MultipartFile file){
         imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist
         imageServiceInterface.updateImage(file, imageId);

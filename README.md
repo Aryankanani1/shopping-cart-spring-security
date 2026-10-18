@@ -637,11 +637,19 @@ as a diff there, and `OpenApiContractTest` fails until it is regenerated:
 ```
 
 **Fuzzing.** The staging stage runs Schemathesis against the deployed API with that
-contract: thousands of generated requests, valid and malformed, signed in as a customer,
-and any 5xx fails the build. Its first run found five kinds of malformed request that
-crashed with a 500 (a multipart body with no boundary, an undecodable query string, a
-parameter name the firewall rejects, a `page` so large its offset overflowed, a `%` in
-`sort`); they are 400s now. To fuzz a local API (dev profile on :8082):
+contract: thousands of generated requests, valid and malformed, and any 5xx fails the
+build. Its first run found five kinds of malformed request that crashed with a 500 (a
+multipart body with no boundary, an undecodable query string, a parameter name the
+firewall rejects, a `page` so large its offset overflowed, a `%` in `sort`); they are
+400s now. [`.github/scripts/fuzz_api.sh`](.github/scripts/fuzz_api.sh) first creates a
+customer with a paid order, a refund, a cart item and a product with an image, so that
+most requests to an operation on one record use a real id and reach the code behind the
+404 (the rest are still generated). It then fuzzes as that customer and as an admin,
+which also reaches the admin-only operations, with the deletes in runs of their own at
+the end, so they can't take those records away early. The spec has to be as strict as the
+API's validation, or the fuzzer spends its requests on bodies the API refuses; that is
+why a `@NotBlank` field is documented with a pattern (`NotBlankPropertyCustomizer`). To
+fuzz a local API (dev profile on :8082):
 
 ```bash
 docker run --rm -v "$PWD/docs:/spec:ro" schemathesis/schemathesis:4.31.1 run /spec/openapi.json \

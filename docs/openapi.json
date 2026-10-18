@@ -6,6 +6,7 @@
           "brand" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "category" : {
@@ -28,6 +29,7 @@
           "name" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "price" : {
@@ -181,6 +183,7 @@
           "name" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           }
         },
@@ -191,11 +194,13 @@
         "properties" : {
           "currentPassword" : {
             "minLength" : 1,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "newPassword" : {
             "maxLength" : 72,
             "minLength" : 6,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           }
         },
@@ -208,21 +213,25 @@
             "format" : "email",
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "firstName" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "lastName" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "password" : {
             "maxLength" : 72,
             "minLength" : 6,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           }
         },
@@ -248,10 +257,12 @@
         "properties" : {
           "email" : {
             "minLength" : 1,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "password" : {
             "minLength" : 1,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           }
         },
@@ -539,6 +550,7 @@
           "paymentMethod" : {
             "maxLength" : 64,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           }
         },
@@ -599,6 +611,7 @@
           "addressLine1" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "addressLine2" : {
@@ -609,26 +622,31 @@
           "city" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "country" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "postalCode" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "recipientName" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "state" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           }
         },
@@ -674,6 +692,7 @@
           "brand" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "category" : {
@@ -696,6 +715,7 @@
           "name" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "price" : {
@@ -710,6 +730,7 @@
         "properties" : {
           "refreshToken" : {
             "minLength" : 1,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           }
         },
@@ -809,6 +830,7 @@
           "reason" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "restock" : {
@@ -858,11 +880,13 @@
           "firstName" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           },
           "lastName" : {
             "maxLength" : 255,
             "minLength" : 0,
+            "pattern" : "[^\\u0009-\\u000D\\u001C-\\u0020\\u1680\\u2000-\\u2006\\u2008-\\u200A\\u2028\\u2029\\u205F\\u3000]",
             "type" : "string"
           }
         },
@@ -1256,11 +1280,11 @@
     },
     "/api/v1/categories" : {
       "get" : {
-        "operationId" : "getAllCategories",
+        "operationId" : "getCategories",
         "parameters" : [ {
           "in" : "query",
           "name" : "name",
-          "required" : true,
+          "required" : false,
           "schema" : {
             "type" : "string"
           }
@@ -1398,17 +1422,6 @@
         "operationId" : "saveImages",
         "parameters" : [ {
           "in" : "query",
-          "name" : "files",
-          "required" : true,
-          "schema" : {
-            "items" : {
-              "format" : "binary",
-              "type" : "string"
-            },
-            "type" : "array"
-          }
-        }, {
-          "in" : "query",
           "name" : "productId",
           "required" : true,
           "schema" : {
@@ -1416,6 +1429,25 @@
             "type" : "integer"
           }
         } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "properties" : {
+                  "files" : {
+                    "items" : {
+                      "format" : "binary",
+                      "type" : "string"
+                    },
+                    "type" : "array"
+                  }
+                },
+                "required" : [ "files" ],
+                "type" : "object"
+              }
+            }
+          }
+        },
         "responses" : {
           "200" : {
             "content" : {
@@ -1496,7 +1528,7 @@
         } ],
         "requestBody" : {
           "content" : {
-            "application/json" : {
+            "multipart/form-data" : {
               "schema" : {
                 "properties" : {
                   "file" : {
@@ -1823,7 +1855,7 @@
           "name" : "Idempotency-Key",
           "required" : true,
           "schema" : {
-            "pattern" : "[A-Za-z0-9_-]{8,64}",
+            "pattern" : "^[A-Za-z0-9_-]{8,64}$",
             "type" : "string"
           }
         } ],
@@ -1928,7 +1960,7 @@
           "name" : "Idempotency-Key",
           "required" : true,
           "schema" : {
-            "pattern" : "[A-Za-z0-9_-]{8,64}",
+            "pattern" : "^[A-Za-z0-9_-]{8,64}$",
             "type" : "string"
           }
         } ],
