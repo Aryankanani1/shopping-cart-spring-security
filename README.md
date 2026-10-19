@@ -285,6 +285,10 @@ sum(rate(http_server_requests_seconds_count{uri="/api/v1/orders", method="POST",
 ```
 
 ### Security model
+The design, with a diagram of each flow (sign-in, every request after it, the access
+map, ownership checks, refresh tokens, rate limiting, webhooks) and links to the
+classes that do it, is in [docs/security-design.md](docs/security-design.md).
+
 - **Stateless access JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`
   and authenticates each request from the bearer token — no server-side session lookup, so reads scale.
 - **Deny-by-default authorization** (`ShopConfig`): only listed paths are public
