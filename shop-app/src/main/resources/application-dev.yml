@@ -25,6 +25,12 @@ spring:
 # To also see bound parameter values while debugging, set
 # org.hibernate.orm.jdbc.bind to TRACE. It is off by default because the values
 # include password hashes and refresh-token hashes.
+# No JWT_SIGNING_KEY needed on a developer's machine: a throwaway key is made at
+# startup (tokens stop working when the app restarts). Set one to keep sessions.
+auth:
+  token:
+    generate-key-if-missing: true
+
 logging:
   level:
     org.hibernate.SQL: DEBUG

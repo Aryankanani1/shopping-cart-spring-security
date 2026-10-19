@@ -21,17 +21,11 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
-		<!-- JWT signing and parsing: the code compiles against jjwt-api only (from shop-common);
-		     the implementation and its Jackson serializer are runtime-only, as JJWT recommends. -->
+		<!-- Access tokens: signed with an RSA private key (NimbusJwtEncoder) and checked by
+		     Spring Security's resource-server support with the public key (JwtConfig). -->
 		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-impl</artifactId>
-			<scope>runtime</scope>
-		</dependency>
-		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-jackson</artifactId>
-			<scope>runtime</scope>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
 		</dependency>
 	</dependencies>
 

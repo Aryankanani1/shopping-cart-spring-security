@@ -5,10 +5,10 @@ that do it. Each section names the classes and methods involved, and ends with l
 to them, so a diagram can be read next to its code. The diagrams are
 [Mermaid](https://mermaid.js.org/), which GitHub draws in place.
 
-The access token is a JWT signed with HMAC under one secret, `JWT_SECRET`, which the
-same application uses to sign tokens and to verify them. Signing with a private key
-and verifying with a public one, so that other services could check tokens without
-being able to make them, is the next step (section 14).
+The access token is a JWT signed RS256 with an RSA private key that only this
+application holds. It is checked with the public key, through Spring Security's
+resource-server support, and the public key is published (section 14), so another
+service can check a token without being able to make one.
 
 ## 1. The road a request travels
 
@@ -21,7 +21,7 @@ flowchart TB
     B["Browser<br/>Authorization: Bearer token"] --> C["Caddy<br/>TLS, HSTS, nosniff"]
     C --> R
     subgraph SEC["Spring Security filter chain, ShopConfig"]
-        R["RateLimitFilter<br/>only /api/v1/auth/**"] --> T["AuthTokenFilter<br/>who is calling?"]
+        R["RateLimitFilter<br/>only /api/v1/auth/**"] --> T["BearerTokenAuthenticationFilter<br/>who is calling?"]
         T --> Z["AuthorizationFilter<br/>may they call this URL?"]
     end
     subgraph APP["Spring MVC and the services"]
@@ -31,6 +31,7 @@ flowchart TB
     S --> OK["2xx<br/>ApiResponse: message, data"]
     C -. "plain HTTP" .-> X0["redirected to HTTPS"]
     R -. "too many tries" .-> X1["429 and Retry-After<br/>RateLimitFilter"]
+    T -. "token invalid" .-> X7["401<br/>JwtEntryPoint"]
     Z -. "not signed in" .-> X2["401<br/>JwtEntryPoint"]
     Z -. "signed in, not an admin" .-> X3["403<br/>ApiAccessDeniedHandler"]
     CT -. "invalid body" .-> X4["400<br/>GlobalExceptionHandler"]
@@ -38,16 +39,16 @@ flowchart TB
     S -. "not theirs" .-> X6["403<br/>AuthUtils, GlobalExceptionHandler"]
     classDef no stroke:#d1242f,stroke-width:2px
     classDef yes stroke:#1a7f37,stroke-width:2px
-    class X1,X2,X3,X4,X5,X6 no
+    class X1,X2,X3,X4,X5,X6,X7 no
     class OK yes
 ```
 
-- `AuthTokenFilter` is the one step that never rejects anything. It works out who is
-  calling and leaves the decision to `AuthorizationFilter`; a missing or bad token
-  just leaves the caller anonymous.
-- The order of the custom filters is set in `ShopConfig`:
-  `addFilterBefore(authTokenFilter(), UsernamePasswordAuthenticationFilter.class)`
-  and `addFilterBefore(rateLimitFilter, AuthTokenFilter.class)`.
+- `BearerTokenAuthenticationFilter` is Spring Security's: `oauth2ResourceServer()`
+  in `ShopConfig` adds it. With no token the caller stays anonymous, and the decision
+  is left to `AuthorizationFilter`. A token that fails its checks is a `401` on any
+  URL, public ones too, as RFC 6750 has it.
+- `RateLimitFilter` is placed before it in `ShopConfig`:
+  `addFilterBefore(rateLimitFilter, BearerTokenAuthenticationFilter.class)`.
 - Errors raised inside the filter chain never reach `GlobalExceptionHandler`, which
   only sees exceptions thrown inside Spring MVC. So `JwtEntryPoint`,
   `ApiAccessDeniedHandler` and `RateLimitFilter` write their answers themselves, as
@@ -58,12 +59,15 @@ flowchart TB
 | Spring Security piece | Its job | Here |
 |---|---|---|
 | `SecurityFilterChain` | The filters and URL rules a request goes through | `ShopConfig.securityFilterChain`, and a second chain for Prometheus (section 10) |
-| `OncePerRequestFilter` | Base class for a filter that runs once per request | `AuthTokenFilter`, `RateLimitFilter` |
+| `BearerTokenAuthenticationFilter` | Reads the bearer token and authenticates the request with it | Spring's own, added by `oauth2ResourceServer()` in `ShopConfig` |
+| `JwtDecoder`, `JwtEncoder` | Check a JWT's signature and claims; sign a new one | `NimbusJwtDecoder` and `NimbusJwtEncoder`, beans in `JwtConfig`, with the keys from `JwtKeys` |
+| `Converter<Jwt, AbstractAuthenticationToken>` | Turns a verified token into the caller | `ShopJwtAuthenticationConverter`, which loads the user |
+| `OncePerRequestFilter` | Base class for a filter that runs once per request | `RateLimitFilter` |
 | `UserDetailsService` | Finds a user by username, for Spring to check | `ShopUserDetailsService`; the username is the email |
 | `UserDetails` | The user as Spring sees it: name, password hash, authorities | `ShopUserDetails`, which also carries the user's id |
 | `AuthenticationManager`, `DaoAuthenticationProvider` | Check a username and password with the pieces above and below | Beans in `ShopConfig`, called by `AuthController.login` |
 | `PasswordEncoder` | Hashes passwords and compares them | `BCryptPasswordEncoder`, a bean in `ShopConfig` |
-| `SecurityContextHolder` | Holds who is calling, for the rest of the request | Filled by `AuthTokenFilter`, read by `AuthUtils` |
+| `SecurityContextHolder` | Holds who is calling, for the rest of the request | Filled by `BearerTokenAuthenticationFilter`, read by `AuthUtils` |
 | `AuthenticationEntryPoint` | Answers when the caller must sign in | `JwtEntryPoint` (401) |
 | `AccessDeniedHandler` | Answers when a signed-in caller isn't allowed | `ApiAccessDeniedHandler` (403) |
 | `CorsConfigurationSource` | Which other websites may call the API from a browser | `CorsConfig` |
@@ -115,7 +119,8 @@ sequenceDiagram
     E-->>P: true
     P-->>C: Authentication, principal = ShopUserDetails
     C->>J: generateUserTokenFromUser(authentication)
-    J-->>C: access token: a JWT, subject = email, claims id and roles, 15 minutes
+    note over J: JwtEncoder signs it RS256 with the private key
+    J-->>C: access token: a JWT, kid = key id, subject = email, claims id and roles, 15 minutes
     C->>R: issueFor(userId)
     note over R: 256 random bits, stored only as their SHA-256, valid 7 days
     R-->>C: refresh token (the raw value)
@@ -132,29 +137,31 @@ have accounts.
 Code: [`AuthController.login`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/AuthController.java),
 [`ShopUserDetailsService`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/user/ShopUserDetailsService.java),
 [`JwtUtils.generateTokenFromUserDetails`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtUtils.java),
+[`JwtConfig`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtConfig.java),
 [`RefreshTokenService.issueFor`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/RefreshTokenService.java).
 
 ## 4. Every request after that
 
 There is no server-side session: `ShopConfig` sets the session policy to
-`STATELESS`. Each request carries the access token, and `AuthTokenFilter` rebuilds
-the caller from it every time.
+`STATELESS`. Each request carries the access token, and Spring Security's
+resource-server support rebuilds the caller from it every time.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant B as Browser (Ana)
-    participant F as AuthTokenFilter
-    participant J as JwtUtils
-    participant U as ShopUserDetailsService
+    participant F as BearerTokenAuthenticationFilter
+    participant J as JwtDecoder (JwtConfig)
+    participant U as ShopJwtAuthenticationConverter
     participant H as SecurityContextHolder
     participant Z as AuthorizationFilter
     participant S as OrderController and OrderService
     B->>F: GET /api/v1/orders/42 with Authorization: Bearer eyJ...
-    F->>J: validateToken(jwt)
-    note over J: checks the HMAC signature (key from JWT_SECRET)<br/>and the expiry, against the injected Clock
-    J-->>F: valid, subject = ana@example.com
-    F->>U: loadUserByUsername(email)
+    F->>J: decode(token)
+    note over J: RS256 only, under a published key (the kid in the header),<br/>not expired by the injected Clock, issuer is this API
+    J-->>F: Jwt: subject = ana@example.com, id = 7
+    F->>U: convert(jwt)
+    note over U: ShopUserDetailsService.loadUserByUsername(email),<br/>and the token's id must be the account's
     U-->>F: ShopUserDetails: id 7, ROLE_CUSTOMER, read from the database
     F->>H: setAuthentication(principal, authorities)
     F->>Z: filterChain.doFilter(request, response)
@@ -167,16 +174,21 @@ sequenceDiagram
     S-->>B: 200 with order 42
 ```
 
-- The roles inside the JWT aren't used for decisions. The filter reloads the user
+- The roles inside the JWT aren't used for decisions. The converter reloads the user
   from the database on every request, so a deleted account or a removed role takes
-  effect on the next request, not when the token expires.
-- A missing, expired or forged token makes `JwtUtils` throw. `AuthTokenFilter`
-  catches that, clears the context and lets the request go on as anonymous: a
-  public URL still answers, and a secured one ends at `JwtEntryPoint` with a `401`.
-  An exception thrown out of a filter would have been a `500` instead.
+  effect on the next request, not when the token expires. The roles are in the token
+  for other services that read it.
+- The token must also name the account's current id. If an account is deleted and
+  its email signs up again, a token made for the first account doesn't work for the
+  second.
+- No token at all leaves the caller anonymous. An expired, forged or otherwise
+  invalid one is refused by `BearerTokenAuthenticationFilter` with a `401` from
+  `JwtEntryPoint`, with `WWW-Authenticate: Bearer`, whatever the URL. The storefront
+  sends no token to the public catalogue, so this only reaches clients that send one.
 
-Code: [`AuthTokenFilter`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/AuthTokenFilter.java),
-[`JwtUtils.validateToken`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtUtils.java),
+Code: `oauth2ResourceServer(...)` in `ShopConfig`,
+[`JwtConfig.jwtDecoder`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtConfig.java),
+[`ShopJwtAuthenticationConverter`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/ShopJwtAuthenticationConverter.java),
 [`AuthUtils`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/AuthUtils.java).
 
 ## 5. The access map
@@ -191,20 +203,21 @@ open to anyone.
 | 1 | `PUT` | `/api/v1/auth/password` | authenticated | The one `/auth` endpoint that needs a signed-in caller; under `/auth` so it is rate-limited like login |
 | 2 | any | `/api/v1/auth/**` | permitAll | Login, refresh, logout: the caller has no token yet |
 | 3 | `POST` | `/api/v1/users` | permitAll | Signing up |
-| 4 | `POST` | `/api/v1/payments/webhooks` | permitAll | The payment provider has no user token; its HMAC signature authenticates it instead (section 10) |
-| 5 | `GET` | `/products/**`, `/categories/**`, `/images/**` | permitAll | Browsing the catalogue |
-| 6 | any | `/swagger-ui/**`, `/v3/api-docs/**` | permitAll | API docs; the `prod` profile turns them off |
-| 7 | any | actuator `health` | permitAll | Load balancers probe it; only admins see its details |
-| 8 | any | every other actuator endpoint | `ROLE_ADMIN` | Metrics and build information are for operators |
-| 9 | any | `/error` | permitAll | So an error can be shown |
-| 10 | `POST`, `PUT`, `DELETE` | `/products/**`, `/categories/**`, `/images/**` | `ROLE_ADMIN` | Changing the catalogue |
-| 11 | `PATCH` | `/api/v1/orders/*/status` | `ROLE_ADMIN` | Shipping and delivering; cancelling is a customer's action, checked in the service |
-| 12 | `GET` | `/api/v1/orders/admin` | `ROLE_ADMIN` | Every customer's orders; without this rule any signed-in user could list them |
-| 13 | `POST` | `/api/v1/orders/*/refunds` | `ROLE_ADMIN` | A refund gives money back, so an admin decides |
-| 14 | any | everything else | authenticated | Deny by default: a new endpoint is never public by accident; the service then checks ownership |
+| 4 | `GET` | `/api/v1/.well-known/jwks.json` | permitAll | The public keys that verify tokens (section 14); nothing can be signed with them |
+| 5 | `POST` | `/api/v1/payments/webhooks` | permitAll | The payment provider has no user token; its HMAC signature authenticates it instead (section 10) |
+| 6 | `GET` | `/products/**`, `/categories/**`, `/images/**` | permitAll | Browsing the catalogue |
+| 7 | any | `/swagger-ui/**`, `/v3/api-docs/**` | permitAll | API docs; the `prod` profile turns them off |
+| 8 | any | actuator `health` | permitAll | Load balancers probe it; only admins see its details |
+| 9 | any | every other actuator endpoint | `ROLE_ADMIN` | Metrics and build information are for operators |
+| 10 | any | `/error` | permitAll | So an error can be shown |
+| 11 | `POST`, `PUT`, `DELETE` | `/products/**`, `/categories/**`, `/images/**` | `ROLE_ADMIN` | Changing the catalogue |
+| 12 | `PATCH` | `/api/v1/orders/*/status` | `ROLE_ADMIN` | Shipping and delivering; cancelling is a customer's action, checked in the service |
+| 13 | `GET` | `/api/v1/orders/admin` | `ROLE_ADMIN` | Every customer's orders; without this rule any signed-in user could list them |
+| 14 | `POST` | `/api/v1/orders/*/refunds` | `ROLE_ADMIN` | A refund gives money back, so an admin decides |
+| 15 | any | everything else | authenticated | Deny by default: a new endpoint is never public by accident; the service then checks ownership |
 
 Admin rules use `hasAuthority("ROLE_ADMIN")` here rather than `@PreAuthorize` on the
-controllers, so the whole map can be read in one place. Rows 7 and 8 match the
+controllers, so the whole map can be read in one place. Rows 8 and 9 match the
 actuator endpoints themselves (`EndpointRequest`), so they keep working if the
 actuator's path or port changes.
 
@@ -290,7 +303,7 @@ Code: [`RefreshTokenService.rotate`](../shop-identity/src/main/java/com/aryan/sp
 
 ## 8. Rate limiting
 
-`RateLimitFilter` runs before `AuthTokenFilter`, and only for `/api/v1/auth/**`, so
+`RateLimitFilter` runs before `BearerTokenAuthenticationFilter`, and only for `/api/v1/auth/**`, so
 password guessing gets a `429` before any token or password work happens. Each client
 address has a token bucket: 5 tokens, refilled continuously at 5 a minute (one every
 12 seconds). Each request spends one.
@@ -439,28 +452,61 @@ Code: [`PrometheusScrapeSecurityConfig`](../shop-identity/src/main/java/com/arya
 | Every URL rule in one `SecurityFilterChain`, admin rules as `hasAuthority("ROLE_ADMIN")` | The access map can be read and reviewed in one place, and the business code has no security wiring | `@PreAuthorize` on each controller |
 | Deny by default: `anyRequest().authenticated()` last | A new endpoint is never public by accident | Listing the protected paths |
 | Ownership checked in the service once the record is loaded, or queries scoped to `currentUserId()` | A URL rule can't know who owns a record | Trusting an id or user id sent by the client |
-| The user reloaded from the database on every request | A deleted account or a removed role takes effect at once | Trusting the roles in the token until it expires |
+| The user reloaded from the database on every request, and the token bound to the account's id | A deleted account or a removed role takes effect at once, and a token can't pass to a new account with the same email | Trusting the roles in the token until it expires |
 | A 15-minute access token and a 7-day rotating refresh token, stored as SHA-256 | A leaked access token is short-lived, refresh tokens can be revoked, a leaked table holds no usable token, and a replayed one is noticed | Long-lived access tokens; refresh tokens stored as they are |
 | Tokens in the `Authorization` header, sessions `STATELESS`, CSRF off | No cookie means no CSRF, and no session store to scale | Cookie sessions with CSRF tokens |
 | `/auth/**` rate-limited per address, in memory, before authentication | Guessing is slowed before any password work; one instance needs no shared store | No limit; a shared store before it is needed |
 | Errors in the filter chain written by the filters, as RFC 7807 | `GlobalExceptionHandler` never sees them, and every error should look the same to the storefront | Spring's default error responses |
-| The JWT signed with HMAC under one secret | The application that signs tokens is the only one that verifies them | An RSA key pair and a published public key: the next step (section 14) |
+| Access tokens signed RS256 with a private key, checked with the published public key | A service that checks tokens can't make them, and the key is replaced without telling every service a new secret | HMAC under one shared secret, which every verifier would have to hold |
+| Spring Security's resource-server support for the checking | The bearer-token parsing, algorithm restriction and claim validation are Spring's, used by many applications | A filter of our own (the previous `AuthTokenFilter`) |
+| An invalid token is a `401` on public URLs too | The client learns its token is bad (RFC 6750); the storefront sends none there | Ignoring a bad token on public URLs, as the previous filter did |
 
-## 14. Next: signing with a private key
+## 14. Signing keys and the published public keys
 
-With HMAC, the key that verifies a token can also make one, so every service that
-checks tokens must hold the secret. The planned change signs tokens with a private
-key that only the API holds and publishes the matching public key, so that another
-service can verify tokens without being able to make them:
+```mermaid
+flowchart LR
+    ENV["JWT_SIGNING_KEY<br/>RSA private key, from the environment"] --> K["JwtKeys<br/>kid = the key's thumbprint (RFC 7638)"]
+    PREV["JWT_PREVIOUS_PUBLIC_KEYS<br/>old public keys, while a key is replaced"] --> K
+    K -->|private key| ENC["JwtEncoder<br/>signs RS256, kid in the header"]
+    K -->|public keys| DEC["JwtDecoder<br/>RS256 only, picks the key by kid"]
+    K -->|public keys| JW["GET /api/v1/.well-known/jwks.json<br/>JWK Set, cached 5 minutes"]
+    JW -.->|"fetched by"| RS["another service<br/>verifies tokens, can't make them"]
+```
 
-- Spring Security's own resource-server support (`oauth2ResourceServer().jwt()`)
-  replaces `AuthTokenFilter`, and the tokens are signed with RS256.
-- The public key is published as a JWK Set at `/.well-known/jwks.json`, each key with
-  a key id (`kid`), so that a key can be replaced by publishing the new one before
-  signing with it.
-- The private key comes from the environment, like every other secret.
+- The signing key comes from `JWT_SIGNING_KEY`: an RSA private key of at least 2048
+  bits, PKCS#8 DER in Base64 on one line. Generate one with
+  `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\n'`.
+  A missing or unusable key stops the application at startup (`AuthTokenProperties`).
+- The dev and test profiles may run without one: a throwaway key is made at startup
+  (`generate-key-if-missing`), so no private key is ever committed, not even for
+  tests. Tokens then stop working when the application restarts.
+- Each key's id (`kid`) is its thumbprint, so it needs no setting and never changes
+  for a key. A token names its key; the decoder and other services pick it from the
+  set.
+- `GET /api/v1/.well-known/jwks.json` publishes the public keys as a JWK Set
+  (RFC 7517). It is under the API prefix so the proxy serves it, outside `/auth` so
+  the rate limiter doesn't hold back a service fetching it, and not wrapped in
+  `ApiResponse`, because libraries read the standard shape as it is.
+- Another Spring service verifies the tokens with
+  `spring.security.oauth2.resourceserver.jwt.jwk-set-uri` set to that URL, and
+  checks `iss` (`auth.token.issuer`, default `shopping-cart-api`).
 
-This section will become the design itself when the change lands.
+Replacing the signing key:
+
+1. Set the new key as `JWT_SIGNING_KEY`, and the old key's public half as
+   `JWT_PREVIOUS_PUBLIC_KEYS`:
+   `echo "$OLD_JWT_SIGNING_KEY" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '\n'`.
+   New tokens are signed with the new key, and the old ones still verify.
+2. After one access-token lifetime (15 minutes), every old token has expired: empty
+   `JWT_PREVIOUS_PUBLIC_KEYS`.
+3. Refresh tokens are random values, not JWTs, so they survive the change. A client
+   whose access token is refused simply refreshes.
+
+Code: [`JwtKeys`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtKeys.java),
+[`RsaKeys`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/RsaKeys.java),
+[`JwtConfig`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtConfig.java),
+[`JwksController`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/JwksController.java),
+[`AuthTokenProperties`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/AuthTokenProperties.java).
 
 ## 15. Reading the code in order
 
@@ -468,9 +514,11 @@ Each file builds on the ones before it.
 
 1. [`ShopConfig`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/config/ShopConfig.java):
    the filter chain, the access map, the beans. Everything else is plugged in here.
-2. [`AuthTokenFilter`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/AuthTokenFilter.java)
-   and [`JwtUtils`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtUtils.java):
-   how a request becomes a signed-in user.
+2. [`JwtConfig`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtConfig.java),
+   [`JwtKeys`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtKeys.java),
+   [`JwtUtils`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/JwtUtils.java)
+   and [`ShopJwtAuthenticationConverter`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/jwt/ShopJwtAuthenticationConverter.java):
+   how tokens are signed, checked, and turned into a signed-in user.
 3. [`ShopUserDetailsService`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/user/ShopUserDetailsService.java)
    and [`ShopUserDetails`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/user/ShopUserDetails.java):
    the user as Spring sees it.

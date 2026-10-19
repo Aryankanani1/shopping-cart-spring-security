@@ -171,14 +171,23 @@ management:
 api:
   prefix: /api/v1
 
-# --- JWT (see AuthTokenProperties) ---
-# jwtSecret has NO committed default — it must be supplied via JWT_SECRET.
-# Base64 key, >= 256 bits for HS256:  openssl rand -base64 32
+# --- Access tokens (see AuthTokenProperties) ---
+# Signed RS256 with an RSA private key that only this application holds; the
+# public key verifies them and is published at /api/v1/.well-known/jwks.json.
+# signingKey has NO committed default: it must be supplied via JWT_SIGNING_KEY,
+# PKCS#8 DER in Base64 on one line, at least 2048 bits:
+#   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\n'
+# When the key is replaced, put the old key's public half in
+# JWT_PREVIOUS_PUBLIC_KEYS (comma-separated, X.509 DER in Base64) for one
+# access-token lifetime, so tokens already issued stay valid:
+#   echo "$OLD_JWT_SIGNING_KEY" | base64 -d | openssl pkey -inform DER -pubout -outform DER | base64 | tr -d '\n'
 # Access token is short-lived (15 min); sessions are kept alive with a
 # longer-lived but revocable refresh token (7 days) — see RefreshTokenService.
 auth:
   token:
-    jwtSecret: ${JWT_SECRET}
+    signingKey: ${JWT_SIGNING_KEY:}
+    previousPublicKeys: ${JWT_PREVIOUS_PUBLIC_KEYS:}
+    issuer: ${JWT_ISSUER:shopping-cart-api}
     expirationInMils: ${JWT_EXPIRATION_MS:900000}
     refreshExpirationInMils: ${JWT_REFRESH_EXPIRATION_MS:604800000}
     # Scheduled purge of expired refresh tokens (Spring cron). Runs at an off-peak

@@ -437,10 +437,11 @@ jobs:
         run: |
           # Throwaway secrets, hidden from the log.
           DB_PASSWORD=$(openssl rand -hex 24)
-          JWT_SECRET=$(openssl rand -base64 32)
+          # The RSA key that signs access tokens, PKCS#8 DER in Base64 on one line.
+          JWT_SIGNING_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 -w0)
           PAYMENT_WEBHOOK_SECRET=$(openssl rand -hex 32)
           ADMIN_PASSWORD=$(openssl rand -hex 24)
-          for value in "$DB_PASSWORD" "$JWT_SECRET" "$PAYMENT_WEBHOOK_SECRET" "$ADMIN_PASSWORD"; do echo "::add-mask::$value"; done
+          for value in "$DB_PASSWORD" "$JWT_SIGNING_KEY" "$PAYMENT_WEBHOOK_SECRET" "$ADMIN_PASSWORD"; do echo "::add-mask::$value"; done
           umask 077
           cat > .env <<EOF
           IMAGE_TAG=$IMAGE_TAG
@@ -448,7 +449,7 @@ jobs:
           DB_URL=jdbc:mysql://db:3306/shop?sslMode=REQUIRED
           DB_USERNAME=shop
           DB_PASSWORD=$DB_PASSWORD
-          JWT_SECRET=$JWT_SECRET
+          JWT_SIGNING_KEY=$JWT_SIGNING_KEY
           PAYMENT_WEBHOOK_SECRET=$PAYMENT_WEBHOOK_SECRET
           ADMIN_EMAIL=admin@staging.test
           ADMIN_PASSWORD=$ADMIN_PASSWORD

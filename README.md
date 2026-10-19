@@ -25,7 +25,7 @@ A **React + Vite + TypeScript** customer storefront lives in
 | Framework      | Spring Boot 4.1.0 (Web MVC, Data JPA, Security)    |
 | Language       | Java 17                                            |
 | Database       | MySQL (`mysql-connector-j`), Hibernate             |
-| Auth           | JWT (jjwt 0.12.5), stateless, BCrypt               |
+| Auth           | JWT signed RS256, checked by Spring Security's resource server; stateless, BCrypt |
 | Mapping        | ModelMapper 3.2.4                                  |
 | API docs       | springdoc-openapi 3.1.0 (OpenAPI 3 + Swagger UI)   |
 | Caching        | Spring Cache (`ConcurrentMapCacheManager`)         |
@@ -63,7 +63,8 @@ Environment variables:
 
 | Variable          | Required?            | Purpose                                            |
 |-------------------|----------------------|----------------------------------------------------|
-| `JWT_SECRET`      | **always**           | Base64 key, ≥256 bits — `openssl rand -base64 32`  |
+| `JWT_SIGNING_KEY` | prod (dev: made at startup) | RSA private key that signs access tokens, PKCS#8 DER in Base64 — `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\n'` |
+| `JWT_PREVIOUS_PUBLIC_KEYS` | optional    | Public keys still accepted while a signing key is replaced (comma-separated) |
 | `DB_URL`          | prod (dev: localhost)| JDBC URL, e.g. `jdbc:mysql://localhost:3306/shop`  |
 | `DB_USERNAME`     | prod (dev: `root`)   | Database user                                      |
 | `DB_PASSWORD`     | prod (dev: empty)    | Database password                                  |
@@ -84,12 +85,12 @@ overridden by exporting the matching env var.
 ### Run
 
 ```bash
-# dev
-SPRING_PROFILES_ACTIVE=dev JWT_SECRET=$(openssl rand -base64 32) ./mvnw -pl shop-app -am spring-boot:run
+# dev (signs tokens with a throwaway key made at startup)
+SPRING_PROFILES_ACTIVE=dev ./mvnw -pl shop-app -am spring-boot:run
 
 # prod (the default profile)
 DB_URL=... DB_USERNAME=... DB_PASSWORD=... \
-  JWT_SECRET=... ./mvnw -pl shop-app -am spring-boot:run
+  JWT_SIGNING_KEY=... ./mvnw -pl shop-app -am spring-boot:run
 ```
 
 `-pl shop-app -am` runs the application module and builds the modules it uses
@@ -289,8 +290,11 @@ The design, with a diagram of each flow (sign-in, every request after it, the ac
 map, ownership checks, refresh tokens, rate limiting, webhooks) and links to the
 classes that do it, is in [docs/security-design.md](docs/security-design.md).
 
-- **Stateless access JWT**: `AuthTokenFilter` runs before `UsernamePasswordAuthenticationFilter`
-  and authenticates each request from the bearer token — no server-side session lookup, so reads scale.
+- **Stateless access JWT, signed with a private key**: access tokens are signed RS256
+  with an RSA private key only the API holds, and checked by Spring Security's
+  resource-server support with the public key, which is published at
+  `GET /api/v1/.well-known/jwks.json` so another service can verify tokens without
+  being able to make one. No server-side session lookup, so reads scale.
 - **Deny-by-default authorization** (`ShopConfig`): only listed paths are public
   (login, self-registration, GET catalog, docs); catalog writes are `ROLE_ADMIN`;
   everything else requires authentication. **Object-level ownership** (a user may
@@ -839,11 +843,11 @@ docker run --rm -p 8080:8080 \
   -e DB_URL='jdbc:mysql://db:3306/shopping_cart' \
   -e DB_USERNAME='shop' \
   -e DB_PASSWORD='...' \
-  -e JWT_SECRET='...' \
+  -e JWT_SIGNING_KEY='...' \
   shopping-cart:latest
 ```
 
-> Never bake `DB_PASSWORD`, `JWT_SECRET`, or any key into the image or the
+> Never bake `DB_PASSWORD`, `JWT_SIGNING_KEY`, or any key into the image or the
 > `Dockerfile` — anyone who pulls the image could extract it. Supply them at
 > runtime via `-e`, an env file kept out of source control, or a secrets manager.
 > Kubernetes liveness/readiness probes should target `/actuator/health/liveness`

@@ -44,11 +44,6 @@
 			<groupId>org.modelmapper</groupId>
 			<artifactId>modelmapper</artifactId>
 		</dependency>
-		<!-- GlobalExceptionHandler maps JJWT's JwtException to 401. -->
-		<dependency>
-			<groupId>io.jsonwebtoken</groupId>
-			<artifactId>jjwt-api</artifactId>
-		</dependency>
 		<!-- Distributed lock for @Scheduled tasks, stored in the `shedlock` table (Flyway V2). -->
 		<dependency>
 			<groupId>net.javacrumbs.shedlock</groupId>

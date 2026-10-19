@@ -2,6 +2,7 @@ package com.aryan.spring_security_demo.identity.security.jwt;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -41,6 +42,8 @@ public class JwtEntryPoint implements AuthenticationEntryPoint {
         problem.setProperty("path", request.getServletPath());
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        // How to authenticate (RFC 6750): a bearer token.
+        response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
         response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
         MAPPER.writeValue(response.getOutputStream(), problem);
     }

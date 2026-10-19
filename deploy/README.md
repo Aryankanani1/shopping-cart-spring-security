@@ -44,7 +44,10 @@ come from `.env` at run time.
    - `SITE_ADDRESS` — the domain;
    - `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` — the managed database, with
      `sslMode=VERIFY_IDENTITY` in the URL;
-   - `JWT_SECRET` — `openssl rand -base64 32`;
+   - `JWT_SIGNING_KEY` — the RSA key that signs access tokens:
+     `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\n'`. To replace it, put the
+     old key's public half in `JWT_PREVIOUS_PUBLIC_KEYS` for 15 minutes (the command is
+     in `.env.example`);
    - `ADMIN_EMAIL` and `ADMIN_PASSWORD` (12+ characters) — the first admin.
 
    Keep it readable only by the deploying user: `chmod 600 .env`.

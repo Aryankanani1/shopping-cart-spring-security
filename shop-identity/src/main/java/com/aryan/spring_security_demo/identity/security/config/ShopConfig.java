@@ -2,8 +2,8 @@ package com.aryan.spring_security_demo.identity.security.config;
 
 import com.aryan.spring_security_demo.identity.RateLimitProperties;
 import com.aryan.spring_security_demo.identity.security.ApiAccessDeniedHandler;
-import com.aryan.spring_security_demo.identity.security.jwt.AuthTokenFilter;
 import com.aryan.spring_security_demo.identity.security.jwt.JwtEntryPoint;
+import com.aryan.spring_security_demo.identity.security.jwt.ShopJwtAuthenticationConverter;
 import com.aryan.spring_security_demo.identity.security.ratelimit.RateLimitFilter;
 import com.aryan.spring_security_demo.identity.security.ratelimit.RateLimitService;
 import com.aryan.spring_security_demo.identity.security.user.ShopUserDetailsService;
@@ -23,8 +23,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @EnableWebSecurity
 @Configuration
@@ -41,11 +41,6 @@ public class ShopConfig {
         return new BCryptPasswordEncoder();
     }
 
-
-    @Bean
-    public AuthTokenFilter authTokenFilter(){
-        return new AuthTokenFilter();
-    }
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws
@@ -67,7 +62,7 @@ public class ShopConfig {
                                                    @Value("${api.prefix}") String apiPrefix) throws Exception{
             // Throttle the auth endpoints before any authentication work runs. Built
             // here (not a @Component) so it isn't dragged into @WebMvcTest slices
-            // without its collaborators — same pattern as authTokenFilter below.
+            // without its collaborators.
             RateLimitFilter rateLimitFilter = new RateLimitFilter(rateLimitService, rateLimitProperties, apiPrefix);
 
             http.csrf(AbstractHttpConfigurer::disable)
@@ -84,6 +79,16 @@ public class ShopConfig {
                             .authenticationEntryPoint(jwtEntryPoint)          // 401 — unauthenticated
                             .accessDeniedHandler(apiAccessDeniedHandler))     // 403 — authenticated, wrong authority
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                    // Access tokens, through Spring Security's resource-server support: it
+                    // reads the bearer token, checks its RS256 signature against the public
+                    // keys and its claims (JwtConfig's decoder), and hands it to
+                    // ShopJwtAuthenticationConverter, which loads the user. No token leaves
+                    // the caller anonymous; an invalid one is a 401 (JwtEntryPoint) on any
+                    // URL, public ones too, as RFC 6750 has it.
+                    .oauth2ResourceServer(oauth2 -> oauth2
+                            .jwt(jwt -> jwt.jwtAuthenticationConverter(new ShopJwtAuthenticationConverter(userDetailsService)))
+                            .authenticationEntryPoint(jwtEntryPoint)
+                            .accessDeniedHandler(apiAccessDeniedHandler))
                     // Deny by default: only the endpoints listed below are public, so
                     // adding a new controller can never accidentally expose it. This
                     // closes the previous gap where /users/** (and catalog writes) were
@@ -95,6 +100,10 @@ public class ShopConfig {
                             .requestMatchers(HttpMethod.PUT, "/api/v1/auth/password").authenticated()
                             .requestMatchers("/api/v1/auth/**").permitAll()                 // login
                             .requestMatchers(HttpMethod.POST, "/api/v1/users").permitAll()  // self-registration
+                            // The public keys that verify access tokens (JwksController). Public
+                            // by design: they let another service check a token, and nothing
+                            // can be signed with them.
+                            .requestMatchers(HttpMethod.GET, "/api/v1/.well-known/jwks.json").permitAll()
                             // The payment provider's webhooks. The provider has no user token,
                             // so each request is authenticated by its HMAC signature instead,
                             // checked over the raw body before anything else; an unsigned or
@@ -161,11 +170,12 @@ public class ShopConfig {
                             // authentication; object-level ownership is then enforced in
                             // the service layer (see AuthUtils / CartService).
                             .anyRequest().authenticated());
+                    // Login's username and password (AuthController); bearer tokens have
+                    // their own provider, set up by oauth2ResourceServer above.
                     http.authenticationProvider(daoAuthenticationProvider());
-                    http.addFilterBefore(authTokenFilter(), UsernamePasswordAuthenticationFilter.class);
                     // Rate limiter sits ahead of authentication so an over-limit caller
                     // is rejected with 429 before any token/credential processing.
-                    http.addFilterBefore(rateLimitFilter, AuthTokenFilter.class);
+                    http.addFilterBefore(rateLimitFilter, BearerTokenAuthenticationFilter.class);
                     return http.build();
 
     }

@@ -1,8 +1,6 @@
 package com.aryan.spring_security_demo.identity;
 
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
+import com.aryan.spring_security_demo.identity.security.jwt.RsaKeys;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -11,13 +9,19 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Type-safe, validated JWT settings ({@code auth.token.*}), replacing the
- * scattered {@code @Value} lookups in {@code JwtUtils}.
+ * Type-safe, validated token settings ({@code auth.token.*}).
  *
- * <p>The secret has no default — it must be supplied per environment (via the
- * {@code JWT_SECRET} env var). A missing secret, or one that can't be used as an
- * HS256 key, fails the application at startup instead of at first login.
+ * <p>Access tokens are signed with an RSA private key that only this application
+ * holds, and checked with its public key, which is published (JwksController) so
+ * another service can check them too without being able to make one. The key has
+ * no default: it comes from the {@code JWT_SIGNING_KEY} environment variable. A
+ * missing or unusable key fails the application at startup instead of at the
+ * first login. Only the dev and test profiles may do without one, and then a
+ * throwaway key is made at startup ({@code generateKeyIfMissing}).
  */
 @Getter
 @Setter
@@ -25,25 +29,54 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "auth.token")
 public class AuthTokenProperties {
 
-    /** Base64-encoded HMAC secret; must be >= 256 bits (32 bytes) for HS256. */
-    @NotBlank
-    private String jwtSecret;
+    static final String KEY_COMMAND =
+            "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\\n'";
 
     /**
-     * Builds the key the same way {@code JwtUtils} does, so a secret that passes
-     * here signs tokens. Without this check, a short or non-Base64 secret started
-     * fine and then failed every login with a 401 "Invalid or expired token".
+     * The RSA private key that signs access tokens: PKCS#8, Base64 on one line
+     * (or PEM), at least 2048 bits. Its public half is derived from it.
      */
-    @AssertTrue(message = "JWT_SECRET must be a Base64-encoded key of at least 256 bits "
-            + "(generate one with: openssl rand -base64 32)")
-    public boolean isJwtSecretUsable() {
-        if (jwtSecret == null || jwtSecret.isBlank()) {
-            return true;  // @NotBlank reports a missing secret
-        }
+    private String signingKey;
+
+    /**
+     * Public keys that still verify tokens but no longer sign them (X.509, Base64
+     * or PEM): the keys before the current one, kept for one access-token lifetime
+     * after a new signing key is put in, so the tokens already out stay valid.
+     */
+    private List<String> previousPublicKeys = new ArrayList<>();
+
+    /**
+     * Make a throwaway signing key at startup when none is set. For the dev and
+     * test profiles only: tokens stop working when the application restarts, and
+     * every instance would have its own key.
+     */
+    private boolean generateKeyIfMissing = false;
+
+    /** The {@code iss} claim of every token, checked on every token presented. */
+    @NotBlank
+    private String issuer = "shopping-cart-api";
+
+    @AssertTrue(message = "JWT_SIGNING_KEY must be set: an RSA private key of at least 2048 bits, "
+            + "in Base64 (generate one with: " + KEY_COMMAND + ")")
+    public boolean isSigningKeyPresent() {
+        return generateKeyIfMissing || (signingKey != null && !signingKey.isBlank());
+    }
+
+    /**
+     * Parses the keys the same way JwtKeys does, so keys that pass here sign and
+     * verify tokens. Without this check, a bad key would only fail at the first login.
+     */
+    @AssertTrue(message = "JWT_SIGNING_KEY must be an RSA private key (PKCS#8) of at least 2048 bits, "
+            + "and each of JWT_PREVIOUS_PUBLIC_KEYS an RSA public key (X.509) of at least 2048 bits, "
+            + "all in Base64 (generate a signing key with: " + KEY_COMMAND + ")")
+    public boolean isKeysUsable() {
         try {
-            Keys.hmacShaKeyFor(Decoders.BASE64.decode(jwtSecret));
+            if (signingKey != null && !signingKey.isBlank()) {
+                RsaKeys.parsePrivateKey(signingKey);
+            }
+            previousPublicKeys.stream().filter(key -> !key.isBlank()).forEach(RsaKeys::parsePublicKey);
             return true;
-        } catch (JwtException e) {
+        } catch (IllegalArgumentException e) {
             return false;
         }
     }

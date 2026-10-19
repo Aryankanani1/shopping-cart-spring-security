@@ -21,8 +21,8 @@ import java.io.IOException;
  * change) so credential-stuffing, password guessing and refresh-token guessing
  * can't hammer them at machine speed. Everything else is unaffected.
  *
- * <p>Wired into the security filter chain ahead of {@code AuthTokenFilter} (see
- * {@code ShopConfig}) — like {@code AuthTokenFilter} it is a plain class, not a
+ * <p>Wired into the security filter chain ahead of the bearer-token filter (see
+ * {@code ShopConfig}). It is a plain class, not a
  * {@code @Component}, so it isn't pulled into {@code @WebMvcTest} slices without
  * its collaborators. An over-limit caller is turned away with a 429 before any
  * authentication work runs, with an RFC 7807 {@link ProblemDetail} body (matching
