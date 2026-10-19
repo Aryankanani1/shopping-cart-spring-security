@@ -63,7 +63,7 @@ Environment variables:
 
 | Variable          | Required?            | Purpose                                            |
 |-------------------|----------------------|----------------------------------------------------|
-| `JWT_SIGNING_KEY` | prod (dev: made at startup) | RSA private key that signs access tokens, PKCS#8 DER in Base64 — `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\n'` |
+| `JWT_SIGNING_KEY` | prod (dev: made at startup) | RSA private key that signs access tokens, PKCS#8 DER in Base64 — `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\n'` |
 | `JWT_PREVIOUS_PUBLIC_KEYS` | optional    | Public keys still accepted while a signing key is replaced (comma-separated) |
 | `DB_URL`          | prod (dev: localhost)| JDBC URL, e.g. `jdbc:mysql://localhost:3306/shop`  |
 | `DB_USERNAME`     | prod (dev: `root`)   | Database user                                      |

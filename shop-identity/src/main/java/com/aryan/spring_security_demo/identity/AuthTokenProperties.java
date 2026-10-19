@@ -30,7 +30,7 @@ import java.util.List;
 public class AuthTokenProperties {
 
     static final String KEY_COMMAND =
-            "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\\n'";
+            "openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\\n'";
 
     /**
      * The RSA private key that signs access tokens: PKCS#8, Base64 on one line
@@ -66,9 +66,10 @@ public class AuthTokenProperties {
      * Parses the keys the same way JwtKeys does, so keys that pass here sign and
      * verify tokens. Without this check, a bad key would only fail at the first login.
      */
-    @AssertTrue(message = "JWT_SIGNING_KEY must be an RSA private key (PKCS#8) of at least 2048 bits, "
-            + "and each of JWT_PREVIOUS_PUBLIC_KEYS an RSA public key (X.509) of at least 2048 bits, "
-            + "all in Base64 (generate a signing key with: " + KEY_COMMAND + ")")
+    @AssertTrue(message = "JWT_SIGNING_KEY must be an RSA private key (PKCS#8; a PKCS#1 key, as genrsa writes, "
+            + "converts with openssl pkcs8 -topk8 -nocrypt) of at least 2048 bits, and each of "
+            + "JWT_PREVIOUS_PUBLIC_KEYS an RSA public key (X.509) of at least 2048 bits, all in Base64 "
+            + "(generate a signing key with: " + KEY_COMMAND + ")")
     public boolean isKeysUsable() {
         try {
             if (signingKey != null && !signingKey.isBlank()) {

@@ -176,7 +176,7 @@ api:
 # public key verifies them and is published at /api/v1/.well-known/jwks.json.
 # signingKey has NO committed default: it must be supplied via JWT_SIGNING_KEY,
 # PKCS#8 DER in Base64 on one line, at least 2048 bits:
-#   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\n'
+#   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\n'
 # When the key is replaced, put the old key's public half in
 # JWT_PREVIOUS_PUBLIC_KEYS (comma-separated, X.509 DER in Base64) for one
 # access-token lifetime, so tokens already issued stay valid:

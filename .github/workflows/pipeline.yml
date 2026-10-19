@@ -438,7 +438,7 @@ jobs:
           # Throwaway secrets, hidden from the log.
           DB_PASSWORD=$(openssl rand -hex 24)
           # The RSA key that signs access tokens, PKCS#8 DER in Base64 on one line.
-          JWT_SIGNING_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 -w0)
+          JWT_SIGNING_KEY=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 -w0)
           PAYMENT_WEBHOOK_SECRET=$(openssl rand -hex 32)
           ADMIN_PASSWORD=$(openssl rand -hex 24)
           for value in "$DB_PASSWORD" "$JWT_SIGNING_KEY" "$PAYMENT_WEBHOOK_SECRET" "$ADMIN_PASSWORD"; do echo "::add-mask::$value"; done

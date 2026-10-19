@@ -16,9 +16,9 @@ import java.util.Base64;
 /**
  * Reads the RSA keys the access tokens are signed and checked with, as they come
  * from the environment: the DER encoding in Base64, either on one line
- * ({@code openssl genpkey ... -outform DER | base64}) or as PEM, whose header,
- * footer and line breaks are ignored. A private key is PKCS#8, a public one
- * X.509 SubjectPublicKeyInfo.
+ * ({@code openssl genpkey ... | openssl pkcs8 -topk8 -nocrypt -outform DER | base64})
+ * or as PEM, whose header, footer and line breaks are ignored. A private key is
+ * PKCS#8, a public one X.509 SubjectPublicKeyInfo.
  */
 public final class RsaKeys {
 
@@ -34,16 +34,36 @@ public final class RsaKeys {
      * @throws IllegalArgumentException if it isn't Base64, isn't an RSA private key, or is too short
      */
     public static RSAPrivateCrtKey parsePrivateKey(String encoded) {
+        byte[] der = der(encoded);
         try {
-            var key = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der(encoded)));
+            var key = KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der));
             if (!(key instanceof RSAPrivateCrtKey rsa)) {
                 throw new IllegalArgumentException("Not an RSA private key with its public part (CRT form)");
             }
             requireLongEnough(rsa.getModulus().bitLength());
             return rsa;
         } catch (GeneralSecurityException e) {
+            if (isPkcs1(der)) {
+                throw new IllegalArgumentException("A PKCS#1 RSA key (as genrsa, or genpkey with -outform DER, "
+                        + "writes): convert it to PKCS#8 with openssl pkcs8 -topk8 -nocrypt", e);
+            }
             throw new IllegalArgumentException("Not a PKCS#8 RSA private key", e);
         }
+    }
+
+    /**
+     * Whether {@code der} looks like a PKCS#1 RSAPrivateKey: a SEQUENCE whose
+     * version 0 is followed by an INTEGER (the modulus). In PKCS#8 the version is
+     * followed by the algorithm's SEQUENCE instead.
+     */
+    static boolean isPkcs1(byte[] der) {
+        if (der.length < 8 || der[0] != 0x30) {
+            return false;
+        }
+        int lengthBytes = (der[1] & 0x80) == 0 ? 0 : der[1] & 0x7f;
+        int version = 2 + lengthBytes;
+        return der.length > version + 3 && der[version] == 0x02 && der[version + 1] == 0x01
+                && der[version + 2] == 0x00 && der[version + 3] == 0x02;
     }
 
     /**

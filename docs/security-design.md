@@ -475,7 +475,7 @@ flowchart LR
 
 - The signing key comes from `JWT_SIGNING_KEY`: an RSA private key of at least 2048
   bits, PKCS#8 DER in Base64 on one line. Generate one with
-  `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -outform DER | base64 | tr -d '\n'`.
+  `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\n'`.
   A missing or unusable key stops the application at startup (`AuthTokenProperties`).
 - The dev and test profiles may run without one: a throwaway key is made at startup
   (`generate-key-if-missing`), so no private key is ever committed, not even for

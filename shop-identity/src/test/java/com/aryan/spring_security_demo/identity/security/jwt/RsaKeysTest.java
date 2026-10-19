@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPublicKey;
+import java.util.Arrays;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,6 +59,31 @@ class RsaKeysTest {
                 .hasMessageContaining("1024 bits").hasMessageContaining("at least 2048");
         assertThatThrownBy(() -> RsaKeys.parsePublicKey(RsaKeys.encode(weak.getPublic())))
                 .hasMessageContaining("at least 2048");
+    }
+
+    // Regression: the documented command was openssl genpkey ... -outform DER, which
+    // writes PKCS#1, not PKCS#8, so the staging deploy's key stopped the app at startup.
+    @Test
+    void aPkcs1Key_isRefused_withHowToConvertIt() {
+        byte[] pkcs1 = pkcs1Of(pair.getPrivate().getEncoded());
+
+        assertThat(RsaKeys.isPkcs1(pkcs1)).isTrue();
+        assertThat(RsaKeys.isPkcs1(pair.getPrivate().getEncoded())).isFalse();
+        assertThatThrownBy(() -> RsaKeys.parsePrivateKey(Base64.getEncoder().encodeToString(pkcs1)))
+                .hasMessageContaining("PKCS#1").hasMessageContaining("openssl pkcs8 -topk8 -nocrypt");
+    }
+
+    /**
+     * The PKCS#1 RSAPrivateKey inside a PKCS#8 encoding, which is what openssl
+     * genpkey -outform DER writes: PrivateKeyInfo is SEQUENCE { INTEGER 0,
+     * AlgorithmIdentifier, OCTET STRING { RSAPrivateKey } }.
+     */
+    private static byte[] pkcs1Of(byte[] pkcs8) {
+        int i = 2 + (pkcs8[1] & 0x7f);  // past the outer SEQUENCE's tag and long-form length
+        i += 3;                          // the version, INTEGER 0
+        i += 2 + pkcs8[i + 1];           // the AlgorithmIdentifier SEQUENCE (a short length)
+        assertThat(pkcs8[i]).as("OCTET STRING").isEqualTo((byte) 0x04);
+        return Arrays.copyOfRange(pkcs8, i + 2 + (pkcs8[i + 1] & 0x7f), pkcs8.length);
     }
 
     @Test
