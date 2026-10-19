@@ -36,7 +36,9 @@ public class StartupInfoRunner implements CommandLineRunner {
         log.info("  DDL auto       : {}", env.getProperty("spring.jpa.hibernate.ddl-auto", "(default)"));
         log.info("  Open-in-view   : {}", env.getProperty("spring.jpa.open-in-view", "(default)"));
         log.info("  Launch args    : {}", args.length == 0 ? "(none)" : String.join(" ", args));
-        log.info("  JWT secret     : {}", isPresent("auth.token.jwtSecret") ? "configured" : "MISSING");
+        log.info("  JWT signing key: {}", isPresent("auth.token.signingKey") ? "configured"
+                : env.getProperty("auth.token.generate-key-if-missing", Boolean.class, false)
+                        ? "made at startup (throwaway)" : "MISSING");
         log.info("  JWT expiry(ms) : {}", env.getProperty("auth.token.expirationInMils", "(default)"));
         log.info("======================================================================");
     }

@@ -3,7 +3,6 @@ package com.aryan.spring_security_demo.identity.security.user;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
@@ -21,7 +20,7 @@ public class ShopUserDetailsService implements org.springframework.security.core
      * exception is treated as a server error (500).
      */
     @Override
-    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+    public ShopUserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
         User user =  userRepository.findByEmailWithRoles(email).orElseThrow(() ->
                 new UsernameNotFoundException("User not found"));
         return ShopUserDetails.buildUserDetails(user);

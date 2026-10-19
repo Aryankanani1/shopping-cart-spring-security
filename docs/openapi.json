@@ -1015,6 +1015,25 @@
   },
   "openapi" : "3.1.0",
   "paths" : {
+    "/api/v1/.well-known/jwks.json" : {
+      "get" : {
+        "operationId" : "jwks",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "additionalProperties" : { },
+                  "type" : "object"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "jwks-controller" ]
+      }
+    },
     "/api/v1/auth/login" : {
       "post" : {
         "operationId" : "login",

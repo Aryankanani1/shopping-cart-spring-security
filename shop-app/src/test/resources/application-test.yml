@@ -22,10 +22,11 @@ spring:
 api:
   prefix: /api/v1
 
-# Deterministic secret for signing/validating JWTs in tests (Base64, 256-bit).
+# Tests sign tokens with a key made when the context starts: no private key is
+# committed, not even a test one.
 auth:
   token:
-    jwtSecret: CEN/4/BWJAn9lZR7HK2RXAN+ejVVU7p4oBUm7RWtt5Q=
+    generate-key-if-missing: true
     expirationInMils: 3600000
 
 # Keep the boot pipeline quiet and the database empty so each test controls its

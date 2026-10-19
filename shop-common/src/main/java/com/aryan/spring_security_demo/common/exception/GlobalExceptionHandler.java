@@ -1,6 +1,5 @@
 package com.aryan.spring_security_demo.common.exception;
 
-import io.jsonwebtoken.JwtException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.apache.tomcat.util.http.InvalidParameterException;
@@ -74,13 +73,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ProblemDetail handleConflict(ConflictException ex) {
         log.debug("409 {}: {}", ex.getTitle(), ex.getMessage());
         return problem(HttpStatus.CONFLICT, ex.getTitle(), ex.getMessage());
-    }
-
-    /** 401 — a bad or expired JWT surfaced from within a controller. */
-    @ExceptionHandler(JwtException.class)
-    public ProblemDetail handleJwt(JwtException ex) {
-        log.debug("401 Authentication failed: {}", ex.getMessage());
-        return problem(HttpStatus.UNAUTHORIZED, "Authentication failed", "Invalid or expired token");
     }
 
     /**

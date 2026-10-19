@@ -36,7 +36,10 @@ services:
       # Connections per API instance (see application.yml): about (database CPU
       # cores x 2) + 1, and all instances together under MySQL's max_connections.
       DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (openssl rand -base64 32)}
+      # Signs access tokens; JWT_PREVIOUS_PUBLIC_KEYS keeps the last key's tokens
+      # valid while a new one is put in (deploy/.env.example).
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env (see .env.example)}
+      JWT_PREVIOUS_PUBLIC_KEYS: ${JWT_PREVIOUS_PUBLIC_KEYS:-}
       # The simulated payment provider signs its webhooks with this, and delivers
       # them to the API itself (docs/payment-design.md, section 7).
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?Set PAYMENT_WEBHOOK_SECRET in .env (openssl rand -hex 32)}

@@ -1,6 +1,5 @@
 package com.aryan.spring_security_demo.common.exception;
 
-import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -59,14 +58,6 @@ class GlobalExceptionHandlerTest {
 
         assertThat(problem.getStatus()).isEqualTo(409);
         assertThat(problem.getDetail()).contains("retry").doesNotContain("cart");
-    }
-
-    @Test
-    void badJwt_is401WithoutTheParserMessage() {
-        ProblemDetail problem = handler.handleJwt(new JwtException("JWT signature does not match locally computed"));
-
-        assertThat(problem.getStatus()).isEqualTo(401);
-        assertThat(problem.getDetail()).isEqualTo("Invalid or expired token");
     }
 
     @Test

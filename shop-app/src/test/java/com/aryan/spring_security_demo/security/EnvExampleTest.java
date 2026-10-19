@@ -20,17 +20,17 @@ class EnvExampleTest {
     private static final Path ENV_EXAMPLE = repositoryRoot().resolve(".env.example");
     private static final Path DEPLOY_ENV_EXAMPLE = repositoryRoot().resolve("deploy/.env.example");
 
-    // Regression: JWT_SECRET shipped with a working key, so anyone could sign an
-    // admin token for a stack started from the example.
+    // Regression: the JWT key once shipped working, so anyone could sign an admin
+    // token for a stack started from the example.
     @ParameterizedTest
-    @ValueSource(strings = {"JWT_SECRET", "PAYMENT_WEBHOOK_SECRET", "PROMETHEUS_SCRAPE_PASSWORD", "GRAFANA_ADMIN_PASSWORD"})
+    @ValueSource(strings = {"JWT_SIGNING_KEY", "PAYMENT_WEBHOOK_SECRET", "PROMETHEUS_SCRAPE_PASSWORD", "GRAFANA_ADMIN_PASSWORD"})
     void secretsAreLeftEmpty(String key) throws IOException {
         assertThat(valueOf(ENV_EXAMPLE, key)).as(key + " in .env.example").isEmpty();
     }
 
     // The production example (deploy/) is just as public.
     @ParameterizedTest
-    @ValueSource(strings = {"DB_PASSWORD", "JWT_SECRET", "PAYMENT_WEBHOOK_SECRET", "ADMIN_PASSWORD"})
+    @ValueSource(strings = {"DB_PASSWORD", "JWT_SIGNING_KEY", "PAYMENT_WEBHOOK_SECRET", "ADMIN_PASSWORD"})
     void productionSecretsAreLeftEmpty(String key) throws IOException {
         assertThat(valueOf(DEPLOY_ENV_EXAMPLE, key)).as(key + " in deploy/.env.example").isEmpty();
     }

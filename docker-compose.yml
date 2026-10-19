@@ -24,7 +24,7 @@
 #     Hibernate don't hit a DB that isn't accepting connections yet.
 #
 # Quick start:
-#   cp .env.example .env      # then set JWT_SECRET (openssl rand -base64 32)
+#   cp .env.example .env      # optionally set JWT_SIGNING_KEY (see .env.example)
 #   docker compose up --build # first build runs the full Maven package; be patient
 #   # API on http://localhost:8080 , MySQL on localhost:3306
 #
@@ -80,9 +80,10 @@ services:
       DB_URL: "jdbc:mysql://mysql:3306/${DB_NAME:-shopping_cart}?useSSL=false&allowPublicKeyRetrieval=true"
       DB_USERNAME: ${DB_USERNAME:-shop}
       DB_PASSWORD: ${DB_PASSWORD:-shop}
-      # Required — no default anywhere. Compose refuses to start if unset, with
-      # this message. Put it in .env (see .env.example).
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env — see .env.example (openssl rand -base64 32)}
+      # The key that signs access tokens (see .env.example). Optional with the
+      # dev profile, which makes a throwaway one at startup; any other profile
+      # refuses to start without it.
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:-}
       JAVA_OPTS: ${JAVA_OPTS:-}
       # Payment webhooks, off unless PAYMENT_WEBHOOK_SECRET is set in .env: the
       # simulated provider then delivers them to the API itself.

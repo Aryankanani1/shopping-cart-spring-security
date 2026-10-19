@@ -3,7 +3,7 @@
 #
 # Principles baked in here:
 #   * NO configuration or secrets in the image. The jar carries only non-secret
-#     defaults (application*.yml); DB_URL, DB_USERNAME, DB_PASSWORD, JWT_SECRET,
+#     defaults (application*.yml); DB_URL, DB_USERNAME, DB_PASSWORD, JWT_SIGNING_KEY,
 #     SPRING_PROFILES_ACTIVE, etc. are injected at RUNTIME via env vars / a
 #     secrets manager. The same image runs unchanged in every environment.
 #   * Base images pinned to digests (never :latest) for reproducible builds;

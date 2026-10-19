@@ -121,17 +121,22 @@ class AccountDeletionIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    // The token is still unexpired and correctly signed, but its account is gone:
+    // it is refused (RFC 6750: wherever it is sent, public URLs too), and never a 500.
+    // Without a token, the public catalogue still answers.
     @Test
-    @DisplayName("the deleted account's unexpired access token is treated as signed out, not a 500")
-    void deletedAccountToken_isAnonymous() throws Exception {
+    @DisplayName("the deleted account's unexpired access token is a 401 everywhere, not a 500")
+    void deletedAccountToken_isRefused() throws Exception {
         String bearer = "Bearer " + login().path("token").asText();
         mockMvc.perform(delete("/api/v1/users/" + userId).header("Authorization", bearer))
                 .andExpect(status().isNoContent());
 
-        mockMvc.perform(get("/api/v1/products").header("Authorization", bearer))
-                .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/users/" + userId).header("Authorization", bearer))
                 .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/products").header("Authorization", bearer))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/products"))
+                .andExpect(status().isOk());
     }
 
     @Test
