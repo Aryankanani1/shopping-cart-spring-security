@@ -7,6 +7,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -54,9 +55,9 @@ public class ImageController {
     }
 
     @DeleteMapping("/{imageId}")
-    public ResponseEntity<ApiResponse<?>> deleteImage(@PathVariable Long imageId){
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteImage(@PathVariable Long imageId){
         imageServiceInterface.getImageById(imageId); // 404 (via global handler) if it doesn't exist
         imageServiceInterface.deleteImageById(imageId);
-        return ResponseEntity.noContent().build();
     }
 }

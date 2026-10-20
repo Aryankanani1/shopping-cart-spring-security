@@ -5,6 +5,7 @@ import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserServiceInterface;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -36,12 +37,12 @@ public class CartItemController {
 
 
     @DeleteMapping("/cart/{cartId}/product/{productId}")
-    public ResponseEntity<ApiResponse<?>> removeItemFromCart(
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeItemFromCart(
             @PathVariable Long cartId,
             @PathVariable Long productId
     ){
         cartItemServiceInterface.removeItemFromCart(cartId, productId);
-        return ResponseEntity.noContent().build();
     }
 
 

@@ -17,6 +17,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -165,6 +168,25 @@ class OpenApiContractTest {
                 .asText()).isEqualTo("#/components/schemas/WebhookEvent");
         assertThat(spec.at("/components/schemas/WebhookEvent/properties/type/enum")).extracting(JsonNode::asText)
                 .containsExactlyInAnyOrder("charge.succeeded", "charge.failed", "refund.succeeded");
+    }
+
+    // springdoc documents a ResponseEntity's status as 200 whatever the method
+    // returns, so the deletes said 200 while answering 204 No Content.
+    @Test
+    @DisplayName("a delete documents 204, except clearing a reminder, which returns the item")
+    void deletes_document204() throws Exception {
+        JsonNode paths = generatedSpec().path("paths");
+        List<String> deletes = new ArrayList<>();
+        for (Map.Entry<String, JsonNode> path : paths.properties()) {
+            JsonNode delete = path.getValue().path("delete");
+            if (!delete.isMissingNode()) {
+                deletes.add(path.getKey());
+                boolean returnsTheItem = "clearReminder".equals(delete.path("operationId").asText());
+                assertThat(delete.path("responses").fieldNames()).toIterable().as(path.getKey())
+                        .containsExactly(returnsTheItem ? "200" : "204");
+            }
+        }
+        assertThat(deletes).as("delete operations").hasSizeGreaterThan(5);
     }
 
     /** The operation's parameter of that name, or a missing node. */

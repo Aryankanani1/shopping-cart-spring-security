@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.catalog;
 import com.aryan.spring_security_demo.common.web.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -53,9 +54,9 @@ public class CategoryController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<ApiResponse<?>> deleteCategoryById(@PathVariable Long id){
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCategoryById(@PathVariable Long id){
         categoryServiceInterface.deleteCategoryById(id);
-        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{id}")

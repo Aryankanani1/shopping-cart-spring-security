@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.identity;
 import com.aryan.spring_security_demo.common.web.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -39,8 +40,8 @@ public class UserController {
     }
 
     @DeleteMapping("/{userId}")
-    public ResponseEntity<ApiResponse<?>> deleteUser(@PathVariable Long userId){
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteUser(@PathVariable Long userId){
         userServiceInterface.deleteUser(userId);
-        return ResponseEntity.noContent().build();
     }
 }
