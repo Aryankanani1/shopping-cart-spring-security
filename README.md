@@ -288,7 +288,8 @@ sum(rate(http_server_requests_seconds_count{uri="/api/v1/orders", method="POST",
 ### Security model
 The design, with a diagram of each flow (sign-in, every request after it, the access
 map, ownership checks, refresh tokens, rate limiting, webhooks) and links to the
-classes that do it, is in [docs/security-design.md](docs/security-design.md).
+classes that do it, is in [docs/security-design.md](docs/security-design.md). To
+report a security problem, see [SECURITY.md](SECURITY.md).
 
 - **Stateless access JWT, signed with a private key**: access tokens are signed RS256
   with an RSA private key only the API holds, and checked by Spring Security's
