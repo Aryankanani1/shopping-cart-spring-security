@@ -3,6 +3,7 @@ package com.aryan.spring_security_demo.wishlist;
 import com.aryan.spring_security_demo.common.web.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -41,9 +42,9 @@ public class WishlistController {
     }
 
     @DeleteMapping("/items/{productId}")
-    public ResponseEntity<ApiResponse<?>> removeItem(@PathVariable Long productId) {
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeItem(@PathVariable Long productId) {
         wishlistService.remove(productId);
-        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/items/{productId}/reminder")

@@ -1247,15 +1247,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseObject"
-                }
-              }
-            },
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "cart-item-controller" ]
@@ -1319,15 +1312,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseObject"
-                }
-              }
-            },
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "cart-controller" ]
@@ -1425,15 +1411,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseObject"
-                }
-              }
-            },
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "category-controller" ]
@@ -1563,15 +1542,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseObject"
-                }
-              }
-            },
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "image-controller" ]
@@ -1724,15 +1696,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseObject"
-                }
-              }
-            },
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "notification-controller" ]
@@ -2315,15 +2280,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseObject"
-                }
-              }
-            },
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "product-controller" ]
@@ -2459,15 +2417,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseObject"
-                }
-              }
-            },
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "user-controller" ]
@@ -2539,15 +2490,8 @@
           }
         } ],
         "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponseObject"
-                }
-              }
-            },
-            "description" : "OK"
+          "204" : {
+            "description" : "No Content"
           }
         },
         "tags" : [ "wishlist-controller" ]
