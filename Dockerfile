@@ -20,7 +20,7 @@
 # Runs on the building machine's own platform even when the image is built for
 # another (amd64 and arm64 in CI): the jar is the same on every platform, so it is
 # built once, natively, instead of under emulation for each target.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk-jammy@sha256:43f4431cc895d37ceb115e2e1f160545ec45caee9c1cb4246fc6bb879d58aeda AS build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk-jammy@sha256:73ed442231ec66cfe48cae0b263ce619a75ab96d162ab325f38fc0a269ee3aab AS build
 WORKDIR /workspace
 
 # Copy only what's needed to resolve dependencies first, so this layer is cached
@@ -54,7 +54,7 @@ COPY shop-app/src/ shop-app/src/
 RUN ./mvnw -B -pl shop-app -am clean package -DskipTests
 
 # --- Stage 2: minimal runtime --------------------------------------------
-FROM eclipse-temurin:17-jre-jammy@sha256:8993f1aed8b25fcea7a7047a7949c1866fa558fc6830d938c22c4f13b26be9d7
+FROM eclipse-temurin:17-jre-jammy@sha256:b3054a20e1a851574cdb1692dd0db5310c647e62214a2a7abecbec1b9e3ae8f1
 WORKDIR /app
 
 # Ubuntu's security fixes released since the pinned base image was built: the image
