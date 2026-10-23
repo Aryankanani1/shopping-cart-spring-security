@@ -1,5 +1,12 @@
 # Security design
 
+> **Version 1.0, final** (October 2026). It describes the code at the tag
+> [`security-design-v1.0`](https://github.com/Aryankanani1/shopping-cart-spring-security/tree/security-design-v1.0);
+> `master` may have moved on since. It is a learning resource: it explains how the
+> security works and why it was built that way, and it is not a security audit or a
+> guarantee. To report a security problem, see [SECURITY.md](../SECURITY.md), and
+> please don't open a public issue for one.
+
 How the API decides who is calling and what they may do, drawn from the classes
 that do it. Each section names the classes and methods involved, and ends with links
 to them, so a diagram can be read next to its code. The diagrams are
@@ -326,7 +333,9 @@ Six sign-in attempts from one address, a second apart:
   directly, because a client can write anything there. In production
   `SERVER_FORWARD_HEADERS_STRATEGY=native` lets Tomcat take the address from Caddy,
   which replaces whatever the client sent (README, "Security model").
-- The buckets live in memory, so the limit is per instance. Staging raises the
+- The buckets live in memory, which suits a single instance. With several instances
+  behind a load balancer, they would live in a shared store (Redis, for example), so
+  a client's tries count once whichever instance answers. Staging raises the
   capacity to 50, so the end-to-end tests' many sign-ins fit.
 
 Code: [`RateLimitFilter`](../shop-identity/src/main/java/com/aryan/spring_security_demo/identity/security/ratelimit/RateLimitFilter.java),
@@ -419,10 +428,13 @@ Code: [`PrometheusScrapeSecurityConfig`](../shop-identity/src/main/java/com/arya
   send a request to another site with credentials the browser attaches by itself,
   which means cookies. This API's credential is the `Authorization` header, which a
   browser never adds on its own.
-- **The trade-off.** The storefront keeps both tokens in `localStorage`
-  (`tokenStore.ts`), where any script running on the page can read them, so the risk
-  to guard against is cross-site scripting rather than CSRF. An `httpOnly` cookie
-  would hide the token from scripts but bring CSRF back.
+- **Where the tokens are kept, a design choice.** The storefront keeps both tokens in
+  `localStorage` (`tokenStore.ts`), so a session survives a reload and every tab
+  shares it. Scripts on the page can read `localStorage`, so an app that keeps tokens
+  there guards against cross-site scripting: React escapes everything it renders, and
+  the storefront never inserts raw HTML. The other common choice is an `httpOnly`
+  cookie, which scripts can't read, but which the browser sends by itself, so it needs
+  CSRF protection again. Each choice puts the guard in a different place.
 - **CORS.** No other website may call the API from a browser unless
   `app.cors.allowed-origins` lists it. A listed origin gets the API paths only, the
   `Authorization`, `Content-Type` and `Idempotency-Key` headers, and never
@@ -458,8 +470,8 @@ Code: [`PrometheusScrapeSecurityConfig`](../shop-identity/src/main/java/com/arya
 | `/auth/**` rate-limited per address, in memory, before authentication | Guessing is slowed before any password work; one instance needs no shared store | No limit; a shared store before it is needed |
 | Errors in the filter chain written by the filters, as RFC 7807 | `GlobalExceptionHandler` never sees them, and every error should look the same to the storefront | Spring's default error responses |
 | Access tokens signed RS256 with a private key, checked with the published public key | A service that checks tokens can't make them, and the key is replaced without telling every service a new secret | HMAC under one shared secret, which every verifier would have to hold |
-| Spring Security's resource-server support for the checking | The bearer-token parsing, algorithm restriction and claim validation are Spring's, used by many applications | A filter of our own (the previous `AuthTokenFilter`) |
-| An invalid token is a `401` on public URLs too | The client learns its token is bad (RFC 6750); the storefront sends none there | Ignoring a bad token on public URLs, as the previous filter did |
+| Spring Security's resource-server support for the checking | The bearer-token parsing, algorithm restriction and claim validation are Spring's, used by many applications | A hand-written token filter |
+| An invalid token is a `401` on public URLs too | The client learns its token is bad (RFC 6750); the storefront sends none there | Ignoring a bad token on public URLs |
 
 ## 14. Signing keys and the published public keys
 
