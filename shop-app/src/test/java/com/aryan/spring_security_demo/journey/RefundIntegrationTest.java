@@ -23,6 +23,7 @@ import com.aryan.spring_security_demo.payment.RefundRepository;
 import com.aryan.spring_security_demo.payment.RefundResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
@@ -123,6 +124,12 @@ class RefundIntegrationTest {
         shopperToken = login("refund-shopper@example.com");
         otherToken = login("refund-other@example.com");
         adminToken = login("refund-admin@example.com");
+    }
+
+    // Other test classes delete orders, which a leftover payment would stop.
+    @AfterEach
+    void tearDown() {
+        paymentRepository.deleteAll();  // and their refunds go with them
     }
 
     @Test
