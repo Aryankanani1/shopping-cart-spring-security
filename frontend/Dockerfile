@@ -29,15 +29,17 @@ RUN npm run build
 #   CVE-2026-78667, CVE-2026-97031  Go standard library, fixed in Go 1.26.9
 #   CVE-2026-78669                  Go standard library and x/net, fixed in
 #                                   Go 1.26.9 and x/net v0.60.0
+#   CVE-2026-111943                 Go standard library (crypto/x509), fixed in
+#                                   Go 1.26.10 and 1.27.3
 # No Caddy release includes the fixes yet, so this builds the same Caddy version
 # the same way (standard modules, the official build tags and flags) with Go
-# 1.27 (the fixes are in 1.27.2 and later) and x/net v0.60.0. Every other
+# 1.27 (all the fixes are in 1.27.3 and later) and x/net v0.60.0. Every other
 # dependency stays at the version Caddy v2.11.7 requires.
 # Remove this stage, and the COPY and RUN after the last FROM, once caddy:2-alpine
-# ships a Caddy built with Go 1.26.9 or later and x/net v0.60.0 or later (a
-# release after v2.11.7): `caddy build-info` in the image shows both.
+# ships a Caddy built with Go 1.26.10 or later (or 1.27.3 or later) and x/net
+# v0.60.0 or later (a release after v2.11.7): `caddy build-info` in the image shows both.
 # Cross-compiled on the building machine's platform, so no emulation is needed.
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS caddy
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS caddy
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
