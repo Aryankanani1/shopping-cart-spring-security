@@ -58,7 +58,7 @@ RUN printf '%s\n' \
        go build -trimpath -tags nobadger,nomysql,nopgx -ldflags '-s -w' -o /out/caddy .
 
 # --- Stage 3: Caddy with the built files ------------------------------------
-FROM caddy:2-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+FROM caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
 COPY --from=caddy /out/caddy /usr/bin/caddy
 # As the official image does: lets Caddy bind ports 80 and 443 without root.
 RUN setcap cap_net_bind_service=+ep /usr/bin/caddy && caddy version
