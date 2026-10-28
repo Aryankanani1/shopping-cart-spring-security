@@ -10,7 +10,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.1</version>
+		<version>4.1.2</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.aryan</groupId>
@@ -52,8 +52,8 @@
 		     manage. Each is set once here and applied by dependencyManagement below;
 		     no <dependency> in any module declares a version of its own. -->
 		<shedlock.version>7.10.1</shedlock.version>
-		<springdoc-openapi.version>3.1.1</springdoc-openapi.version>
-		<modelmapper.version>3.2.7</modelmapper.version>
+		<springdoc-openapi.version>3.2.0</springdoc-openapi.version>
+		<modelmapper.version>3.2.8</modelmapper.version>
 		<resilience4j.version>2.4.0</resilience4j.version>
 		<!-- Not 13.0.0: it sends an empty NVD API key when none is set, so its
 		     update fails without a key (dependency-check/DependencyCheck#8715, fixed
