@@ -39,7 +39,7 @@ RUN npm run build
 # ships a Caddy built with Go 1.26.10 or later (or 1.27.3 or later) and x/net
 # v0.60.0 or later (a release after v2.11.7): `caddy build-info` in the image shows both.
 # Cross-compiled on the building machine's platform, so no emulation is needed.
-FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS caddy
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS caddy
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
