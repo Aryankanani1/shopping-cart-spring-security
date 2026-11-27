@@ -32,8 +32,8 @@ import java.util.concurrent.CompletionException;
  * times (Resilience4j's {@value #RETRY} retry: on a connection error or a {@code 5xx},
  * 1 s and then 2 s apart), through the {@value #BREAKER} circuit breaker, which skips
  * deliveries for a while once they keep failing (docs/payment-design.md, section
- * 10). Then the fallback logs it: reconciliation and the refund retry job settle
- * what the webhook would have.
+ * 10). Then the fallback logs it: reconciliation and the outbox relay settle what
+ * the webhook would have.
  *
  * <p>Deliveries run on the scheduler, whose one thread also runs the payment jobs,
  * so a retry never waits on it: the retry says how long to wait, and the next try
@@ -81,12 +81,17 @@ public class FakeWebhookSender {
 
     /** Report an event about a second from now; nothing if webhooks are off. */
     public void send(String type, WebhookEvent.Data data) {
+        sendAfter(type, data, DELAY);
+    }
+
+    /** Report an event {@code delay} from now; nothing if webhooks are off. */
+    public void sendAfter(String type, WebhookEvent.Data data, Duration delay) {
         if (!isEnabled()) {
             return;
         }
         WebhookEvent event = new WebhookEvent(
                 "evt_" + UUID.randomUUID().toString().replace("-", ""), type, clock.instant().getEpochSecond(), data);
-        scheduler.schedule(() -> deliver(event), clock.instant().plus(DELAY));
+        scheduler.schedule(() -> deliver(event), clock.instant().plus(delay));
     }
 
     /**

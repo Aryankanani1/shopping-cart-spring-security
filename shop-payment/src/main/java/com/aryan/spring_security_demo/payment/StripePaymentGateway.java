@@ -174,7 +174,7 @@ public class StripePaymentGateway implements PaymentGateway {
             throw new PaymentOutcomeUnknownException("Stripe didn't answer the confirmation", e);
         }
         if (confirmed.isSuccess()) {
-            return outcome(confirmed.body());
+            return outcome(confirmed.body(), request);
         }
         if (confirmed.status() >= 500) {
             // Stripe may have charged before it failed.
@@ -225,6 +225,13 @@ public class StripePaymentGateway implements PaymentGateway {
                     ? Optional.of(declined(intent))
                     : neverConfirmed(intentId, request);
             case "requires_confirmation" -> neverConfirmed(intentId, request);
+            case "requires_action" -> {
+                // Left unfinished by its confirm, and still open: cancelled now, it can't charge later.
+                if (!cancelUnfinished(intentId, request)) {
+                    throw new PaymentNotSettledException("Stripe didn't cancel the unfinished payment");
+                }
+                yield Optional.of(unfinished("requires_action"));
+            }
             case "canceled" -> Optional.empty();
             default -> throw new PaymentNotSettledException(
                     "Stripe is still settling the payment (" + text(intent, "status") + ")");
@@ -320,15 +327,53 @@ public class StripePaymentGateway implements PaymentGateway {
         return REFUSED;
     }
 
-    /** What a PaymentIntent that was just confirmed says happened. */
-    private static ChargeResult outcome(JsonNode intent) {
+    /**
+     * What a PaymentIntent that was just confirmed says happened. One the confirm left
+     * unfinished (such as {@code requires_action}: 3-D Secure, which the shop can't do
+     * on the server) is cancelled before it is called declined: left open, it could
+     * still complete, and charge an attempt the shop has recorded as failed.
+     */
+    private ChargeResult outcome(JsonNode intent, ChargeRequest request) {
         String status = text(intent, "status");
         return switch (status) {
             case "succeeded" -> approved(intent);
             case "requires_payment_method" -> declined(intent);
             case "processing" -> throw new PaymentOutcomeUnknownException("Stripe is still processing the payment");
-            default -> new ChargeResult.Declined("Stripe couldn't complete the payment (" + status + ")");
+            default -> {
+                if (!cancelUnfinished(text(intent, "id"), request)) {
+                    // Completed, or being completed, since: reconciliation finds out which.
+                    throw new PaymentOutcomeUnknownException("Stripe didn't cancel the unfinished payment (" + status + ")");
+                }
+                yield unfinished(status);
+            }
         };
+    }
+
+    private static ChargeResult.Declined unfinished(String status) {
+        return new ChargeResult.Declined("Stripe couldn't complete the payment (" + status + ")");
+    }
+
+    /**
+     * Cancel a PaymentIntent its confirm left unfinished, under the same key a lookup
+     * cancels with, so the two can't disagree.
+     *
+     * @return false if Stripe refused: the payment completed, or is being completed
+     * @throws PaymentOutcomeUnknownException if Stripe couldn't be asked: the payment
+     *         stays open, so it can't be called declined yet
+     */
+    private boolean cancelUnfinished(String intentId, ChargeRequest request) {
+        Answer cancelled;
+        try {
+            cancelled = post(INTENTS + "/" + intentId + "/cancel", new LinkedMultiValueMap<>(),
+                    key(request.idempotencyKey()) + "-cancel");
+        } catch (ResourceAccessException e) {
+            throw new PaymentOutcomeUnknownException("Couldn't reach Stripe to cancel the unfinished payment", e);
+        }
+        if (isTransient(cancelled)) {
+            throw new PaymentOutcomeUnknownException(
+                    "Stripe couldn't cancel the unfinished payment (" + cancelled.status() + ")");
+        }
+        return cancelled.isSuccess();
     }
 
     private static ChargeResult.Approved approved(JsonNode intent) {

@@ -454,6 +454,13 @@ test payment methods (`test_visa`, `test_declined`, `test_insufficient_funds`,
   the checkout can't finish (the order cancelled and restocked after the fifth
   failed payment or 30 minutes unpaid; a refund when a paid order is cancelled)
   ([section 13](docs/payment-design.md#13-the-checkout-saga)).
+- **A charge after a failure goes back.** If the provider reports charging an
+  attempt the shop recorded as failed (and told the customer so), the checkout saga
+  refunds all of it; the attempt stays failed, and the order is still the
+  customer's to pay. With Stripe, a payment its confirm leaves unfinished (3-D
+  Secure) is cancelled before it is called declined, so it can't charge later
+  ([section 14](docs/payment-design.md#14-charges-after-a-failure); test it with
+  `test_late_charge`).
 - **Lost outcomes are reconciled.** A payment still `PROCESSING` after 2 minutes
   (the provider timed out, or the app stopped before recording its answer) is
   settled by `PaymentReconciliationJob` (`APP_PAYMENT_RECONCILE_CRON`, every

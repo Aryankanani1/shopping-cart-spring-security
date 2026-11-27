@@ -29,6 +29,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   <li>{@value #REFUND_DOWN}: approved, but unavailable for the first
  *       {@value #REFUND_DOWN_CALLS} calls to refund it (a first try and its
  *       retries), so a later retry is what refunds it</li>
+ *   <li>{@value #LATE_CHARGE}: declined, then charged after all: the bank confirms
+ *       it once the provider has answered, and the provider reports the charge by
+ *       webhook a few seconds later, when the shop has recorded the attempt as
+ *       failed (it refunds the charge; docs/payment-design.md, section 14)</li>
  *   <li>anything else: declined as unknown</li>
  * </ul>
  *
@@ -52,7 +56,10 @@ public class FakePaymentGateway implements PaymentGateway {
     public static final String REFUND_DOWN = "test_refund_down";
     public static final String TIMEOUT_CHARGED = "test_timeout_charged";
     public static final String TIMEOUT_NOT_CHARGED = "test_timeout_not_charged";
+    public static final String LATE_CHARGE = "test_late_charge";
     static final int REFUND_DOWN_CALLS = 3;
+    /** How long after declining {@value #LATE_CHARGE} the provider reports charging it. */
+    static final Duration LATE_CHARGE_DELAY = Duration.ofSeconds(5);
 
     private final Map<String, ChargeResult> answers = new ConcurrentHashMap<>();
     private final Set<String> flakyKeysTried = ConcurrentHashMap.newKeySet();
@@ -99,6 +106,9 @@ public class FakePaymentGateway implements PaymentGateway {
                 methodByCharge.put(approved.providerReference(), method);
             }
             announce(request.idempotencyKey(), result);
+            if (LATE_CHARGE.equals(method)) {
+                chargeLate(request.idempotencyKey());
+            }
         }
         if (TIMEOUT_CHARGED.equals(method)) {
             throw new PaymentOutcomeUnknownException("The payment provider didn't answer in time");
@@ -144,6 +154,14 @@ public class FakePaymentGateway implements PaymentGateway {
     }
 
     /** Report a new charge's outcome by webhook, as a real provider does. */
+    /** Charge {@value #LATE_CHARGE} after declining it, and report that a few seconds later. */
+    private void chargeLate(String idempotencyKey) {
+        ChargeResult.Approved late = approved("Visa", "4242");
+        methodByCharge.put(late.providerReference(), LATE_CHARGE);
+        webhooks.sendAfter(WebhookEvent.CHARGE_SUCCEEDED, new WebhookEvent.Data(idempotencyKey,
+                late.providerReference(), late.cardBrand(), late.cardLast4(), null, null), LATE_CHARGE_DELAY);
+    }
+
     private void announce(String idempotencyKey, ChargeResult result) {
         if (result instanceof ChargeResult.Approved approved) {
             webhooks.send(WebhookEvent.CHARGE_SUCCEEDED, new WebhookEvent.Data(idempotencyKey,
@@ -160,11 +178,12 @@ public class FakePaymentGateway implements PaymentGateway {
             case MASTERCARD -> approved("Mastercard", "4444");
             case DECLINED -> new ChargeResult.Declined("Your card was declined.");
             case INSUFFICIENT_FUNDS -> new ChargeResult.Declined("Your card has insufficient funds.");
+            case LATE_CHARGE -> new ChargeResult.Declined("Your bank didn't confirm the payment in time.");
             default -> new ChargeResult.Declined("Unknown payment method.");
         };
     }
 
-    private static ChargeResult approved(String brand, String last4) {
+    private static ChargeResult.Approved approved(String brand, String last4) {
         return new ChargeResult.Approved("ch_" + UUID.randomUUID().toString().replace("-", ""), brand, last4);
     }
 }

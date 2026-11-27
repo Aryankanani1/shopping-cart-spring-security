@@ -103,6 +103,14 @@ class FakeWebhookSenderTest {
     }
 
     @Test
+    void sendAfter_schedulesTheDeliveryWhenAsked() {
+        sender.sendAfter(WebhookEvent.CHARGE_SUCCEEDED,
+                new WebhookEvent.Data("pay_7", "ch_1", "Visa", "4242", null, null), Duration.ofSeconds(5));
+
+        verify(scheduler).schedule(any(Runnable.class), eq(NOW.plusSeconds(5)));
+    }
+
+    @Test
     void send_doesNothing_untilBothTheSecretAndTheUrlAreSet() {
         properties.getFake().setWebhookUrl("");
         sender.send(WebhookEvent.CHARGE_FAILED, new WebhookEvent.Data("pay_7", null, null, null, "declined", null));

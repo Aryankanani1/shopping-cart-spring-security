@@ -212,6 +212,37 @@ class CheckoutSagaTest {
         assertThat(saga.getStatus()).isEqualTo(CheckoutSagaStatus.COMPLETED);
     }
 
+    // Step 2 completing out of turn: refunded, not taken as the order's payment.
+    @Test
+    void aChargeAfterTheAttemptFailed_isOwedBack_throughTheOutbox() {
+        Payment failed = Payment.start(paid().getOrder(), "key-late", FakePaymentGateway.LATE_CHARGE, "USD", NOW);
+        failed.fail("Your bank didn't confirm the payment in time.", NOW);
+        when(refundRepository.save(any(Refund.class))).thenAnswer(invocation -> {
+            Refund refund = invocation.getArgument(0);
+            ReflectionTestUtils.setField(refund, "id", REFUND_ID);
+            return refund;
+        });
+
+        checkoutSaga.chargedAfterFailing(failed, new ChargeResult.Approved("ch_late", "Visa", "4242"));
+
+        assertThat(failed.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(failed.getRefunds()).singleElement()
+                .satisfies(refund -> assertThat(refund.getKind()).isEqualTo(Refund.Kind.LATE_CHARGE));
+        verify(outbox).append(RefundOutboxHandler.TYPE, REFUND_ID);
+        verifyNoInteractions(sagas, orderService);
+    }
+
+    @Test
+    void aLateChargeReportedAgain_owesNothingMore() {
+        Payment failed = Payment.start(paid().getOrder(), "key-late", FakePaymentGateway.LATE_CHARGE, "USD", NOW);
+        failed.fail("declined", NOW);
+        failed.chargedLate("ch_late", "Visa", "4242", NOW);
+
+        checkoutSaga.chargedAfterFailing(failed, new ChargeResult.Approved("ch_late", "Visa", "4242"));
+
+        verifyNoInteractions(refundRepository, outbox);
+    }
+
     private CheckoutSagaInstance awaitingPayment(Long orderId) {
         CheckoutSagaInstance saga = CheckoutSagaInstance.started(orderId, NOW);
         when(sagas.findByOrderIdsForUpdate(List.of(orderId))).thenReturn(List.of(saga));

@@ -124,8 +124,11 @@ export interface PaymentDto {
   refundedAmount: number
 }
 
-/** What a refund gives back for (docs/payment-design.md, section 11). */
-export type RefundKind = 'ITEMS' | 'AMOUNT' | 'CANCELLATION'
+/**
+ * What a refund gives back for (docs/payment-design.md, sections 11 and 14):
+ * LATE_CHARGE is all of a charge the provider made after the attempt had failed.
+ */
+export type RefundKind = 'ITEMS' | 'AMOUNT' | 'CANCELLATION' | 'LATE_CHARGE'
 
 /** PENDING until the payment provider has refunded it. */
 export type RefundStatus = 'PENDING' | 'REFUNDED'

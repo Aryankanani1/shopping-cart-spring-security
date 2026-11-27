@@ -28,12 +28,12 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * One attempt to pay for an order (V11, V12 and V17 migrations). Recorded as
+ * One attempt to pay for an order (V11, V12, V17 and V20 migrations). Recorded as
  * {@link PaymentStatus#PROCESSING} before the provider is called, then settled
  * with the provider's answer; rows are never deleted, so every attempt stays on
  * record. Its state changes only through {@link #succeed}, {@link #fail},
- * {@link #refund}, {@link #refundTheRest} and {@link #refunded}, which follow
- * {@link PaymentStatus}.
+ * {@link #refund}, {@link #refundTheRest}, {@link #chargedLate} and
+ * {@link #refunded}, which follow {@link PaymentStatus}.
  *
  * <p>It is refunded through {@link Refund}s, in full or in part (section 11), and
  * never by more than was paid: each is added here, by a caller holding the
@@ -105,6 +105,15 @@ public class Payment {
 
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    /**
+     * When the provider reported charging this attempt after it had been recorded as
+     * failed (V20); null for every other payment. The attempt stays {@code FAILED},
+     * as the customer was told, and the charge is refunded in full
+     * ({@link #chargedLate}).
+     */
+    @Column(name = "late_charged_at")
+    private Instant lateChargedAt;
 
     /**
      * Every refund owed or made so far, added up, and the part of that the provider
@@ -254,9 +263,35 @@ public class Payment {
     }
 
     /**
+     * The provider charged this attempt after it was recorded as failed (a webhook
+     * reported it): record the charge, and owe all of it back. The attempt stays
+     * {@code FAILED}, as the customer was told, and doesn't pay for the order. Nothing
+     * changes if the late charge is recorded already.
+     *
+     * @return the refund of the late charge, or empty if it was owed before
+     */
+    public Optional<Refund> chargedLate(String providerReference, String cardBrand, String cardLast4, Instant now) {
+        if (status != PaymentStatus.FAILED) {
+            throw new IllegalStateException("Payment " + id + " is " + status + ", not a failed attempt charged late");
+        }
+        if (lateChargedAt != null) {
+            return Optional.empty();
+        }
+        this.lateChargedAt = now;
+        this.providerReference = providerReference;
+        this.cardBrand = cardBrand;
+        this.cardLast4 = cardLast4;
+        Refund refund = Refund.owed(this, Refund.Kind.LATE_CHARGE, amount,
+                "Charged after the payment had failed", null, null, now);
+        refunds.add(refund);
+        refundRequestedAmount = amount;
+        return Optional.of(refund);
+    }
+
+    /**
      * The provider refunded {@code refund}, one of this payment's. Once every cent
-     * is back, the payment is {@code REFUNDED}. Nothing changes if that is recorded
-     * already.
+     * is back, a payment that succeeded is {@code REFUNDED}; one that failed and was
+     * charged late stays {@code FAILED}. Nothing changes if that is recorded already.
      */
     public void refunded(Refund refund, String reference, Instant now) {
         if (refund.getStatus() == Refund.Status.REFUNDED) {
@@ -264,7 +299,9 @@ public class Payment {
         }
         refund.refunded(reference, now);
         refundedAmount = refundedAmount.add(refund.getAmount());
-        if (refundedAmount.compareTo(amount) == 0) {
+        // A failed attempt never becomes REFUNDED: that would count it, in V11's unique
+        // index, as the order's one payment that hasn't failed.
+        if (refundedAmount.compareTo(amount) == 0 && status != PaymentStatus.FAILED) {
             moveTo(PaymentStatus.REFUNDED);
         }
     }

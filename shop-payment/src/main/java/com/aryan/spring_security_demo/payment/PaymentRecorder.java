@@ -78,11 +78,19 @@ public class PaymentRecorder {
     /**
      * The provider approved: the payment succeeded, the order is paid and its
      * checkout saga completed, together or not at all. Nothing changes if the
-     * attempt is already settled (see {@link #settledAlready}).
+     * attempt is already settled (see {@link #settledAlready}), except for one
+     * recorded as failed: the provider charged it after all, and the checkout saga
+     * has that charge refunded.
      */
     @Transactional
     public PaymentDto recordSuccess(Long paymentId, ChargeResult.Approved approved) {
         Payment payment = loadForUpdate(paymentId);
+        if (payment.getStatus() == PaymentStatus.FAILED) {
+            // A webhook, after the customer was told the payment failed: it doesn't pay
+            // for the order now (they may have paid again, or the order been cancelled).
+            checkoutSaga.chargedAfterFailing(payment, approved);
+            return PaymentDto.from(payment);
+        }
         if (payment.getStatus() != PaymentStatus.PROCESSING) {
             return settledAlready(payment, true);
         }
@@ -131,8 +139,9 @@ public class PaymentRecorder {
     /**
      * The request and {@link PaymentReconciler} can both settle one attempt, from the
      * same provider answer: the first to get here records it, and the second leaves
-     * it. A settled outcome never changes; if the two ever disagreed, the first
-     * stands and the disagreement is logged.
+     * it. A settled outcome never changes; if a failure is reported for an attempt
+     * that succeeded, the success stands and the disagreement is logged. (A charge
+     * reported for an attempt that failed is refunded, by {@link #recordSuccess}.)
      */
     private PaymentDto settledAlready(Payment payment, boolean charged) {
         boolean wasCharged = payment.getStatus() != PaymentStatus.FAILED;

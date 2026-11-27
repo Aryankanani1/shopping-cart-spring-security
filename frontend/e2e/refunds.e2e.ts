@@ -1,4 +1,3 @@
-import type { Page } from '@playwright/test'
 import {
   admin,
   adminToken,
@@ -7,6 +6,7 @@ import {
   createProduct,
   expect,
   inventoryOf,
+  signIn,
   test,
   unique,
 } from './support'
@@ -14,14 +14,6 @@ import {
 // Partial refunds (docs/payment-design.md, section 11): the admin refunds part of a
 // paid order, an item sent back and an amount, and the customer sees both on the
 // order. The customer and the paid order are made through the API.
-
-async function signIn(page: Page, user: { email: string; password: string }) {
-  await page.goto('/login')
-  await page.getByLabel('Email').fill(user.email)
-  await page.getByLabel('Password').fill(user.password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
-}
 
 test('the admin refunds a returned item and an amount, and the customer sees both on the order', async ({
   page,

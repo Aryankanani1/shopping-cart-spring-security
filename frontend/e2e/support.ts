@@ -1,4 +1,4 @@
-import { test as base, expect, type APIRequestContext } from '@playwright/test'
+import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
 
 /**
  * The tests' `test`: Playwright's, with requests to Google Fonts aborted, so a slow
@@ -87,8 +87,8 @@ export async function createCustomer(request: APIRequestContext): Promise<Custom
   return { email, password, token: (await res.json()).data.token }
 }
 
-/** The customer's order of `quantity` of `product`, paid with the simulated provider's test Visa; its id. */
-export async function createPaidOrder(
+/** The customer's order of `quantity` of `product`, placed and not yet paid; its id. */
+export async function createOrder(
   request: APIRequestContext,
   customer: Customer,
   product: CreatedProduct,
@@ -109,14 +109,33 @@ export async function createPaidOrder(
     },
   })
   expect(placed.status(), await placed.text()).toBe(201)
-  const orderId: number = (await placed.json()).data.id
+  return (await placed.json()).data.id
+}
+
+/** The customer's order of `quantity` of `product`, paid with the simulated provider's test Visa; its id. */
+export async function createPaidOrder(
+  request: APIRequestContext,
+  customer: Customer,
+  product: CreatedProduct,
+  quantity: number,
+): Promise<number> {
+  const orderId = await createOrder(request, customer, product, quantity)
   const paid = await request.post(`/api/v1/orders/${orderId}/payments`, {
-    headers: { ...auth, 'Idempotency-Key': unique('pay').replace(' ', '-') },
+    headers: { Authorization: `Bearer ${customer.token}`, 'Idempotency-Key': unique('pay').replace(' ', '-') },
     data: { paymentMethod: 'test_visa' },
   })
   expect(paid.status(), await paid.text()).toBe(201)
   expect((await paid.json()).data.status).toBe('SUCCEEDED')
   return orderId
+}
+
+/** Sign `user` in through the storefront's login page. */
+export async function signIn(page: Page, user: { email: string; password: string }) {
+  await page.goto('/login')
+  await page.getByLabel('Email').fill(user.email)
+  await page.getByLabel('Password').fill(user.password)
+  await page.getByRole('button', { name: 'Sign in' }).click()
+  await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
 }
 
 export async function inventoryOf(request: APIRequestContext, productId: number): Promise<number> {

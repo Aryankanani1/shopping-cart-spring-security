@@ -15,6 +15,7 @@ export const TEST_PAYMENT_METHODS = [
   { value: 'test_refund_down', label: 'Visa whose refunds fail at first' },
   { value: 'test_timeout_charged', label: 'Provider times out after charging' },
   { value: 'test_timeout_not_charged', label: 'Provider times out before charging' },
+  { value: 'test_late_charge', label: 'Declined, then charged late (refunded)' },
 ] as const
 
 /**

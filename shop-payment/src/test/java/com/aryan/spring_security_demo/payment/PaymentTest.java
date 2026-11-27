@@ -225,6 +225,58 @@ class PaymentTest {
         assertThat(payment.getFailureReason()).isEqualTo("Your card was declined.");
     }
 
+    // The provider charged an attempt the shop had recorded as failed (a webhook): all
+    // of it is owed back, and the attempt stays as the customer was told.
+    @Test
+    void aFailedAttempt_chargedLate_owesAllOfItBack_andStaysFailed() {
+        Payment payment = started();
+        payment.fail("Your bank didn't confirm the payment in time.", SETTLED);
+
+        Refund refund = payment.chargedLate("ch_late", "Visa", "4242", LATER).orElseThrow();
+
+        assertThat(refund.getKind()).isEqualTo(Refund.Kind.LATE_CHARGE);
+        assertThat(refund.getAmount()).isEqualByComparingTo("59.97");
+        assertThat(refund.getStatus()).isEqualTo(Refund.Status.PENDING);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(payment.getLateChargedAt()).isEqualTo(LATER);
+        assertThat(payment.getProviderReference()).as("what the refund is sent for").isEqualTo("ch_late");
+        assertThat(payment.getRefundRequestedAmount()).isEqualByComparingTo("59.97");
+    }
+
+    // The provider repeats its webhook: one refund, however often it says so.
+    @Test
+    void aLateChargeReportedAgain_owesNothingMore() {
+        Payment payment = started();
+        payment.fail("declined", SETTLED);
+        payment.chargedLate("ch_late", "Visa", "4242", LATER);
+
+        assertThat(payment.chargedLate("ch_late", "Visa", "4242", LATER)).isEmpty();
+        assertThat(payment.getRefunds()).hasSize(1);
+    }
+
+    // Becoming REFUNDED would count it, in V11's unique index, as the order's one
+    // payment that hasn't failed.
+    @Test
+    void aLateChargeRefunded_leavesTheAttemptFailed() {
+        Payment payment = started();
+        payment.fail("declined", SETTLED);
+        Refund refund = payment.chargedLate("ch_late", "Visa", "4242", LATER).orElseThrow();
+
+        payment.refunded(refund, "re_1", LATER);
+
+        assertThat(refund.getStatus()).isEqualTo(Refund.Status.REFUNDED);
+        assertThat(payment.getRefundedAmount()).isEqualByComparingTo("59.97");
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    @Test
+    void onlyAFailedAttempt_canBeChargedLate() {
+        assertThatThrownBy(() -> paid().chargedLate("ch_late", "Visa", "4242", LATER))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> started().chargedLate("ch_late", "Visa", "4242", LATER))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     private static Payment started() {
         Order order = new Order();
         order.setId(9L);

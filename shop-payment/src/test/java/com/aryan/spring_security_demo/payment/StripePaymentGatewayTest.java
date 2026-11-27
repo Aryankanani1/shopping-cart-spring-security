@@ -52,6 +52,10 @@ class StripePaymentGatewayTest {
     private static final String CARD_DECLINED = """
             {"error": {"type": "card_error", "code": "card_declined", "decline_code": "generic_decline",
                        "message": "Your card was declined."}}""";
+    /** Stripe refusing to cancel a PaymentIntent that completed meanwhile. */
+    private static final String CANCEL_REFUSED = """
+            {"error": {"type": "invalid_request_error", "code": "payment_intent_unexpected_state",
+                       "message": "You cannot cancel this PaymentIntent because it has a status of succeeded."}}""";
 
     private final RestClient.Builder builder = RestClient.builder();
     private final MockRestServiceServer stripe = MockRestServiceServer.bindTo(builder).build();
@@ -183,7 +187,61 @@ class StripePaymentGatewayTest {
         assertThatThrownBy(() -> gateway.charge(visa())).isInstanceOf(PaymentOutcomeUnknownException.class);
     }
 
+    // 3-D Secure, which the shop can't do on the server: left open, the payment could
+    // complete later and charge an attempt recorded as failed.
+    @Test
+    void aPaymentLeftUnfinished_isCancelled_beforeItIsDeclined() {
+        expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
+        expectConfirm().andRespond(withSuccess(intent("requires_action"), MediaType.APPLICATION_JSON));
+        expectCancel().andRespond(withSuccess(intent("canceled"), MediaType.APPLICATION_JSON));
+
+        assertThat(gateway.charge(visa()))
+                .isEqualTo(new ChargeResult.Declined("Stripe couldn't complete the payment (requires_action)"));
+    }
+
+    // Completed since the confirm answered: only Stripe's record says what happened.
+    @Test
+    void aPaymentLeftUnfinished_thatStripeWontCancel_hasAnUnknownOutcome() {
+        expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
+        expectConfirm().andRespond(withSuccess(intent("requires_action"), MediaType.APPLICATION_JSON));
+        expectCancel().andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON)
+                .body(CANCEL_REFUSED));
+
+        assertThatThrownBy(() -> gateway.charge(visa())).isInstanceOf(PaymentOutcomeUnknownException.class);
+    }
+
+    // Not cancelled, so still open: calling it declined (or retrying into a fallback
+    // that would) could hide a charge.
+    @Test
+    void aPaymentLeftUnfinished_whoseCancelFails_hasAnUnknownOutcome() {
+        expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
+        expectConfirm().andRespond(withSuccess(intent("requires_action"), MediaType.APPLICATION_JSON));
+        expectCancel().andRespond(withServerError());
+
+        assertThatThrownBy(() -> gateway.charge(visa())).isInstanceOf(PaymentOutcomeUnknownException.class);
+    }
+
     // --- findCharge --------------------------------------------------------
+
+    @Test
+    void findCharge_cancelsAPaymentLeftUnfinished_andReportsItDeclined() {
+        expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
+        expectLookup().andRespond(withSuccess(intent("requires_action"), MediaType.APPLICATION_JSON));
+        expectCancel().andRespond(withSuccess(intent("canceled"), MediaType.APPLICATION_JSON));
+
+        assertThat(gateway.findCharge(visa()))
+                .contains(new ChargeResult.Declined("Stripe couldn't complete the payment (requires_action)"));
+    }
+
+    @Test
+    void findCharge_whenAnUnfinishedPaymentWontCancel_looksAgainLater() {
+        expectCreate().andRespond(withSuccess(CREATED, MediaType.APPLICATION_JSON));
+        expectLookup().andRespond(withSuccess(intent("requires_action"), MediaType.APPLICATION_JSON));
+        expectCancel().andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON)
+                .body(CANCEL_REFUSED));
+
+        assertThatThrownBy(() -> gateway.findCharge(visa())).isInstanceOf(PaymentNotSettledException.class);
+    }
 
     @Test
     void findCharge_sendsTheSameCreateAgain_andReportsACharge() {
@@ -429,6 +487,13 @@ class StripePaymentGatewayTest {
                 .andExpect(header("Idempotency-Key", CREATE_KEY + "-confirm"))
                 .andExpect(content().formData(new LinkedMultiValueMap<>(Map.of(
                         "expand[]", List.of("payment_method")))));
+    }
+
+    /** The cancel a lookup and a charge both send, under one key, so they can't disagree. */
+    private ResponseActions expectCancel() {
+        return stripe.expect(requestTo(API + "/v1/payment_intents/pi_123/cancel"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Idempotency-Key", CREATE_KEY + "-cancel"));
     }
 
     private ResponseActions expectLookup() {
