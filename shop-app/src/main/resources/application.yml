@@ -242,9 +242,19 @@ app:
   # ShedLock makes only one instance run each tick. "-" disables it.
   wishlist:
     alert-cron: ${APP_WISHLIST_ALERT_CRON:0 * * * * *}
-  # Retries refunds still owed (RefundRetryJob): ones the attempt right after the
-  # cancellation couldn't finish. Spring cron, every minute (at :30, off the wishlist
-  # scan's beat) by default; ShedLock makes only one instance run each tick.
+  # The transactional outbox (docs/payment-design.md, section 12): work owed once a
+  # transaction commits (sending a refund), delivered right after the commit and
+  # then by OutboxRelayJob on relay-cron (every 10 seconds; ShedLock) until it is
+  # done. A message that fails waits backoff, doubled after each try up to
+  # max-backoff. Processed messages are deleted after retention, on cleanup-cron.
+  outbox:
+    relay-cron: ${APP_OUTBOX_RELAY_CRON:*/10 * * * * *}
+    cleanup-cron: ${APP_OUTBOX_CLEANUP_CRON:0 30 3 * * *}
+    batch-size: 20
+    claim-timeout: 5m
+    backoff: 10s
+    max-backoff: 10m
+    retention: 7d
   # Unpaid orders: checkout reserves the stock, so an order left unpaid this long is
   # cancelled and its items go back on sale (UnpaidOrderExpiryJob, every minute at
   # :45, ShedLock). The order's payBy shows the customer the deadline.
@@ -256,7 +266,6 @@ app:
     # what the tests, CI and staging use) or stripe (Stripe's test mode, which needs
     # STRIPE_SECRET_KEY). docs/payment-design.md, section 8.
     provider: ${APP_PAYMENT_PROVIDER:fake}
-    refund-retry-cron: ${APP_PAYMENT_REFUND_RETRY_CRON:30 * * * * *}
     # Settles payments still PROCESSING after 2 minutes (PaymentReconciliationJob)
     # by asking the provider what happened. Every minute, at :15; ShedLock too.
     reconcile-cron: ${APP_PAYMENT_RECONCILE_CRON:15 * * * * *}

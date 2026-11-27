@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.payment;
 
+import com.aryan.spring_security_demo.common.outbox.Outbox;
 import com.aryan.spring_security_demo.order.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +19,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** The database steps of a refund, with the repositories mocked. */
@@ -30,12 +32,13 @@ class RefundRecorderTest {
 
     @Mock private PaymentRepository paymentRepository;
     @Mock private RefundRepository refundRepository;
+    @Mock private Outbox outbox;
     @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @InjectMocks private RefundRecorder recorder;
 
     @Test
-    void requestRefunds_owesWhatIsLeftOfEachPaidOrder_underThePaymentsLock() {
+    void requestRefunds_owesWhatIsLeftOfEachPaidOrder_underThePaymentsLock_withItsOutboxMessage() {
         Payment paid = paid();
         when(paymentRepository.findByOrdersAndStatusForUpdate(List.of(9L), PaymentStatus.SUCCEEDED))
                 .thenReturn(List.of(paid));
@@ -53,6 +56,7 @@ class RefundRecorderTest {
             assertThat(refund.getAmount()).isEqualByComparingTo("59.97");
             assertThat(refund.getRequestedAt()).isEqualTo(NOW);
         });
+        verify(outbox).append(RefundOutboxHandler.TYPE, REFUND_ID);
     }
 
     @Test
@@ -116,13 +120,6 @@ class RefundRecorderTest {
         recorder.recordRefundedInCurrentTransaction(REFUND_ID, new RefundResult("re_1"));
 
         assertThat(refund.getStatus()).isEqualTo(Refund.Status.REFUNDED);
-    }
-
-    @Test
-    void refundsPendingSince_asksForThePendingOnes() {
-        when(refundRepository.findIdsByStatusRequestedBefore(Refund.Status.PENDING, NOW)).thenReturn(List.of(11L, 12L));
-
-        assertThat(recorder.refundsPendingSince(NOW)).containsExactly(11L, 12L);
     }
 
     private void lookedUp(Payment paid, Refund refund) {

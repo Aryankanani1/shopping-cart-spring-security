@@ -273,6 +273,11 @@ the refund call.
 
 ### The flow: an outbox row, then the provider after the commit
 
+Since section 12, the refund is sent through the shop's general outbox:
+`OutboxAfterCommitDispatcher` and `OutboxRelayJob` do what
+`RefundAfterCommitListener` and `RefundRetryJob` did here, and the reasoning below
+still holds.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -1071,7 +1076,149 @@ and an order item reports its `id` (what a refund of items names) and its
 Built in two pull requests: the model, the API and the money rules first; then the
 admin's refund form, the customer's view of their refunds, and the E2E test.
 
-## 12. Roadmap
+## 12. The transactional outbox
+
+Some work can only happen after a transaction commits: sending a refund to the
+provider is the one this shop has. Doing it inside the transaction would hold a
+pooled connection while the provider answers, and refund the customer even if the
+transaction then rolled back; doing it after the commit loses it if the app stops
+in between. Section 4 solved that for refunds alone: the refund row recorded that
+money was owed, an `@Async` after-commit listener sent it, and `RefundRetryJob`
+retried it. That is the **transactional outbox** pattern, built for one kind of
+message. This section makes it general, so the checkout saga (next) can owe its
+own steps the same way, and refunds now go through it.
+
+### The idea
+
+Write the work that is owed as a row, in the same transaction as the change that
+owes it, then deliver it after the commit. The two commit together or not at all,
+so the work is owed if and only if the change happened, and the row survives a
+crash. Delivering it is a separate step that can be retried until it succeeds.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant S as RefundService
+    participant O as Outbox
+    participant DB as MySQL
+    participant D as OutboxAfterCommitDispatcher (@Async)
+    participant R as OutboxRelay
+    participant H as RefundOutboxHandler
+    participant G as Provider
+    participant J as OutboxRelayJob (ShedLock)
+    C->>S: POST /orders/42/refunds
+    rect rgb(230, 240, 255)
+    note over S,DB: the request's transaction
+    S->>DB: INSERT refund 11 (PENDING)
+    S->>O: append("payment.refund", 11)
+    O->>DB: INSERT outbox_message 5 (due now)
+    end
+    S-->>C: 201 Created, refund PENDING
+    D->>R: deliver([5]), on another thread, after the commit
+    R->>DB: claim 5 (a short transaction: FOR UPDATE SKIP LOCKED,<br/>attempts + 1, due again in 5 minutes)
+    R->>H: handle(11), no transaction open
+    H->>G: refund(key rfd_...)
+    G-->>H: refunded (re_...)
+    H->>DB: refund 11 becomes REFUNDED (a short transaction)
+    R->>DB: message 5 processed (a short transaction)
+    note over J: every 10 seconds: messages due by now,<br/>those not processed after a failure or a crash
+    J->>R: deliverDue(now)
+```
+
+A cancellation owes its refunds the same way: `PaymentOrderListener`, inside the
+cancellation's transaction, calls `RefundRecorder.requestRefunds`, which writes each
+refund row and its message.
+
+### A message's life
+
+```mermaid
+stateDiagram-v2
+    [*] --> Due: appended, in the transaction that owes it
+    Due --> Claimed: a relay claims it (attempts + 1)
+    Claimed --> Processed: the handler is done
+    Claimed --> Due: the handler failed or isn't done, due again after the backoff
+    Claimed --> Due: the claim ran out (the app stopped mid-delivery)
+    Processed --> [*]: deleted after 7 days
+```
+
+There is no "claimed" column: claiming a message moves its `available_at` 5
+minutes on (`app.outbox.claim-timeout`), so no relay finds it due before then. If
+the relay finishes, it records the result, and if it never does, the message is due
+again once that time has passed.
+
+### Rules
+
+- **Written in the transaction that owes it.** `Outbox.append` is
+  `Propagation.MANDATORY`: without a transaction, nothing would tie the message to
+  the change.
+- **A message names its record, not a copy of it.** It holds a type and an id
+  (`payment.refund`, refund 11). The handler reads the refund as it is when the
+  message is delivered, so a message can't carry stale data, and there is no
+  payload format to version.
+- **Delivered at least once, so handlers are safe to repeat.** A relay can stop
+  after the handler finished and before it recorded that; the message is then
+  delivered again. `RefundOutboxHandler` checks that the refund is still owed and
+  sends the same provider key every time, so a refund is made once.
+- **No transaction around a handler.** Claiming and recording are short
+  transactions in `OutboxStore`, a separate bean so each goes through Spring's
+  proxy; the handler runs between them, holding no pooled connection however long
+  the provider takes.
+- **Two relays never take one message.** The after-commit delivery and the job, or
+  two instances of the app, can run at once. The claim locks rows with
+  `FOR UPDATE SKIP LOCKED`, which passes over rows another relay is claiming
+  instead of waiting for them, and the moved `available_at` keeps them off it after
+  that. ShedLock also runs the job on one instance at a time.
+- **Retried with a backoff, never given up.** A message that fails, or whose
+  handler isn't done (the provider still unavailable after its own retries), is due
+  again after 10 seconds, then 20, 40 and so on, up to 10 minutes. It is never
+  dropped: what it owes (money back) must happen. `last_error` and `attempts` show
+  what is going wrong.
+- **Delivered right away, retried by a job.** The after-commit delivery means a
+  refund normally goes out within a moment; `OutboxRelayJob`
+  (`app.outbox.relay-cron`, every 10 seconds) delivers whatever that couldn't
+  finish. Processed messages are deleted after 7 days (`app.outbox.retention`).
+
+### Data model (`V18__outbox.sql`)
+
+| Column | Meaning |
+|---|---|
+| `type` | what the message asks for, and so which `OutboxHandler` takes it: `payment.refund` |
+| `aggregate_id` | the record it is about: the refund's id. Not a foreign key: every type shares the table |
+| `created_at` | when it was written |
+| `available_at` | when it may next be delivered: when it was written, then while claimed or after a failure, later |
+| `attempts` | how many times it was claimed |
+| `processed_at` | when its handler finished; null while it is owed |
+| `last_error` | why the last try failed, if it did |
+
+An index on `(processed_at, available_at)` serves the relay's query and the
+cleanup. The migration gives each refund still `PENDING` a message, since
+`RefundRetryJob`, which found them by their status, is gone; and it drops the index
+that only that job's query used.
+
+### What happens when
+
+| Situation | Result |
+|---|---|
+| The transaction that appends a message rolls back | No message, and nothing is sent |
+| The app stops right after the commit | The message is due; the job delivers it on its next run |
+| The provider is down | The handler reports "not done"; the message is due again after the backoff, until the provider is back |
+| The app stops after the provider refunded, before the message is marked | The claim runs out, the message is delivered again, and the handler finds the refund already recorded (or the provider answers from the same key) |
+| The after-commit delivery and the job reach one message | The first to claim it delivers it; the other skips it |
+| A message of a type no handler takes (an older release reading a newer message) | Logged as an error, and kept due until a handler for it is deployed |
+
+### Key decisions
+
+| Decision | Why | Rejected alternative |
+|---|---|---|
+| One outbox table and relay in `shop-common`, handlers in the modules | Every module can owe work the same way; refunds, and the checkout saga next, share one mechanism, one job and one set of rules | A table and a retry job per kind of work, as refunds had |
+| Delivered in the app, to handlers it holds | One application and one database: a message broker would add infrastructure to run, secure and test for nothing the app needs yet. A handler could later publish to a broker instead | Kafka or RabbitMQ, with a relay or change data capture (Debezium) publishing the rows |
+| Messages name their record by id | The handler always works from the current state; nothing to keep in sync or version | A JSON payload copied from the record |
+| A claim moves `available_at` and commits, rather than holding the row lock while the handler runs | A lock held for the handler's whole run would mean a connection held for it too | `SELECT ... FOR UPDATE` across the provider call |
+| At least once, with idempotent handlers | Exactly once would need the provider in the same transaction as the database, which can't be done | Hoping a crash never falls between the two |
+| Right after the commit, and also polled | Fast in the normal case, and nothing is lost when the fast path fails | Polling only (slower), or after-commit only (lost on a crash) |
+
+## 13. Roadmap
 
 - **Phase 1**, done (#177): everything in sections 1 to 3, the pay step on the
   storefront's order page, and tests (unit, integration against MySQL,
@@ -1082,5 +1229,9 @@ admin's refund form, the customer's view of their refunds, and the E2E test.
 - **Phase 3**, done: provider webhooks with a signature check (section 7, #181),
   Stripe in test mode (section 8, #185), a circuit breaker on Stripe (section 9,
   #187), and Resilience4j retries with explicit fallbacks (section 10).
-- **Partial refunds** (section 11), in progress.
-- **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure.
+- **Partial refunds**, done (section 11, #189 and #190).
+- **The transactional outbox** (section 12), in progress: refunds are sent
+  through it.
+- **Next:** a checkout saga on top of the outbox, with each step's compensation
+  (a payment refunded, a booked order cancelled and restocked); then Stripe's card
+  form in the browser (Stripe Elements), with 3-D Secure.

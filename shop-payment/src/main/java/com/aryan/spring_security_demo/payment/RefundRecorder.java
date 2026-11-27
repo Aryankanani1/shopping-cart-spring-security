@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.payment;
 
+import com.aryan.spring_security_demo.common.outbox.Outbox;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -15,8 +16,9 @@ import java.util.Optional;
 /**
  * The database steps of a refund ({@link Refund}). Owing one is written in the
  * transaction that owes it (a cancellation's, or an admin's partial refund in
- * {@link RefundService}); the steps after the provider call are short transactions
- * of their own.
+ * {@link RefundService}), with the outbox message that has it sent
+ * ({@link RefundOutboxHandler}); the steps after the provider call are short
+ * transactions of their own.
  *
  * <p>Those later steps are {@code REQUIRES_NEW}, not the default {@code REQUIRED}.
  * On the background thread and in the retry job, where they run now, the two are
@@ -31,12 +33,13 @@ public class RefundRecorder {
 
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
+    private final Outbox outbox;
     private final Clock clock;
 
     /**
      * Owe back what is left of the payments of orders being cancelled. Joins the
-     * cancellation's transaction, so the refund is owed if and only if the
-     * cancellation commits: the refund row is the outbox it is retried from. The
+     * cancellation's transaction, so each refund, and the outbox message that has it
+     * sent to the provider, is owed if and only if the cancellation commits. The
      * payments are locked first, as a partial refund locks them, so the two can't
      * both count the same money.
      *
@@ -50,7 +53,9 @@ public class RefundRecorder {
             payment.refundTheRest(now).ifPresent(owed::add);
         }
         // Saved now, not at the flush, so that their ids are known.
-        return refundRepository.saveAll(owed).stream().map(Refund::getId).toList();
+        List<Long> refundIds = refundRepository.saveAll(owed).stream().map(Refund::getId).toList();
+        refundIds.forEach(refundId -> outbox.append(RefundOutboxHandler.TYPE, refundId));
+        return refundIds;
     }
 
     /** What to ask the provider to refund, or empty once it is refunded. */
@@ -64,8 +69,8 @@ public class RefundRecorder {
 
     /**
      * Record the provider's refund, in a transaction of its own. Nothing to do if it
-     * is already recorded: the after-commit listener, the retry job and a webhook
-     * can all get here for one refund.
+     * is already recorded: the outbox can deliver one refund's message more than
+     * once, and a webhook can get here too.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordRefunded(Long refundId, RefundResult result) {
@@ -92,11 +97,5 @@ public class RefundRecorder {
         Refund refund = refundRepository.findByIdForUpdate(refundId)
                 .orElseThrow(() -> new IllegalStateException("Refund " + refundId + " is missing"));
         payment.refunded(refund, result.refundReference(), Instant.now(clock));
-    }
-
-    /** The refunds owed since before {@code requestedBefore} and still owed, oldest first. */
-    @Transactional(readOnly = true)
-    public List<Long> refundsPendingSince(Instant requestedBefore) {
-        return refundRepository.findIdsByStatusRequestedBefore(Refund.Status.PENDING, requestedBefore);
     }
 }

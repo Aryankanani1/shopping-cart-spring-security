@@ -1,5 +1,6 @@
 package com.aryan.spring_security_demo.payment;
 
+import com.aryan.spring_security_demo.common.outbox.Outbox;
 import com.aryan.spring_security_demo.order.Order;
 import com.aryan.spring_security_demo.order.OrderServiceInterface;
 import com.aryan.spring_security_demo.order.RefundedItem;
@@ -10,7 +11,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
@@ -45,7 +45,7 @@ class RefundServiceTest {
     @Mock private PaymentRepository paymentRepository;
     @Mock private RefundRepository refundRepository;
     @Mock private OrderServiceInterface orderService;
-    @Mock private ApplicationEventPublisher events;
+    @Mock private Outbox outbox;
     @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @InjectMocks private RefundService refundService;
@@ -84,7 +84,7 @@ class RefundServiceTest {
         assertThat(payment.getRefunds()).singleElement()
                 .satisfies(owed -> assertThat(owed.getRequestedBy()).isEqualTo(ADMIN));
         verify(orderService).getOrder(ORDER_ID);
-        verify(events).publishEvent(new RefundsRequestedEvent(List.of(11L)));
+        verify(outbox).append(RefundOutboxHandler.TYPE, 11L);
     }
 
     @Test

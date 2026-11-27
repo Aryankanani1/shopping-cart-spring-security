@@ -42,13 +42,16 @@ app:
   # that drives WishlistAlertService directly. Tests call the service themselves.
   wishlist:
     alert-cron: "-"
-  # Tests call RefundProcessor.retryPendingRefunds,
+  # Tests call OutboxRelay.deliverDue,
   # PaymentReconciler.reconcileStuckPayments and
   # UnpaidOrderExpiryJob.expireUnpaidOrders themselves, with a time they choose.
+  # Messages are still delivered right after their commit.
+  outbox:
+    relay-cron: "-"
+    cleanup-cron: "-"
   orders:
     unpaid-expiry-cron: "-"
   payment:
-    refund-retry-cron: "-"
     reconcile-cron: "-"
     # Deliberately fake, so the webhook tests can sign their requests. The fake
     # provider sends no webhooks here: its webhook-url stays empty.

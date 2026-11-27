@@ -6,6 +6,8 @@ import com.aryan.spring_security_demo.catalog.Category;
 import com.aryan.spring_security_demo.catalog.CategoryRepository;
 import com.aryan.spring_security_demo.catalog.Product;
 import com.aryan.spring_security_demo.catalog.ProductRepository;
+import com.aryan.spring_security_demo.common.outbox.OutboxMessageRepository;
+import com.aryan.spring_security_demo.common.outbox.OutboxRelay;
 import com.aryan.spring_security_demo.identity.RefreshTokenRepository;
 import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
@@ -22,7 +24,6 @@ import com.aryan.spring_security_demo.payment.PaymentRepository;
 import com.aryan.spring_security_demo.payment.Refund;
 import com.aryan.spring_security_demo.payment.RefundRepository;
 import com.aryan.spring_security_demo.payment.PaymentStatus;
-import com.aryan.spring_security_demo.payment.RefundProcessor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -120,7 +121,8 @@ class PaymentIntegrationTest {
     @Autowired private ProductRepository productRepository;
     @Autowired private CategoryRepository categoryRepository;
     @Autowired private PasswordEncoder passwordEncoder;
-    @Autowired private RefundProcessor refundProcessor;
+    @Autowired private OutboxRelay outboxRelay;
+    @Autowired private OutboxMessageRepository outboxMessageRepository;
     @Autowired private PaymentReconciler reconciler;
     @MockitoSpyBean private FakePaymentGateway gateway;
 
@@ -459,8 +461,8 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    @DisplayName("a refund the provider can't take yet stays owed, and the retry job refunds it once")
-    void refund_whileTheProviderIsDown_isRetriedByTheJob() throws Exception {
+    @DisplayName("a refund the provider can't take yet stays owed, and the outbox relay refunds it once")
+    void refund_whileTheProviderIsDown_isRetriedByTheOutboxRelay() throws Exception {
         Long orderId = placeOrder(1);
         pay(orderId, newKey(), FakePaymentGateway.REFUND_DOWN).andExpect(status().isCreated());
 
@@ -470,12 +472,13 @@ class PaymentIntegrationTest {
         await().atMost(REFUND_WAIT).until(() -> refundThreads.size() == 3);
         assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUND_PENDING);
 
-        assertThat(refundProcessor.retryPendingRefunds(FAR_FUTURE)).isEqualTo(1);
+        // Past the message's backoff: the relay job's next run.
+        assertThat(outboxRelay.deliverDue(FAR_FUTURE)).isEqualTo(1);
 
         assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUNDED);
         assertThat(refundThreads).hasSize(4);
-        // Nothing left to retry, and no second refund.
-        assertThat(refundProcessor.retryPendingRefunds(FAR_FUTURE)).isZero();
+        // Nothing left to deliver, and no second refund.
+        assertThat(outboxRelay.deliverDue(FAR_FUTURE)).isZero();
         assertThat(refundThreads).hasSize(4);
     }
 
@@ -601,6 +604,7 @@ class PaymentIntegrationTest {
     // --- helpers -----------------------------------------------------------
 
     private void clearData() {
+        outboxMessageRepository.deleteAll();  // other classes' messages would be delivered too
         paymentRepository.deleteAll();  // FK on orders — before the orders
         orderRepository.deleteAll();
         cartItemRepository.deleteAll();

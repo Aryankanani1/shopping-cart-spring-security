@@ -1,10 +1,10 @@
 package com.aryan.spring_security_demo.payment;
 
 import com.aryan.spring_security_demo.common.exception.ResourceNotFoundException;
+import com.aryan.spring_security_demo.common.outbox.Outbox;
 import com.aryan.spring_security_demo.order.OrderServiceInterface;
 import com.aryan.spring_security_demo.order.RefundedItem;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,8 +19,8 @@ import java.util.stream.Collectors;
 /**
  * An admin's partial refunds (docs/payment-design.md, section 11), and an order's
  * refunds as its owner or an admin sees them. Owing a refund is one short
- * transaction; the provider is called after it commits, by
- * {@link RefundAfterCommitListener}, as for a cancellation.
+ * transaction, which also writes the outbox message that has the provider called
+ * once it commits ({@link RefundOutboxHandler}), as for a cancellation.
  */
 @Service
 @RequiredArgsConstructor
@@ -29,7 +29,7 @@ public class RefundService {
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
     private final OrderServiceInterface orderService;
-    private final ApplicationEventPublisher events;
+    private final Outbox outbox;
     private final Clock clock;
 
     /** The refund, and whether this request made it (or found it from an earlier one with the same key). */
@@ -74,7 +74,7 @@ public class RefundService {
         }
         refundRepository.save(refund);
         // Sent once this commits, and never if it rolls back.
-        events.publishEvent(new RefundsRequestedEvent(List.of(refund.getId())));
+        outbox.append(RefundOutboxHandler.TYPE, refund.getId());
         return new Outcome(RefundDto.from(refund), true);
     }
 

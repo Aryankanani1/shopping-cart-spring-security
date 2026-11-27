@@ -9,7 +9,6 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
@@ -32,9 +31,10 @@ import java.util.UUID;
 /**
  * Money given back from a payment, in full or in part (V17;
  * docs/payment-design.md, section 11). {@code PENDING} from the moment it is owed,
- * in the transaction that owes it, so it is the outbox row the refund is sent and
- * retried from; {@code REFUNDED} once the provider has refunded it. Created only
- * through {@link Payment}, which checks there is that much left to refund.
+ * in the transaction that owes it, which also writes the outbox message that has
+ * it sent ({@link RefundOutboxHandler}); {@code REFUNDED} once the provider has
+ * refunded it. Created only through {@link Payment}, which checks there is that
+ * much left to refund.
  */
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -43,7 +43,7 @@ import java.util.UUID;
         @UniqueConstraint(name = "uk_refund_idempotency_key", columnNames = "idempotency_key"),
         @UniqueConstraint(name = "uk_refund_provider_reference", columnNames = "provider_reference"),
         @UniqueConstraint(name = "uk_refund_payment_request_key", columnNames = {"payment_id", "request_key"})
-}, indexes = @Index(name = "idx_refund_status_requested", columnList = "status, requested_at"))
+})
 public class Refund {
 
     /** New refunds' keys with the provider; those V17 moved keep {@code refund_<payment id>}. */

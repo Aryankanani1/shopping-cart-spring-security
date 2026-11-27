@@ -6,6 +6,8 @@ import com.aryan.spring_security_demo.catalog.Category;
 import com.aryan.spring_security_demo.catalog.CategoryRepository;
 import com.aryan.spring_security_demo.catalog.Product;
 import com.aryan.spring_security_demo.catalog.ProductRepository;
+import com.aryan.spring_security_demo.common.outbox.OutboxMessageRepository;
+import com.aryan.spring_security_demo.common.outbox.OutboxRelay;
 import com.aryan.spring_security_demo.identity.RefreshTokenRepository;
 import com.aryan.spring_security_demo.identity.Role;
 import com.aryan.spring_security_demo.identity.RoleRepository;
@@ -17,7 +19,6 @@ import com.aryan.spring_security_demo.payment.Payment;
 import com.aryan.spring_security_demo.payment.PaymentRepository;
 import com.aryan.spring_security_demo.payment.PaymentStatus;
 import com.aryan.spring_security_demo.payment.Refund;
-import com.aryan.spring_security_demo.payment.RefundProcessor;
 import com.aryan.spring_security_demo.payment.RefundRecorder;
 import com.aryan.spring_security_demo.payment.RefundRepository;
 import com.aryan.spring_security_demo.payment.RefundResult;
@@ -93,7 +94,8 @@ class RefundIntegrationTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private PaymentRepository paymentRepository;
     @Autowired private RefundRepository refundRepository;
-    @Autowired private RefundProcessor refundProcessor;
+    @Autowired private OutboxRelay outboxRelay;
+    @Autowired private OutboxMessageRepository outboxMessageRepository;
     @Autowired private RefundRecorder refundRecorder;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private OrderRepository orderRepository;
@@ -236,7 +238,9 @@ class RefundIntegrationTest {
                 () -> refundRecorder.requestRefunds(List.of(orderId)));
 
         assertThat(refundRepository.findById(owed.get(0)).orElseThrow().getAmount()).isEqualByComparingTo("29.98");
-        awaitRefunds(orderId, Refund.Status.REFUNDED, 1);  // the 10.00, before the next test clears the data
+        // Both are sent: the 10.00, and the rest through its outbox message. Waited
+        // for before the next test clears the data.
+        awaitRefunds(orderId, Refund.Status.REFUNDED, 2);
     }
 
     // A webhook has read its event before it locks the payment: the refunds it counts must still be the latest.
@@ -267,10 +271,10 @@ class RefundIntegrationTest {
         assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUNDED);
     }
 
-    // The outbox: owed in the request's transaction, retried by the job until the provider takes it.
+    // The outbox: owed in the request's transaction, delivered again until the provider takes it.
     @Test
-    @DisplayName("a partial refund the provider can't take yet stays owed, and the retry job refunds it")
-    void aRefundTheProviderCantTakeYet_isRetriedByTheJob() throws Exception {
+    @DisplayName("a partial refund the provider can't take yet stays owed, and the outbox relay refunds it")
+    void aRefundTheProviderCantTakeYet_isRetriedByTheOutboxRelay() throws Exception {
         Long orderId = paidOrder(1, FakePaymentGateway.REFUND_DOWN);
         refund(orderId, newKey(), amountBody("5.00")).andExpect(status().isCreated());
         // The attempt after the commit: this test card's provider refuses its first 3 calls.
@@ -278,7 +282,7 @@ class RefundIntegrationTest {
                 == Refund.Status.PENDING);
 
         await().atMost(REFUND_WAIT).until(() -> {
-            refundProcessor.retryPendingRefunds(FAR_FUTURE);
+            outboxRelay.deliverDue(FAR_FUTURE);  // past the message's backoff
             return refundRepository.findAllByOrder(orderId).get(0).getStatus() == Refund.Status.REFUNDED;
         });
     }
@@ -410,6 +414,7 @@ class RefundIntegrationTest {
     }
 
     private void clearData() {
+        outboxMessageRepository.deleteAll();  // other classes' messages would be delivered too
         paymentRepository.deleteAll();  // FK on orders, and their refunds go with them
         orderRepository.deleteAll();
         cartItemRepository.deleteAll();
