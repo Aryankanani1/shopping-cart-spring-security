@@ -238,7 +238,9 @@ class RefundIntegrationTest {
                 () -> refundRecorder.requestRefunds(List.of(orderId)));
 
         assertThat(refundRepository.findById(owed.get(0)).orElseThrow().getAmount()).isEqualByComparingTo("29.98");
-        awaitRefunds(orderId, Refund.Status.REFUNDED, 1);  // the 10.00, before the next test clears the data
+        // Both are sent: the 10.00, and the rest through its outbox message. Waited
+        // for before the next test clears the data.
+        awaitRefunds(orderId, Refund.Status.REFUNDED, 2);
     }
 
     // A webhook has read its event before it locks the payment: the refunds it counts must still be the latest.
