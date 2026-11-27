@@ -149,6 +149,20 @@ class FakePaymentGatewayTest {
                 argThat(data -> data.failureReason().equals("Your card was declined.")));
     }
 
+    // Declined now, charged after all a few seconds later: the shop refunds the late charge.
+    @Test
+    void lateCharge_isDeclined_thenReportedCharged_afterTheShopRecordedTheFailure() {
+        ChargeResult answer = gateway.charge(request("pay_1", FakePaymentGateway.LATE_CHARGE));
+        gateway.charge(request("pay_1", FakePaymentGateway.LATE_CHARGE));
+
+        assertThat(answer).isEqualTo(new ChargeResult.Declined("Your bank didn't confirm the payment in time."));
+        verify(webhooks).send(eq(WebhookEvent.CHARGE_FAILED), argThat(data -> data.idempotencyKey().equals("pay_1")));
+        verify(webhooks, times(1)).sendAfter(eq(WebhookEvent.CHARGE_SUCCEEDED), argThat(data ->
+                data.idempotencyKey().equals("pay_1") && data.providerReference().startsWith("ch_")),
+                eq(FakePaymentGateway.LATE_CHARGE_DELAY));
+        assertThat(gateway.findCharge(request("pay_1", FakePaymentGateway.LATE_CHARGE))).contains(answer);
+    }
+
     // The case webhooks exist for: the answer was lost, the webhook tells the shop.
     @Test
     void aChargeWhoseAnswerTimedOut_isStillReported() {

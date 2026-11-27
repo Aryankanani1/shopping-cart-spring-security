@@ -30,7 +30,9 @@ import java.util.Set;
  *
  * <p>Each step's outcome is reported here, in the transaction that records it, and
  * this decides what follows: the saga completes, the customer may try paying again,
- * or the steps done so far are compensated. Compensations owed after a commit are
+ * or the steps done so far are compensated. A charge the provider makes after the
+ * shop recorded the attempt as failed is step 2 completing out of turn, and is
+ * compensated too ({@link #chargedAfterFailing}). Compensations owed after a commit are
  * written to the outbox in the same transaction, so none is lost. The saga's state
  * is one {@link CheckoutSagaInstance} per order, changed only here, and only under
  * its row lock, which is the last lock each of these transactions takes.
@@ -134,6 +136,26 @@ public class CheckoutSaga {
         Set<Long> refundOwed = new HashSet<>(paymentRepository.findOrderIdsByStatus(orderIds, PaymentStatus.REFUND_PENDING));
         Instant now = Instant.now(clock);
         lock(orderIds).forEach(saga -> saga.orderCancelled(refundOwed.contains(saga.getOrderId()), now));
+    }
+
+    /**
+     * Step 2 completed out of turn: the provider reports charging an attempt the shop
+     * recorded as failed, and told the customer so. By now they may have paid with
+     * another attempt, or the order may be cancelled; so the charge doesn't pay for the
+     * order, and is compensated instead: all of it is owed back, with the outbox
+     * message that has it refunded, in the transaction that records the late charge.
+     * The order and its saga stay as they are. Nothing more is owed if the late charge
+     * is recorded already (the provider repeating its webhook).
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void chargedAfterFailing(Payment payment, ChargeResult.Approved approved) {
+        payment.chargedLate(approved.providerReference(), approved.cardBrand(), approved.cardLast4(),
+                Instant.now(clock)).ifPresent(refund -> {
+            refundRepository.save(refund);
+            outbox.append(RefundOutboxHandler.TYPE, refund.getId());
+            log.warn("Payment {} was charged after it had failed; refund {} of {} {} is owed", payment.getId(),
+                    refund.getId(), refund.getAmount(), refund.getCurrency());
+        });
     }
 
     /**

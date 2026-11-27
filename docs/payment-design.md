@@ -1375,7 +1375,114 @@ saga awaiting payment.
 | The deadline cancels in one transaction | The job is its own retry: an order it can't cancel now is found on its next run | A `checkout.compensate` message for the deadline too |
 | One row per order, with a status and a reason | Enough to see where every checkout stands, and why it was undone | A log row per step: more history, more to keep consistent |
 
-## 14. Roadmap
+## 14. Charges after a failure
+
+When the shop records an attempt as `FAILED`, it tells the customer the payment
+failed. The provider could still end up charging it, and until now the shop only
+logged that: the money was kept and the order stayed unpaid. With Stripe the way in
+was a confirm that leaves the PaymentIntent unfinished: `requires_action`, which
+means 3-D Secure, and the shop can't authenticate on the server
+(`allow_redirects=never`, section 8). The shop called it declined but left the
+PaymentIntent open, so an authentication completed elsewhere (in the bank's app)
+would charge it, and `payment_intent.succeeded` would reach a `FAILED` payment.
+
+There are two parts: nothing is left open where the shop can prevent it, and a
+charge that comes anyway is refunded.
+
+### Prevention: nothing left open
+
+- **A PaymentIntent left unfinished is cancelled before it is called declined**
+  (`StripePaymentGateway.outcome`), under the same idempotency key that
+  reconciliation cancels with, so the two can't disagree.
+- **If Stripe refuses the cancel** (the payment completed meanwhile) **or can't be
+  reached**, the outcome is unknown: the payment stays `PROCESSING` (`202`), and
+  reconciliation settles it from what Stripe says (section 5). Calling it declined,
+  or retrying into a fallback that would, could hide a charge.
+- **Reconciliation does the same**: a lookup that finds `requires_action` cancels
+  the PaymentIntent and reports it declined; if the cancel is refused, the next run
+  looks again.
+
+### Compensation: the late charge is refunded
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant G as Provider
+    participant W as PaymentWebhookProcessor
+    participant R as PaymentRecorder
+    participant S as CheckoutSaga
+    participant DB as MySQL
+    participant O as OutboxRelay
+    G->>W: charge.succeeded for pay_7, signed
+    rect rgb(230, 240, 255)
+    note over W,DB: the webhook's transaction
+    W->>DB: record event evt_… (exactly once, section 7)
+    W->>R: recordSuccess(7)
+    R->>DB: lock payment 7: it is FAILED
+    R->>S: chargedAfterFailing(7)
+    S->>DB: payment 7 gets late_charged_at and the charge's reference, stays FAILED
+    S->>DB: INSERT refund 12 (LATE_CHARGE, all of it, PENDING)
+    S->>DB: outbox payment.refund 12
+    end
+    O->>G: refund(key rfd_…), after the commit, no transaction open
+    O->>DB: refund 12 REFUNDED, payment 7 still FAILED
+```
+
+- **The attempt stays `FAILED`.** That is what the customer was told, and a settled
+  outcome never changes. It also keeps the attempt out of V11's unique index of
+  payments that haven't failed, so the order can be (or has been) paid by another
+  attempt. Once its late charge is refunded, a `FAILED` payment stays `FAILED`
+  rather than becoming `REFUNDED`.
+- **It is always refunded, never taken as the order's payment.** By the time the
+  charge is reported, the customer may have paid with another attempt, or the order
+  may have been cancelled (by them, or by the saga after the fifth failure).
+  Refunding is right in every case; taking the charge would be right only in some.
+- **The saga decides.** It is step 2 completing out of turn, so
+  `CheckoutSaga.chargedAfterFailing` compensates it, as it compensates the other
+  steps (section 13), and the order and the saga's state don't change.
+- **Repeat-safe.** The provider may report the charge again under another event id:
+  `late_charged_at` is set already, so nothing more is owed. The refund keeps its
+  provider key, like every refund.
+- **Visible.** The customer sees the refund under the order's refunds, as "Charged
+  after the payment failed".
+
+### Data model (`V20__late_charge_refunds.sql`)
+
+| Change | Meaning |
+|---|---|
+| `payment.late_charged_at` | when the provider reported charging an attempt recorded as failed; null otherwise |
+| `refund.kind` gains `LATE_CHARGE` | all of such a charge, owed back |
+
+The late charge's reference goes in the payment's `provider_reference`, which a
+failed attempt didn't have, so the refund is sent for it like any other.
+
+### Testing it
+
+A new test method, `test_late_charge`, reproduces it with the simulated provider:
+declined ("Your bank didn't confirm the payment in time."), then charged after all,
+reported by a `charge.succeeded` webhook 5 seconds later, once the shop has recorded
+the failure. The integration test posts that webhook itself; the E2E test
+(`late-charge.e2e.ts`) pays with the card in the storefront and waits for the
+refund.
+
+### Not covered
+
+Detection relies on the webhook: a late charge the provider never reports isn't
+found. Production requires `PAYMENT_WEBHOOK_SECRET`, so webhooks are always on
+there. Sweeping failed payments instead would mean asking Stripe about each, which
+replays its create and cancels what it finds unconfirmed, for a case the cancel
+above already prevents.
+
+### Key decisions
+
+| Decision | Why | Rejected alternative |
+|---|---|---|
+| Cancel an unfinished PaymentIntent before calling it declined | Nothing the shop calls failed can charge later | Leaving it open and relying on the refund alone |
+| Refund the late charge in full, always | Right whether the customer paid again, the order was cancelled, or neither | Taking it as the order's payment when the order is still unpaid |
+| The attempt stays `FAILED`, with `late_charged_at` | The customer's record and V11's index stay true | A new payment status, which the index would count as live |
+| Reuse the refund table, the outbox and the refund webhook | One way money goes back, already safe to repeat | A table and a sender of its own |
+
+## 15. Roadmap
 
 - **Phase 1**, done (#177): everything in sections 1 to 3, the pay step on the
   storefront's order page, and tests (unit, integration against MySQL,
@@ -1387,7 +1494,9 @@ saga awaiting payment.
   Stripe in test mode (section 8, #185), a circuit breaker on Stripe (section 9,
   #187), and Resilience4j retries with explicit fallbacks (section 10).
 - **Partial refunds**, done (section 11, #189 and #190).
-- **The transactional outbox** (section 12, #218): refunds are sent through it.
-- **The checkout saga** (section 13), in progress: one orchestrator for the
+- **The transactional outbox**, done (section 12, #218): refunds are sent through it.
+- **The checkout saga**, done (section 13, #219): one orchestrator for the
   checkout's steps and their compensations.
+- **Charges after a failure** (section 14), in progress: refunded in full, and
+  prevented at Stripe.
 - **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure.

@@ -44,6 +44,20 @@ describe('RefundList', () => {
     expect(screen.getByText('Order cancelled')).toBeInTheDocument()
   })
 
+  // The provider charged an attempt after it failed: all of it goes back, said once.
+  it('names a late charge’s refund, without repeating its reason', () => {
+    render(
+      <RefundList
+        items={ITEMS}
+        refunds={[refund({ kind: 'LATE_CHARGE', reason: 'Charged after the payment had failed', amount: 48 })]}
+      />,
+    )
+
+    expect(screen.getByText('Charged after the payment failed')).toBeInTheDocument()
+    expect(screen.queryByText('Charged after the payment had failed')).not.toBeInTheDocument()
+    expect(screen.getByText('$48.00')).toBeInTheDocument()
+  })
+
   it('shows nothing until there is a refund', () => {
     const { container } = render(<RefundList items={ITEMS} refunds={[]} />)
 

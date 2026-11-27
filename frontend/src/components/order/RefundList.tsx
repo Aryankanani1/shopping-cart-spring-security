@@ -6,7 +6,11 @@ const KIND: Record<RefundKind, string> = {
   ITEMS: 'Items returned',
   AMOUNT: 'Partial refund',
   CANCELLATION: 'Order cancelled',
+  LATE_CHARGE: 'Charged after the payment failed',
 }
+
+/** Kinds whose reason only repeats what the refund was for. */
+const REASON_IMPLIED: ReadonlySet<RefundKind> = new Set(['CANCELLATION', 'LATE_CHARGE'])
 
 const STATUS: Record<RefundStatus, { label: string; tone?: string }> = {
   PENDING: { label: 'pending' },
@@ -51,8 +55,7 @@ export function RefundList({ refunds, items }: { refunds: RefundDto[] | undefine
           <li className="order-refunds__item" key={refund.id}>
             <div>
               <div>{KIND[refund.kind]}</div>
-              {/* A cancellation's reason only repeats that the order was cancelled. */}
-              {refund.reason && refund.kind !== 'CANCELLATION' && <div className="faint">{refund.reason}</div>}
+              {refund.reason && !REASON_IMPLIED.has(refund.kind) && <div className="faint">{refund.reason}</div>}
               {refund.items.length > 0 && <div className="faint">{itemsOf(refund, items)}</div>}
               <div className="faint">
                 {refund.refundedAt

@@ -213,6 +213,20 @@ class PaymentRecorderTest {
         verifyNoInteractions(checkoutSaga);
     }
 
+    // A webhook after the customer was told it failed: refunded, not taken as the order's payment.
+    @Test
+    void recordSuccess_ofAnAttemptThatFailed_hasTheLateChargeRefunded() {
+        Payment payment = Payment.start(order, KEY, FakePaymentGateway.LATE_CHARGE, "USD", NOW);
+        payment.fail("Your bank didn't confirm the payment in time.", NOW);
+        when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(payment));
+        ChargeResult.Approved late = new ChargeResult.Approved("ch_late", "Visa", "4242");
+
+        assertThat(recorder.recordSuccess(PAYMENT_ID, late).status()).isEqualTo(PaymentStatus.FAILED);
+
+        verify(checkoutSaga).chargedAfterFailing(payment, late);
+        verify(orderService, never()).markPaid(any());
+    }
+
     @Test
     void recordFailure_ofAnAttemptThatSucceeded_keepsTheSuccess() {
         Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);

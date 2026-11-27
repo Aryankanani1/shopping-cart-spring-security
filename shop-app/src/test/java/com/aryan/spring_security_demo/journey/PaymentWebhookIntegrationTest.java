@@ -19,6 +19,7 @@ import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
 import com.aryan.spring_security_demo.payment.PaymentReconciler;
 import com.aryan.spring_security_demo.payment.PaymentRepository;
+import com.aryan.spring_security_demo.payment.Refund;
 import com.aryan.spring_security_demo.payment.RefundRepository;
 import com.aryan.spring_security_demo.payment.PaymentStatus;
 import com.aryan.spring_security_demo.payment.PaymentWebhookEventRepository;
@@ -57,6 +58,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -255,6 +257,41 @@ class PaymentWebhookIntegrationTest {
         assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUNDED);
         assertThat(refundRepository.findAllByOrder(orderId)).singleElement()
                 .satisfies(refund -> assertThat(refund.getProviderReference()).isEqualTo("re_from_webhook"));
+    }
+
+    // The customer was told it failed: the late charge goes back in full, and doesn't pay
+    // for the order (docs/payment-design.md, section 14).
+    @Test
+    @DisplayName("a charge reported for a payment that failed is refunded in full; the payment stays failed, the order unpaid")
+    void aChargeAfterThePaymentFailed_isRefunded() throws Exception {
+        Long orderId = placeOrder();
+        pay(orderId, FakePaymentGateway.LATE_CHARGE)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("FAILED"));
+        Long paymentId = paymentOf(orderId).getId();
+        String lateCharge = "{\"idempotencyKey\":\"pay_" + paymentId + "\",\"providerReference\":\"ch_late_"
+                + paymentId + "\",\"cardBrand\":\"Visa\",\"cardLast4\":\"4242\"}";
+
+        deliver(event("evt_late", "charge.succeeded", lateCharge)).andExpect(status().isOk());
+
+        // Owed in the webhook's transaction, refunded through the outbox right after its commit.
+        await().atMost(Duration.ofSeconds(10)).until(() -> refundRepository.findAllByOrder(orderId).stream()
+                .anyMatch(refund -> refund.getStatus() == Refund.Status.REFUNDED));
+        assertThat(refundRepository.findAllByOrder(orderId)).singleElement().satisfies(refund -> {
+            assertThat(refund.getKind()).isEqualTo(Refund.Kind.LATE_CHARGE);
+            assertThat(refund.getAmount()).isEqualByComparingTo("15.00");
+        });
+        Payment failed = paymentOf(orderId);
+        assertThat(failed.getStatus()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(failed.getLateChargedAt()).isNotNull();
+        assertThat(failed.getRefundedAmount()).isEqualByComparingTo("15.00");
+        assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PENDING);
+
+        // The provider reporting it again owes nothing more, and the order can still be paid.
+        deliver(event("evt_late_again", "charge.succeeded", lateCharge)).andExpect(status().isOk());
+        assertThat(refundRepository.findAllByOrder(orderId)).hasSize(1);
+        pay(orderId, FakePaymentGateway.VISA).andExpect(status().isCreated());
+        assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PAID);
     }
 
     @Test

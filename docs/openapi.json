@@ -760,7 +760,7 @@
             "type" : "array"
           },
           "kind" : {
-            "enum" : [ "AMOUNT", "CANCELLATION", "ITEMS" ],
+            "enum" : [ "AMOUNT", "CANCELLATION", "ITEMS", "LATE_CHARGE" ],
             "type" : "string"
           },
           "paymentId" : {

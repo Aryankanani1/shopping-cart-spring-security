@@ -59,7 +59,12 @@ public class Refund {
         /** What was left when the order was cancelled. */
         CANCELLATION,
         /** Order items given back, priced at what the customer paid for them. */
-        ITEMS
+        ITEMS,
+        /**
+         * All of a charge the provider made after the attempt had been recorded as
+         * failed ({@link Payment#chargedLate}).
+         */
+        LATE_CHARGE
     }
 
     public enum Status { PENDING, REFUNDED }

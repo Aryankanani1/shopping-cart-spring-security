@@ -15,7 +15,8 @@ package com.aryan.spring_security_demo.payment;
  * {@code SUCCEEDED} while it is refunded in part ({@link Refund}s). It is
  * {@code REFUND_PENDING} once its order is cancelled, in the cancellation's
  * transaction, and {@code REFUNDED} once every cent is back, which partial refunds
- * can reach on their own.
+ * can reach on their own. An attempt the provider charges after it was recorded as
+ * failed stays {@code FAILED}, and the charge is refunded ({@link Payment#chargedLate}).
  */
 public enum PaymentStatus {
 
