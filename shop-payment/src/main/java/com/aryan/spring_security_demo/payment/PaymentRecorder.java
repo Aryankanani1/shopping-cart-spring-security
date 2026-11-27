@@ -34,6 +34,7 @@ public class PaymentRecorder {
 
     private final PaymentRepository paymentRepository;
     private final OrderServiceInterface orderService;
+    private final CheckoutSaga checkoutSaga;
     private final Clock clock;
 
     /**
@@ -75,9 +76,9 @@ public class PaymentRecorder {
     }
 
     /**
-     * The provider approved: the payment succeeded and the order is paid, together
-     * or not at all. Nothing changes if the attempt is already settled (see
-     * {@link #settledAlready}).
+     * The provider approved: the payment succeeded, the order is paid and its
+     * checkout saga completed, together or not at all. Nothing changes if the
+     * attempt is already settled (see {@link #settledAlready}).
      */
     @Transactional
     public PaymentDto recordSuccess(Long paymentId, ChargeResult.Approved approved) {
@@ -87,12 +88,14 @@ public class PaymentRecorder {
         }
         payment.succeed(approved.providerReference(), approved.cardBrand(), approved.cardLast4(), Instant.now(clock));
         orderService.markPaid(payment.getOrder().getId());
+        checkoutSaga.paymentSucceeded(payment.getOrder().getId());
         return PaymentDto.from(payment);
     }
 
     /**
      * Nothing was charged; the order stays pending, and can be paid with another
-     * attempt. Nothing changes if the attempt is already settled.
+     * attempt, until the last one allowed fails and the checkout saga has the order
+     * cancelled. Nothing changes if the attempt is already settled.
      */
     @Transactional
     public PaymentDto recordFailure(Long paymentId, String reason) {
@@ -101,6 +104,7 @@ public class PaymentRecorder {
             return settledAlready(payment, false);
         }
         payment.fail(reason, Instant.now(clock));
+        checkoutSaga.paymentFailed(payment.getOrder().getId());
         return PaymentDto.from(payment);
     }
 

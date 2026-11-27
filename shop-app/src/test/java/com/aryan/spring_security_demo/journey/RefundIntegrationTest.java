@@ -14,6 +14,7 @@ import com.aryan.spring_security_demo.identity.RoleRepository;
 import com.aryan.spring_security_demo.identity.User;
 import com.aryan.spring_security_demo.identity.UserRepository;
 import com.aryan.spring_security_demo.order.OrderRepository;
+import com.aryan.spring_security_demo.payment.CheckoutSaga;
 import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
 import com.aryan.spring_security_demo.payment.PaymentRepository;
@@ -97,6 +98,7 @@ class RefundIntegrationTest {
     @Autowired private OutboxRelay outboxRelay;
     @Autowired private OutboxMessageRepository outboxMessageRepository;
     @Autowired private RefundRecorder refundRecorder;
+    @Autowired private CheckoutSaga checkoutSaga;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private OrderRepository orderRepository;
     @Autowired private CartItemRepository cartItemRepository;
@@ -233,11 +235,17 @@ class RefundIntegrationTest {
     void aCancellation_thatReadBeforeAPartialRefund_refundsOnlyTheRest() throws Exception {
         Long orderId = paidOrder(2, FakePaymentGateway.VISA);  // 39.98
 
-        List<Long> owed = afterAnEarlierRead(
+        afterAnEarlierRead(
                 () -> refund(orderId, newKey(), amountBody("10.00")).andExpect(status().isCreated()),
-                () -> refundRecorder.requestRefunds(List.of(orderId)));
+                () -> {
+                    checkoutSaga.orderCancelling(List.of(orderId));
+                    return null;
+                });
 
-        assertThat(refundRepository.findById(owed.get(0)).orElseThrow().getAmount()).isEqualByComparingTo("29.98");
+        assertThat(refundRepository.findAllByOrder(orderId))
+                .filteredOn(refund -> refund.getKind() == Refund.Kind.CANCELLATION)
+                .singleElement()
+                .satisfies(rest -> assertThat(rest.getAmount()).isEqualByComparingTo("29.98"));
         // Both are sent: the 10.00, and the rest through its outbox message. Waited
         // for before the next test clears the data.
         awaitRefunds(orderId, Refund.Status.REFUNDED, 2);

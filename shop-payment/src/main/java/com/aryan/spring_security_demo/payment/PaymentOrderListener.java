@@ -1,6 +1,7 @@
 package com.aryan.spring_security_demo.payment;
 
 import com.aryan.spring_security_demo.order.OrderCancellingEvent;
+import com.aryan.spring_security_demo.order.OrderPlacedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -8,38 +9,32 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Settles the payments of orders being cancelled, inside the cancellation's
- * transaction ({@code MANDATORY}): what it writes commits only with the
- * cancellation, and refusing rolls the whole cancellation back.
+ * Tells the checkout saga what the order module does, inside the order module's
+ * transaction ({@code MANDATORY}): what the saga writes commits only with it, and
+ * the saga refusing rolls it back. The order module can't call payments (it is the
+ * lower module), so it publishes these events instead.
  *
  * <ul>
- *   <li>An order being paid for can't be cancelled: the provider may still take
- *       the money, and cancelling would then keep it for a cancelled order.</li>
- *   <li>A paid order's payment becomes {@code REFUND_PENDING}, and a refund of what
- *       is left of it (after any partial refunds) is owed: the record that the
- *       money is due back. Its outbox message has it refunded once the
- *       cancellation commits ({@link RefundOutboxHandler}).</li>
+ *   <li>An order placed starts its checkout saga ({@link CheckoutSaga#orderBooked}).</li>
+ *   <li>Orders being cancelled have their payments refunded, and an order being
+ *       paid for can't be cancelled ({@link CheckoutSaga#orderCancelling}).</li>
  * </ul>
- *
- * <p>A cancellation that read the order just before a payment started can't slip
- * through with a stale answer: starting a payment raises the order's version
- * ({@code OrderService.startPayment}), so that cancellation fails its version
- * check instead.
  */
 @Component
 @RequiredArgsConstructor
 public class PaymentOrderListener {
 
-    private final PaymentRepository paymentRepository;
-    private final RefundRecorder refundRecorder;
+    private final CheckoutSaga checkoutSaga;
+
+    @EventListener
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void onOrderPlaced(OrderPlacedEvent event) {
+        checkoutSaga.orderBooked(event.orderId());
+    }
 
     @EventListener
     @Transactional(propagation = Propagation.MANDATORY)
     public void onOrderCancelling(OrderCancellingEvent event) {
-        if (paymentRepository.countByOrdersAndStatus(event.orderIds(), PaymentStatus.PROCESSING) > 0) {
-            throw new PaymentInProgressException("The order can't be cancelled while its payment is being processed");
-        }
-        // Each refund comes with its outbox message, sent once the cancellation commits.
-        refundRecorder.requestRefunds(event.orderIds());
+        checkoutSaga.orderCancelling(event.orderIds());
     }
 }

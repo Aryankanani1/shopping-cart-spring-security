@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -44,6 +45,7 @@ class PaymentRecorderTest {
 
     @Mock private PaymentRepository paymentRepository;
     @Mock private OrderServiceInterface orderService;
+    @Mock private CheckoutSaga checkoutSaga;
     @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @InjectMocks private PaymentRecorder recorder;
@@ -169,7 +171,7 @@ class PaymentRecorderTest {
     }
 
     @Test
-    void recordSuccess_settlesThePayment_andMarksTheOrderPaid() {
+    void recordSuccess_settlesThePayment_marksTheOrderPaid_andCompletesTheCheckout() {
         Payment payment = Payment.start(order, KEY, FakePaymentGateway.VISA, "USD", NOW);
         when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(payment));
 
@@ -179,10 +181,11 @@ class PaymentRecorderTest {
         assertThat(result.providerReference()).isEqualTo("ch_1");
         assertThat(result.completedAt()).isEqualTo(NOW);
         verify(orderService).markPaid(ORDER_ID);
+        verify(checkoutSaga).paymentSucceeded(ORDER_ID);
     }
 
     @Test
-    void recordFailure_settlesThePayment_andLeavesTheOrderAlone() {
+    void recordFailure_settlesThePayment_andTellsTheCheckout() {
         Payment payment = Payment.start(order, KEY, FakePaymentGateway.DECLINED, "USD", NOW);
         when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(payment));
 
@@ -191,6 +194,8 @@ class PaymentRecorderTest {
         assertThat(result.status()).isEqualTo(PaymentStatus.FAILED);
         assertThat(result.failureReason()).isEqualTo("Your card was declined.");
         verify(orderService, never()).markPaid(any());
+        // Which has the order cancelled after the last attempt allowed.
+        verify(checkoutSaga).paymentFailed(ORDER_ID);
     }
 
     // A late request and the reconciliation job can both settle one attempt: the
@@ -205,6 +210,7 @@ class PaymentRecorderTest {
 
         assertThat(result.providerReference()).isEqualTo("ch_1");
         verify(orderService, never()).markPaid(any());
+        verifyNoInteractions(checkoutSaga);
     }
 
     @Test
@@ -214,6 +220,7 @@ class PaymentRecorderTest {
         when(paymentRepository.findByIdForUpdate(PAYMENT_ID)).thenReturn(Optional.of(payment));
 
         assertThat(recorder.recordFailure(PAYMENT_ID, "declined").status()).isEqualTo(PaymentStatus.SUCCEEDED);
+        verifyNoInteractions(checkoutSaga);
     }
 
     @Test

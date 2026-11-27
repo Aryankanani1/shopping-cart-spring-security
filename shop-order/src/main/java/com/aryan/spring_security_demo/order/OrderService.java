@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Service
@@ -82,6 +83,8 @@ public class OrderService implements OrderServiceInterface{
         orderItems.forEach(order::addOrderItem);
         order.setTotalAmount(calculateTotalAmount(orderItems));
         Order savedOrdered = orderRepository.save(order);
+        // Starts the order's checkout saga, in this transaction: no order without one.
+        events.publishEvent(new OrderPlacedEvent(savedOrdered.getId()));
 
         cartService.clearCart(cart.getId());
 
@@ -183,11 +186,23 @@ public class OrderService implements OrderServiceInterface{
     @Override
     @Transactional
     public boolean expireIfUnpaid(Long orderId, Instant placedBefore) {
-        // No ownership check: the shop cancels it, not a user. Checked again here,
-        // in this order's own transaction: it may have been paid since the scan.
+        return cancelIfUnpaid(orderId, order -> order.getCreatedAt().isBefore(placedBefore));
+    }
+
+    @Override
+    @Transactional
+    public boolean cancelUnpaid(Long orderId) {
+        return cancelIfUnpaid(orderId, order -> true);
+    }
+
+    /**
+     * No ownership check: the shop cancels it, not a user. Checked again here, in
+     * this order's own transaction: it may have been paid or cancelled since the
+     * caller looked.
+     */
+    private boolean cancelIfUnpaid(Long orderId, Predicate<Order> due) {
         Order order = orderRepository.findByIdWithItems(orderId).orElse(null);
-        if (order == null || order.getOrderStatus() != OrderStatus.PENDING
-                || !order.getCreatedAt().isBefore(placedBefore)) {
+        if (order == null || order.getOrderStatus() != OrderStatus.PENDING || !due.test(order)) {
             return false;
         }
         applyTransition(order, OrderStatus.CANCELLED);
@@ -444,7 +459,7 @@ public class OrderService implements OrderServiceInterface{
 
     private OrderDto convertToDto(Order order){
         OrderDto dto = modelMapper.map(order,OrderDto.class);
-        // When an unpaid order is cancelled by UnpaidOrderExpiryJob.
+        // When an unpaid order is cancelled by the checkout saga's deadline (CheckoutDeadlineJob).
         if (order.getOrderStatus() == OrderStatus.PENDING && order.getCreatedAt() != null) {
             dto.setPayBy(order.getCreatedAt().plus(properties.getUnpaidExpiry()));
         }

@@ -1,6 +1,5 @@
 package com.aryan.spring_security_demo.payment;
 
-import com.aryan.spring_security_demo.common.outbox.Outbox;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -8,17 +7,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
 
 /**
- * The database steps of a refund ({@link Refund}). Owing one is written in the
- * transaction that owes it (a cancellation's, or an admin's partial refund in
- * {@link RefundService}), with the outbox message that has it sent
- * ({@link RefundOutboxHandler}); the steps after the provider call are short
- * transactions of their own.
+ * The database steps of a refund ({@link Refund}) after it is owed: what to ask the
+ * provider for, and recording its answer, each a short transaction of its own.
+ * Owing one is written in the transaction that owes it, with the outbox message
+ * that has it sent ({@link RefundOutboxHandler}): a cancellation's, by
+ * {@link CheckoutSaga#orderCancelling}, or an admin's partial refund, by
+ * {@link RefundService}.
  *
  * <p>Those later steps are {@code REQUIRES_NEW}, not the default {@code REQUIRED}.
  * On the background thread and in the retry job, where they run now, the two are
@@ -33,30 +30,8 @@ public class RefundRecorder {
 
     private final PaymentRepository paymentRepository;
     private final RefundRepository refundRepository;
-    private final Outbox outbox;
+    private final CheckoutSaga checkoutSaga;
     private final Clock clock;
-
-    /**
-     * Owe back what is left of the payments of orders being cancelled. Joins the
-     * cancellation's transaction, so each refund, and the outbox message that has it
-     * sent to the provider, is owed if and only if the cancellation commits. The
-     * payments are locked first, as a partial refund locks them, so the two can't
-     * both count the same money.
-     *
-     * @return the refunds now owed
-     */
-    @Transactional(propagation = Propagation.MANDATORY)
-    public List<Long> requestRefunds(Collection<Long> orderIds) {
-        Instant now = Instant.now(clock);
-        List<Refund> owed = new ArrayList<>();
-        for (Payment payment : paymentRepository.findByOrdersAndStatusForUpdate(orderIds, PaymentStatus.SUCCEEDED)) {
-            payment.refundTheRest(now).ifPresent(owed::add);
-        }
-        // Saved now, not at the flush, so that their ids are known.
-        List<Long> refundIds = refundRepository.saveAll(owed).stream().map(Refund::getId).toList();
-        refundIds.forEach(refundId -> outbox.append(RefundOutboxHandler.TYPE, refundId));
-        return refundIds;
-    }
 
     /** What to ask the provider to refund, or empty once it is refunded. */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
@@ -97,5 +72,9 @@ public class RefundRecorder {
         Refund refund = refundRepository.findByIdForUpdate(refundId)
                 .orElseThrow(() -> new IllegalStateException("Refund " + refundId + " is missing"));
         payment.refunded(refund, result.refundReference(), Instant.now(clock));
+        if (payment.getStatus() == PaymentStatus.REFUNDED) {
+            // Every cent is back: if the order was cancelled, its checkout is compensated.
+            checkoutSaga.paymentRefunded(payment.getOrder().getId());
+        }
     }
 }

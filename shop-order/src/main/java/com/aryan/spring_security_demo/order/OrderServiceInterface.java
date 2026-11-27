@@ -49,7 +49,10 @@ public interface OrderServiceInterface {
     /** Record that the order is paid ({@code PENDING} to {@code PAID}). Requires a transaction. */
     void markPaid(Long orderId);
 
-    /** The orders still unpaid that were placed before {@code placedBefore}, oldest first. */
+    /**
+     * The orders still unpaid that were placed before {@code placedBefore}, oldest
+     * first: the checkout sagas past their deadline.
+     */
     List<Long> unpaidOrdersPlacedBefore(Instant placedBefore);
 
     /**
@@ -60,6 +63,16 @@ public interface OrderServiceInterface {
      * @return false if it has been paid or cancelled in the meantime
      */
     boolean expireIfUnpaid(Long orderId, Instant placedBefore);
+
+    /**
+     * Cancel an order still unpaid, whatever its age: the checkout saga's
+     * compensation once every payment attempt has failed. The stock goes back on
+     * sale and other modules are told, as for {@link #expireIfUnpaid}. A transaction
+     * of its own.
+     *
+     * @return false if it has been paid or cancelled in the meantime
+     */
+    boolean cancelUnpaid(Long orderId);
 
     /**
      * Ready {@code userId}'s orders for the account being deleted: cancel and

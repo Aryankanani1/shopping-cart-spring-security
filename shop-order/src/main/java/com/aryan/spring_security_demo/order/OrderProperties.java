@@ -14,8 +14,9 @@ public class OrderProperties {
 
     /**
      * How long an order may stay unpaid. Checkout reserves its stock, so once this
-     * has passed, {@link UnpaidOrderExpiryJob} cancels it and the items go back on
-     * sale; the order's {@code payBy} tells the customer when.
+     * has passed, the checkout saga's deadline job ({@code CheckoutDeadlineJob}, in
+     * the payment module) cancels it and the items go back on sale; the order's
+     * {@code payBy} tells the customer when.
      */
     private Duration unpaidExpiry = Duration.ofMinutes(30);
 }
