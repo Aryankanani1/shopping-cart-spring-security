@@ -746,8 +746,23 @@ later (`late-charge.e2e.ts`).
 
 ## 15. Roadmap
 
-- **Done:** payments (#177), refunds, reconciliation and expiry (#178–#180),
-  webhooks (#181), Stripe test mode (#185), circuit breaker (#187), Resilience4j
-  (#188), partial refunds (#189, #190), the transactional outbox (#218), the checkout
-  saga (#219), charges after a failure (#221).
-- **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure.
+```mermaid
+flowchart TB
+    subgraph R1["Payments: phases 1 to 3"]
+        direction LR
+        A["Payments<br/>§1–3 · PR 177"] --> B["Refunds, reconciliation,<br/>unpaid expiry<br/>§4–6 · PR 178–180"] --> C["Signed webhooks<br/>§7 · PR 181"] --> D["Stripe test mode, breaker,<br/>retries and fallbacks<br/>§8–10 · PR 185, 187, 188"]
+    end
+    subgraph R2["Money going back, and consistency"]
+        direction LR
+        E["Partial refunds<br/>§11 · PR 189, 190"] --> F["Transactional outbox<br/>§12 · PR 218"] --> G["Checkout saga<br/>§13 · PR 219"] --> H["Charges after a failure<br/>§14 · PR 221"]
+    end
+    subgraph R3["Next"]
+        direction LR
+        N["Stripe Elements in the browser,<br/>with 3-D Secure"]
+    end
+    R1 --> R2 --> R3
+    classDef done stroke:#1a7f37,stroke-width:2px
+    classDef next stroke:#9a6700,stroke-width:2px,stroke-dasharray: 5 5
+    class A,B,C,D,E,F,G,H done
+    class N next
+```
