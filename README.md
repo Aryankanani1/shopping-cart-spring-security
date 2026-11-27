@@ -435,11 +435,13 @@ test payment methods (`test_visa`, `test_declined`, `test_insufficient_funds`,
   them, retried (with the same provider key) only while the provider is
   unavailable.
 - **Cancelling a paid order refunds what is left of it.** The cancellation's
-  transaction marks the payment `REFUND_PENDING` and owes a refund row (an outbox
-  row: owed if and only if the cancellation commits); after the commit, a
-  background thread asks the provider and records `REFUNDED`. `RefundRetryJob`
-  (`APP_PAYMENT_REFUND_RETRY_CRON`, every minute, ShedLock) retries any refund
-  still owed, with the same provider key, so it is refunded once.
+  transaction marks the payment `REFUND_PENDING` and owes a refund row, with an
+  outbox message that has it sent (owed if and only if the cancellation commits);
+  after the commit, a background thread asks the provider and records `REFUNDED`.
+  `OutboxRelayJob` (`APP_OUTBOX_RELAY_CRON`, every 10 seconds, ShedLock) delivers
+  any message still owed, with a backoff, and the refund keeps its provider key,
+  so it is refunded once
+  ([section 12](docs/payment-design.md#12-the-transactional-outbox)).
 - **Partial refunds never add up to more than was paid.** An admin's refunds of
   items or amounts go the same way, under the payment's row lock and against
   running totals kept on that row, which a check constraint caps at the amount paid;
