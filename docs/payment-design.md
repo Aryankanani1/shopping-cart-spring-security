@@ -1,44 +1,34 @@
 # Payment service design
 
 This is a portfolio project, so the money is simulated, and the server never sees
-card data. By default a fake provider inside the app stands in for a real one (much
-like a provider's test mode), behind the same interface a real provider sits behind;
-Stripe, in test mode, can take its place (section 8). Everything around the provider
-(the transactions, idempotency, locking and failure handling) is built the way a
-real payment flow needs it.
+card data. A fake provider inside the app stands in for a real one by default, and
+Stripe in test mode can take its place (section 8). Everything around the provider
+(transactions, idempotency, locking, failure handling) is built the way a real
+payment flow needs it. This version keeps the diagrams and tables; the full
+write-up, with every step argued, is
+[the earlier version](https://github.com/Aryankanani1/shopping-cart-spring-security/blob/dfc3b6deb1e356205e3256a92039188989898a09/docs/payment-design.md).
 
 ## 1. Requirements
 
-### What it must do
-
 | # | Requirement | Phase |
 |---|---|---|
-| F1 | A customer pays for their own order while it is `PENDING`. The amount is the order's total, worked out by the server. | 1 |
-| F2 | They pay with a test payment method (`test_visa`, `test_declined`, ...), which stands in for the token a provider's card form returns. The server never sees a card number. | 1 |
-| F3 | Paying twice by accident (a double click, a request retried after a timeout) charges once and returns the first result. | 1 |
-| F4 | A declined payment leaves the order `PENDING`, and the customer can try another method, up to 5 failed attempts per order. | 1 |
-| F5 | A successful payment moves the order to `PAID`. Only then can the shop fulfil it (`PROCESSING`, `SHIPPED`, `DELIVERED`). | 1 |
+| F1 | A customer pays for their own order while it is `PENDING`; the server works out the amount. | 1 |
+| F2 | They pay with a test payment method (`test_visa`, ...), standing in for a card form's token. | 1 |
+| F3 | Paying twice by accident charges once and returns the first result. | 1 |
+| F4 | A declined payment leaves the order `PENDING`, up to 5 failed attempts. | 1 |
+| F5 | A successful payment moves the order to `PAID`; only then is it fulfilled. | 1 |
 | F6 | The customer and admins can see an order's payment attempts. | 1 |
 | F7 | Cancelling a paid order refunds it in full. | 2 |
 | F8 | An order left unpaid for 30 minutes is cancelled and its stock returned. | 2 |
-| F9 | A payment whose outcome is unknown (the provider timed out) is settled later by asking the provider. | 2 |
+| F9 | A payment whose outcome is unknown is settled later by asking the provider. | 2 |
 
-### How well it must do it
+Non-functional: no double charge, no lost payment, no charge kept for a cancelled
+order; no provider call inside a database transaction; a payment and its order
+change together; only the owner (or an admin) pays or sees payments; payment rows
+are never deleted.
 
-- **No double charge, no lost payment, and no charge kept for a cancelled order**,
-  with concurrent requests and with a failure at any step.
-- **No provider call inside a database transaction.** A transaction holds one of
-  the pool's 10 connections until it ends, and a rollback can't undo a charge.
-- **Atomic money state.** A payment and its order change together or not at all.
-- **Security.** Only the order's owner (or an admin) can pay for it or see its
-  payments, the client never sends the amount, and no card data is stored.
-- **Audit.** Payment rows are never deleted, and a settled payment's outcome never
-  changes; every attempt is kept.
-
-### Out of scope
-
-Live payments and card data (PCI DSS), partial refunds, several currencies, saved
-cards, 3-D Secure and payouts. Stripe is used in test mode only (section 8).
+Out of scope: live payments and card data (PCI DSS), several currencies, saved
+cards, 3-D Secure and payouts.
 
 ## 2. High-level design
 
@@ -58,14 +48,8 @@ flowchart LR
     P -->|charge, retried| G[PaymentGateway<br/>FakePaymentGateway runs in the app;<br/>StripePaymentGateway calls Stripe's test mode]
 ```
 
-- `shop-payment` is a new module that depends on `shop-order` (and on
-  `shop-identity` and `shop-common`). Orders never call payments: when orders are
-  being cancelled, `shop-order` publishes an `OrderCancellingEvent` that
-  `shop-payment` handles inside the same transaction, the way `UserDeletingEvent`
-  already works.
-- `PaymentGateway` is the boundary with the provider. `FakePaymentGateway`
-  implements it inside the app; `StripePaymentGateway` implements it with Stripe's
-  API in test mode (section 8), its key coming only from an environment variable.
+`shop-payment` depends on `shop-order`; orders never call payments, they publish
+events the payment module handles in the same transaction.
 
 ### Order lifecycle (changed)
 
@@ -83,10 +67,6 @@ stateDiagram-v2
     CANCELLED --> [*]
 ```
 
-Only a successful payment moves an order to `PAID`; an admin can't set it by hand.
-Phase 1 couldn't cancel a paid order, since nothing could give the money back;
-phase 2 refunds it (section 4).
-
 ### Payment lifecycle
 
 ```mermaid
@@ -102,13 +82,11 @@ stateDiagram-v2
 
 | Method | Path | Who | Result |
 |---|---|---|---|
-| `POST` | `/api/v1/orders/{orderId}/payments` | the order's owner or an admin | `201` with the new payment (`SUCCEEDED` or `FAILED`); `202` with it `PROCESSING` when the provider didn't answer in time (section 5); `200` with the stored payment when the `Idempotency-Key` was already used for this order |
-| `GET` | `/api/v1/orders/{orderId}/payments` | owner or admin | the order's attempts, oldest first (at most 5, so not paginated) |
+| `POST` | `/api/v1/orders/{orderId}/payments` | owner or admin | `201` (`SUCCEEDED` or `FAILED`); `202` (`PROCESSING`, provider timed out); `200` for a repeated `Idempotency-Key` |
+| `GET` | `/api/v1/orders/{orderId}/payments` | owner or admin | the order's attempts, oldest first |
 | `GET` | `/api/v1/orders/{orderId}/payments/{paymentId}` | owner or admin | one attempt |
 
-`POST` takes an `Idempotency-Key` header (8 to 64 letters, digits, `-` or `_`; the
-storefront sends a new UUID for each attempt) and a body like
-`{"paymentMethod": "test_visa"}`.
+`POST` takes an `Idempotency-Key` header and `{"paymentMethod": "test_visa"}`.
 
 ### The pay flow: three short steps, and no provider call inside a transaction
 
@@ -140,25 +118,23 @@ sequenceDiagram
     S-->>C: 201 Created, status SUCCEEDED
 ```
 
-If the app dies between the steps, the payment stays `PROCESSING`. That blocks
-another payment and a cancellation of the order until it is settled, so the order
-can't be charged twice, or charged and cancelled. Phase 2's reconciliation job asks
-the provider about it (by the same key) and finishes it.
+If the app stops between the steps, the payment stays `PROCESSING`, which blocks
+another payment and a cancellation until reconciliation settles it (section 5).
 
 ### Key decisions
 
 | Decision | Why | Rejected alternative |
 |---|---|---|
-| Record the attempt, call the provider, record the result: three steps, two short transactions | A provider call can take seconds. Inside a transaction it would hold a pooled connection that long, and a rollback can't undo a charge anyway | One `@Transactional` method around all of it |
-| The client sends an `Idempotency-Key`, unique per order in the database, and a repeat returns the stored payment | After a timeout the client can't tell a lost request from a lost response, so it must be able to send the request again safely | Spotting duplicates by amount and time (guesswork) |
-| The provider gets a key of our own, `pay_<payment id>`, on every call and retry of an attempt | The provider deduplicates retries of one attempt, and keys chosen by different clients can never collide there | Passing the client's key on |
-| The order row is locked (`SELECT ... FOR UPDATE`) while an attempt starts, and a new attempt raises the order's version | Two attempts for one order run one after the other, and the raised version makes a cancellation running at the same time fail instead of slipping in between | Optimistic checks only: both attempts could pass them |
-| At most one payment that isn't `FAILED` per order, enforced by a unique index on a generated column | The rule holds even if some code path forgets the lock | Trusting the service code alone |
-| Cancelling an order whose payment is `PROCESSING` is refused (`409`) | The charge may still go through, and cancelling would then keep money for a cancelled order | Cancelling now and refunding later |
-| Retry only "provider unavailable", in a separate bean, outside any transaction, with the same provider key | A retry must not repeat database writes, and the key makes the repeated call safe (CLAUDE.md, retries rule) | `@Retryable` on a `@Transactional` method |
-| A decline is a result, not an error: `201` with status `FAILED` | The attempt happened and is recorded; the storefront shows the reason and offers another method | An error response that leaves no record |
-| At most 5 failed attempts per order | Stops card testing (trying stolen card numbers one after another) and bounds the attempt list | No limit |
-| The amount is copied from the order, as `BigDecimal` and `DECIMAL(38,2)`, in a currency set by the server | Floating point loses cents, and the client never decides the price | An amount sent by the client |
+| Record the attempt, call the provider, record the result: two short transactions | A rollback can't undo a charge, and a slow provider would hold a pooled connection | One `@Transactional` method around all of it |
+| A client `Idempotency-Key`, unique per order | After a timeout the client can resend safely | Spotting duplicates by amount and time |
+| The provider gets our own key, `pay_<payment id>` | It deduplicates our retries, and keys can't collide | Passing the client's key on |
+| Lock the order while an attempt starts, and raise its version | Attempts take turns, and a racing cancellation fails its version check | Optimistic checks only |
+| One payment that isn't `FAILED` per order, by a unique index | Holds even if code forgets the lock | Trusting the service code |
+| Cancelling while a payment is `PROCESSING` is refused (`409`) | The charge may still go through | Cancelling now, refunding later |
+| Retry only "provider unavailable", outside any transaction | Repeats no database writes; the key makes the call safe | `@Retryable` on a `@Transactional` method |
+| A decline is a result: `201` with `FAILED` | The attempt happened and is recorded | An error that leaves no record |
+| At most 5 failed attempts per order | Stops card testing | No limit |
+| The amount is the order's, as `BigDecimal` / `DECIMAL(38,2)` | No floating-point cents; the client never sets the price | An amount sent by the client |
 
 ## 3. Low-level design
 
@@ -168,35 +144,25 @@ In `shop-payment`, package `com.aryan.spring_security_demo.payment`:
 
 | Class | Role | Transaction |
 |---|---|---|
-| `PaymentController` | The endpoints; validates the `Idempotency-Key` and the body | none |
-| `PaymentService` | Runs the three steps of a payment; reads | none for `pay`, read-only for reads |
-| `PaymentRecorder` | `start`, `recordSuccess`, `recordFailure` | each a short `@Transactional` of its own (a separate bean, so the proxy applies) |
-| `PaymentGatewayClient` | Calls the gateway with Resilience4j's Retry on `PaymentProviderUnavailableException` (2 retries, after 100 ms and 200 ms), then a fallback (section 10) | none, by design |
-| `PaymentGateway` | The provider boundary: `charge(ChargeRequest)` returns a `ChargeResult` (`Approved` or `Declined`), or throws `PaymentProviderUnavailableException` | |
-| `FakePaymentGateway` | The test payment methods below; remembers each result by provider key, so a repeated key gets the first result | |
-| `Payment`, `PaymentStatus`, `PaymentRepository` | The entity, its state machine and its queries | |
-| `PaymentOrderListener` | Refuses to cancel an order while one of its payments is `PROCESSING` | joins the cancellation's transaction (`MANDATORY`) |
-
-Changes in `shop-order`:
-- `OrderStatus` gets `PAID`.
-- `OrderService.lockForPayment` (lock the order and check the caller owns it),
-  `startPayment` (raise the locked order's version, for a new attempt only) and
-  `markPaid` (`PENDING` to `PAID`, read under a lock). All three require the
-  caller's transaction (`MANDATORY`).
-- `updateStatus` refuses `PAID`.
-- Cancelling orders publishes an `OrderCancellingEvent`.
+| `PaymentController` | The endpoints | none |
+| `PaymentService` | Runs the three steps of a payment; reads | none for `pay` |
+| `PaymentRecorder` | `start`, `recordSuccess`, `recordFailure` | each a short one of its own |
+| `PaymentGatewayClient` | Retry and fallback around the gateway (section 10) | none, by design |
+| `PaymentGateway` | The provider boundary: `FakePaymentGateway`, `StripePaymentGateway` | |
+| `Payment`, `PaymentStatus`, `PaymentRepository` | The entity, its state machine, its queries | |
+| `PaymentOrderListener` | Hands the order module's events to the checkout saga (section 13) | joins the order's transaction |
 
 ### Test payment methods
 
 | Method | Result |
 |---|---|
-| `test_visa` | approved, Visa ending in 4242 |
-| `test_mastercard` | approved, Mastercard ending in 4444 |
-| `test_declined` | declined: "Your card was declined." |
-| `test_insufficient_funds` | declined: "Your card has insufficient funds." |
-| `test_flaky` | provider unavailable on the first try of each charge, approved on the retry |
-| `test_provider_down` | provider unavailable every time, so `FAILED` once the retries run out |
-| anything else | declined: "Unknown payment method." |
+| `test_visa`, `test_mastercard` | approved |
+| `test_declined`, `test_insufficient_funds` | declined |
+| `test_flaky` | unavailable once, then approved |
+| `test_provider_down` | unavailable every time: `FAILED` after the retries |
+| `test_refund_down` | approved; its first 3 refund calls fail (section 4) |
+| `test_timeout_charged`, `test_timeout_not_charged` | the answer is lost; reconciliation settles it (section 5) |
+| `test_late_charge` | declined, then charged and reported by webhook (section 14) |
 
 ### Data model (`V11__payments.sql`)
 
@@ -227,111 +193,62 @@ create table payment (
 ) engine=InnoDB;
 ```
 
-`orders.order_status` gets `PAID`. Orders are never deleted (deleting an account
-only unlinks them), so the foreign key needs no `on delete` rule.
-
 ### What happens when
 
 | Situation | Result |
 |---|---|
-| The same key and method again, for the same order | `200` with the stored payment, even while it is still `PROCESSING` |
-| The same key with another method | `409`, key reused |
-| The order isn't `PENDING` (paid, cancelled, ...) | `409` |
-| Another payment of the order is `PROCESSING` | `409` |
-| 5 failed attempts already | `409` |
-| Someone else's order | `403`; an order that doesn't exist, `404` |
-| `Idempotency-Key` missing or malformed, or no payment method | `400` |
-| Declined | `201` with status `FAILED` and the reason; the order stays `PENDING` |
-| Provider still unavailable after the retries | `201`, `FAILED`, "payment provider unavailable". Safe, because an unavailable provider never took the charge |
-| Cancelling while a payment is `PROCESSING` | `409` |
-| An admin sets the status to `PAID` | `409` |
+| The same key and method again | `200` with the stored payment |
+| The same key with another method | `409` |
+| The order isn't `PENDING`, or another payment is `PROCESSING`, or 5 attempts failed | `409` |
+| Someone else's order / no such order | `403` / `404` |
+| Declined | `201`, `FAILED`, the order stays `PENDING` |
+| Provider still unavailable after the retries | `201`, `FAILED`: nothing was charged |
+| Cancelling while a payment is `PROCESSING`, or an admin setting `PAID` | `409` |
 
 ### Concurrency
 
-| Race | What prevents the bug | Integration test checks |
-|---|---|---|
-| Double click: the same key twice at once | The order lock makes them take turns, and the second finds the first's payment and returns it | one charge, one payment id |
-| Two tabs: different keys at once | The order lock; the second then sees a payment in progress or an order no longer pending. The unique `live_order_id` is the backstop | exactly one `SUCCEEDED` payment and one charge |
-| Paying and cancelling at once | The lock and version bump: a cancellation that read the order before the attempt started fails its version check, and one that reads it after sees the `PROCESSING` payment and is refused | never `CANCELLED` with a `SUCCEEDED` payment |
-| The provider call and the connection pool | No transaction is open during the call | a spy on the gateway sees no active transaction |
-
-**A bug the double-click test caught.** The first version raised the order's
-version whenever it locked the order, including for a repeated request. That
-repeat committed its raised version while the first request was still waiting
-for the provider, so the first request's "record the result" transaction failed
-its version check: the card was charged, the payment stayed `PROCESSING`, and the
-customer got a `409`. Now only a new attempt raises the version (a repeat starts
-nothing, so it has no cancellation to fence off), and `markPaid` reads the order
-under a lock, so recording a result always works from the latest version.
+| Race | What prevents the bug |
+|---|---|
+| Double click: the same key twice at once | The order lock; the second finds the first's payment |
+| Two tabs: different keys at once | The order lock, then the unique `live_order_id` as backstop |
+| Paying and cancelling at once | The lock and version bump: the cancellation fails its version check or sees `PROCESSING` |
+| The provider call and the connection pool | No transaction is open during the call |
 
 ## 4. Phase 2: refunds
 
-Cancelling a paid order (by the customer, an admin, or deleting the account) now
-refunds it in full. The refund has to survive two things a transaction can't
-cover: a provider that is down, and the app stopping between the cancellation and
-the refund call.
-
-### The flow: an outbox row, then the provider after the commit
-
-Since section 12, the refund is sent through the shop's general outbox:
-`OutboxAfterCommitDispatcher` and `OutboxRelayJob` do what
-`RefundAfterCommitListener` and `RefundRetryJob` did here; and since section 13,
-the checkout saga (`CheckoutSaga.orderCancelling`) owes the refund. The reasoning
-below still holds.
+Cancelling a paid order refunds it in full. The refund is owed in the
+cancellation's transaction and sent after the commit, so it survives a provider
+that is down and an app that stops in between. Since sections 12 and 13 the refund
+is owed by the checkout saga and sent through the outbox.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant C as Client
     participant O as OrderService
-    participant L as PaymentOrderListener
+    participant S as CheckoutSaga
     participant DB as MySQL
-    participant A as RefundAfterCommitListener (@Async)
+    participant D as OutboxAfterCommitDispatcher (@Async)
+    participant H as RefundOutboxHandler
     participant G as Provider
-    participant J as RefundRetryJob (ShedLock)
+    participant J as OutboxRelayJob (ShedLock)
     C->>O: POST /orders/42/cancel
     rect rgb(230, 240, 255)
     note over O,DB: the cancellation's transaction
-    O->>L: OrderCancellingEvent (same transaction)
-    L->>DB: payment 7: SUCCEEDED becomes REFUND_PENDING (the outbox row)
-    L-->>O: RefundsRequestedEvent, delivered after the commit
+    O->>S: OrderCancellingEvent, through PaymentOrderListener
+    S->>DB: payment 7: SUCCEEDED becomes REFUND_PENDING
+    S->>DB: INSERT refund 11 (PENDING) and outbox payment.refund 11
+    S->>DB: saga COMPENSATING
     O->>DB: restock, order 42 becomes CANCELLED
     end
     O-->>C: 200 CANCELLED
-    A->>G: refund(key refund_7) on another thread, no transaction, no connection
-    G-->>A: refunded (re_...)
-    A->>DB: payment 7 becomes REFUNDED (a short transaction)
-    note over J: every minute: refunds still pending after a minute
-    J->>G: refund(key refund_7) again: the same key, so the provider refunds once
+    D->>H: after the commit, on another thread
+    H->>G: refund(key rfd_...), no transaction open
+    G-->>H: refunded (re_...)
+    H->>DB: refund 11 and payment 7 REFUNDED, saga COMPENSATED (a short transaction)
+    note over J: every 10 seconds: messages not yet processed
+    J->>H: deliver again: the same key, so the provider refunds once
 ```
-
-- **The outbox row is written in the cancellation's transaction.** The order
-  becoming `CANCELLED` and the payment becoming `REFUND_PENDING` commit together or
-  not at all, so a cancelled order always has a record that money is owed back,
-  even if the app stops a moment later.
-- **The provider is called only after the commit.** Calling it inside the
-  transaction would hold a pooled connection, and if the transaction then rolled
-  back, the customer would be refunded for an order that wasn't cancelled.
-- **The after-commit listener runs `@Async`.** Spring runs an `AFTER_COMMIT`
-  listener *before* it releases the transaction's connection and unbinds its
-  resources (`AbstractPlatformTransactionManager.processCommit`: `doCommit`, then
-  `triggerAfterCommit`, then `cleanupAfterCompletion`). A provider call made right
-  there would hold the request's connection for as long as it takes. A
-  `@Transactional` method called from there would also join the transaction that
-  has already committed, and its writes would be silently lost. On a background
-  thread there is neither problem, and the cancel request doesn't wait for the
-  provider.
-- **The recorder's refund methods are `REQUIRES_NEW`.** On the background thread or
-  in the job, that is simply a new transaction; if the listener were ever made
-  synchronous again, it would still keep the write out of the committed one.
-- **The listener catches every failure and leaves the row pending.** The
-  transaction has committed by then, so there is nothing left to roll back;
-  `RefundRetryJob` retries every refund still pending a minute after it was
-  requested (one instance at a time, through ShedLock).
-- **Every call for one refund uses the key `refund_<payment id>`.** The listener,
-  its retries and the job can all reach the provider for the same refund, and the
-  provider refunds it once. Recording an outcome that is already recorded does
-  nothing.
 
 ### Payment lifecycle, completed
 
@@ -344,39 +261,11 @@ stateDiagram-v2
     REFUND_PENDING --> REFUNDED: provider refunded (after the commit, or the job)
 ```
 
-The charge's own facts (amount, provider reference, card) never change; a refund
-adds its own reference and times. `V12__payment_refunds.sql` adds the two statuses,
-`refund_reference` (unique), `refund_requested_at` and `refunded_at`, and an index
-for the job's query.
-
-### What happens when
-
-| Situation | Result |
-|---|---|
-| A paid (or processing) order is cancelled | `200`, order `CANCELLED`, stock returned, payment `REFUND_PENDING`, then `REFUNDED` a moment later |
-| The provider is down when the refund is first tried | The payment stays `REFUND_PENDING`; the job refunds it once the provider is back |
-| The app stops right after the cancellation commits | The row is `REFUND_PENDING`; the job finds it on the next run |
-| The listener and the job reach the provider for one refund | The same key: refunded once, recorded once |
-| An unpaid order is cancelled | No payment to refund; as before |
-| An order whose payment is `PROCESSING` is cancelled | `409`, as before: the charge may still go through |
-
-A new test method, `test_refund_down`, charges normally, but the provider fails the
-first 3 refund calls (the first try and its 2 retries), so the job's later attempt
-is the one that succeeds.
-
 ## 5. Phase 2: reconciliation
 
-A payment is recorded as `PROCESSING` before the provider is called, and settled
-after. If the settling never happens, it stays `PROCESSING`, and its order can be
-neither paid again nor cancelled. Three things can cause that:
-
-- **The provider times out** after the request was sent: it may or may not have
-  charged.
-- **The app stops** between the provider's answer and recording it.
-- **Recording the answer fails** (the database is briefly unreachable) after the
-  provider approved.
-
-In every case the provider knows what happened. Reconciliation asks it.
+A payment stays `PROCESSING` if its outcome is lost (a timeout, or the app stopped
+before recording it). After 2 minutes, a job asks the provider, under the same key,
+what happened. A timed-out request answers `202`.
 
 ```mermaid
 sequenceDiagram
@@ -400,72 +289,17 @@ sequenceDiagram
     end
 ```
 
-- **The provider is the source of truth.** The payment's key, `pay_<payment id>`,
-  is what the charge was sent under, so the provider can say exactly what happened
-  to that attempt. If the provider is unavailable, the payment stays `PROCESSING`
-  until the next run.
-- **Only after 2 minutes.** A request may still be waiting on the provider; 2
-  minutes is well past any request's provider timeout, so the job never settles an
-  attempt the request is still settling. If both get there anyway, they settle it
-  from the same answer, and recording an outcome that is already recorded does
-  nothing.
-- **A timeout is answered, not failed.** A timed-out charge isn't retried inside
-  the request (each try could take the full timeout, holding the customer's
-  request) and isn't marked failed (it may have charged). The request answers
-  `202 Accepted` with the payment `PROCESSING`; the storefront shows that the
-  payment is being confirmed, and updates once the job settles it.
-- **"Never received" is safe to fail** only because of the 2 minutes: by then a
-  request that hasn't reached the provider never will.
-
-Two new test methods make the cases reproducible: `test_timeout_charged` (the
-provider charges, and then the answer is lost) and `test_timeout_not_charged` (the
-request never reaches the provider). Like the fake provider's other answers, what
-it charged is kept in memory, so after a restart it reports every earlier charge as
-never received; a real provider remembers.
-
-No new columns: the job's query (`status = 'PROCESSING' and created_at < ?`) uses
-the `status`-led index from `V12`.
-
 ## 6. Phase 2: unpaid order expiry
 
-Since section 13, this is the checkout saga's deadline: `CheckoutDeadlineJob`, in
-`shop-payment`, does what `UnpaidOrderExpiryJob` did, through the same
-`OrderService.expireIfUnpaid`, and records why the checkout was compensated.
-
-Checkout takes the items out of stock straight away, so an order nobody pays for
-holds them forever. An order still `PENDING` 30 minutes after it was placed
-(`app.orders.unpaid-expiry`) is cancelled, and its items go back on sale.
-
-- **The order module owns it.** `UnpaidOrderExpiryJob` (ShedLock, every minute)
-  finds the unpaid orders placed before the cutoff, and cancels each through
-  `OrderService.expireIfUnpaid`: the same cancellation as the customer's (restock
-  under product locks, `OrderCancellingEvent`), without the ownership check.
-- **One transaction per order.** The job calls a public `@Transactional` method on
-  another bean, so each order goes through Spring's proxy and commits or rolls back
-  alone, and holds its product locks only as long as its own cancellation. The
-  order's status and age are checked again inside that transaction: it may have
-  been paid since the scan.
-- **Payments still have a say.** An order with a payment `PROCESSING` may still be
-  charged, so the payment module refuses its cancellation (`409`). The job leaves
-  that order and tries again on a later run, after reconciliation (section 5) has
-  settled the payment.
-- **Paying at the last second is safe.** A new payment attempt raises the order's
-  version, so an expiry that read the order before fails its version check; an
-  expiry that commits first leaves the order `CANCELLED`, and the payment request
-  gets a `409`. Either way the order is never cancelled with money taken.
-- **The customer is told.** While an order is unpaid, the API returns `payBy` (when
-  it was placed plus the window), and the order page says "Pay by ...".
-
-`V13__orders_status_created_index.sql` adds `(order_status, created_at)` for the
-job's query; the existing index leads with `user_id`.
+An order still `PENDING` 30 minutes after it was placed (`app.orders.unpaid-expiry`)
+is cancelled and restocked, one transaction per order. Since section 13 this is the
+checkout saga's deadline, `CheckoutDeadlineJob`. An order whose payment is
+`PROCESSING` is left for a later run; the API shows the customer `payBy`.
 
 ## 7. Phase 3: webhooks
 
-A real provider also reports what happened by calling the shop: a **webhook**, an
-HTTP request it sends when a charge succeeds or fails, or a refund goes through.
-Webhooks settle a payment the shop couldn't (a timeout) in seconds, rather than
-when reconciliation next runs. The jobs stay as the safety net, because a webhook
-can be late, repeated, out of order, or never arrive.
+The provider also reports outcomes by calling the shop. Webhooks settle payments in
+seconds; the jobs stay as the safety net.
 
 ```mermaid
 sequenceDiagram
@@ -486,57 +320,15 @@ sequenceDiagram
     W-->>G: 200
 ```
 
-- **Authenticated by signature, not by JWT.** The provider has no user token, so
-  the endpoint is `permitAll`, and every request must carry
-  `Payment-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256>`, computed over
-  `<t>.<raw body>` with a secret only the provider and the shop know
-  (`PAYMENT_WEBHOOK_SECRET`). The signature is checked over the raw bytes received
-  (parsing and re-serializing the JSON could change them), with a constant-time
-  comparison, so its timing reveals nothing about the right value.
-- **Replay protection.** A captured request can't be sent again later: the
-  timestamp is part of what is signed, and one more than 5 minutes from the shop's
-  clock is refused.
-- **Exactly-once effect from at-least-once delivery.** Providers deliver an event
-  at least once: retries after a timeout, duplicates. Each event id is recorded in
-  `payment_webhook_event` (unique) in the same transaction as the change it makes,
-  so the change happens once: a repeat finds the id and does nothing, and two
-  deliveries at the same moment collide on the unique key, the loser rolled back
-  and answered `200` as already done.
-- **Same transitions as everywhere else.** A webhook settles a payment through the
-  same recorder methods as the request, reconciliation and the refund job, so
-  whatever arrives first records the outcome and the rest change nothing.
-  Recording an outcome now locks the payment row first, so two recorders at the
-  same moment take turns instead of the second failing its version check (a `409`
-  for a payment that succeeded).
-- **Unknown events are acknowledged.** An event type the shop doesn't handle, or
-  for a payment it doesn't know, is recorded and answered `200`; refusing it would
-  only make the provider retry forever.
-
-The fake provider sends `charge.succeeded`, `charge.failed` and `refund.succeeded`
-about a second after it answers (the way a real one does), over HTTP to
-`app.payment.fake.webhook-url`, signed with the same secret. A real provider
-retries a failed delivery for days; the fake tries once, and a lost webhook is
-left to reconciliation and the refund job. Webhooks are off until both the secret
-and the URL are set: staging and production send them to the API itself.
-
-`V14__payment_webhook_events.sql` adds the event table. It keeps the payment's id
-as a plain column, not a foreign key, since an event can name a payment the shop
-doesn't know.
+- Authenticated by an HMAC signature over the raw body (`PAYMENT_WEBHOOK_SECRET`),
+  compared in constant time, and refused if more than 5 minutes old.
+- Each event id is recorded in the same transaction as its change: exactly-once
+  effect from at-least-once delivery (`V14__payment_webhook_events.sql`).
 
 ## 8. Stripe in test mode
 
-The fake provider shows the design; this section plugs in a real provider, Stripe,
-in **test mode**: its real API and real webhooks, with test cards and no real
-money. `app.payment.provider` chooses:
-
-- `fake` (the default): the tests, CI, staging and the E2E tests. It needs no
-  network and no secret, and it can simulate what a real provider won't do on
-  request: timeouts, outages and a refund that fails a few times.
-- `stripe`: a developer's machine, with a test key in `.env`.
-
-Only the edges change: `PaymentGateway` gets a second implementation, and the
-webhook endpoint a second reader. The pay flow, the recorders, the jobs and the
-tables stay as they are.
+`app.payment.provider` is `fake` (the default: tests, CI, staging) or `stripe`
+(test mode, a developer's key in `.env`; the app refuses a live key).
 
 ```mermaid
 flowchart LR
@@ -547,13 +339,6 @@ flowchart LR
     CLI -->|Stripe-Signature| W[POST /api/v1/payments/webhooks]
     W --> R[StripeWebhookReader] --> P[PaymentWebhookProcessor]
 ```
-
-### Test mode only
-
-The app refuses to start with `provider: stripe` unless `STRIPE_SECRET_KEY` is a
-test-mode key (`sk_test_...` or a restricted `rk_test_...`), so this project can't
-move real money however it is configured. The key comes only from the environment:
-`.env` locally, which git ignores, and the local hooks refuse to commit.
 
 ### Charging in two idempotent steps
 
@@ -571,169 +356,35 @@ sequenceDiagram
     G-->>S: approved (pi_123, Visa, 4242)
 ```
 
-A PaymentIntent is Stripe's record of one payment. Creating it charges nothing;
-confirming it charges the card. Splitting the two is what lets a lost answer be
-looked up safely (below). Every request carries a key Stripe deduplicates by, so the
-retries of `PaymentGatewayClient` repeat the same two requests and Stripe answers
-them from its first result.
-
-What each failure means:
-
 | Step | Failure | Card charged? | Result |
 |---|---|---|---|
-| create | can't connect, timeout, `401`/`403` (a bad key), `429`, `5xx` | no: nothing is confirmed yet | unavailable: retried, then `FAILED` |
-| create | another `4xx`, such as an amount under Stripe's minimum | no | declined, with a plain reason (Stripe's message goes to the log) |
-| confirm | can't connect | no: the request never left | unavailable: retried with the same keys |
-| confirm | `402`, a card error | no | declined, with Stripe's message (`Your card was declined.`) |
-| confirm | another `4xx` | no | declined, with a plain reason (Stripe's message goes to the log) |
-| confirm | timeout, connection lost, `5xx` | maybe | outcome unknown: `PROCESSING`, `202`, settled by reconciliation |
+| create | can't connect, timeout, `401`/`403`, `429`, `5xx` | no | unavailable: retried, then `FAILED` |
+| create | another `4xx` | no | declined |
+| confirm | can't connect | no | unavailable: retried with the same keys |
+| confirm | `402` card error, another `4xx` | no | declined |
+| confirm | timeout, connection lost, `5xx` | maybe | `PROCESSING` (`202`), settled by reconciliation |
+| confirm | left unfinished (`requires_action`) | not yet | cancelled, then declined (section 14) |
 
-Amounts go to Stripe in the currency's smallest unit (cents for USD), worked out
-from the currency's decimal places, exactly or not at all. Stripe's messages can be
-longer than the 255 characters `failure_reason` holds, so a payment keeps the first
-254 and an ellipsis.
-
-Only Stripe's card errors (`card_error`) are shown to the customer: Stripe writes
-those for customers ("Your card was declined."), and its other messages for
-developers.
-
-The first run against Stripe's test mode found three faults that the unit tests,
-which replay answers written by hand, could not:
-
-- The account's API version no longer accepted `payment_method_types`, which the
-  adapter sent. The create request now sends `automatic_payment_methods` (Stripe
-  picks the methods, never one that redirects), and every request pins the API
-  version it was tried against.
-- That refusal (280 characters) was too long for `failure_reason`, so recording the
-  decline failed and left the payment `PROCESSING`, and its text was a developer's
-  message about a parameter. Long reasons are now cut to fit, and the customer sees
-  a plain reason.
-- Reconciliation then sent the fixed create under the old keys, which Stripe
-  refused as `idempotency_error`, and the adapter took that for a decline. Correct
-  that time (Stripe had refused those requests outright), but not in general: it is
-  now left for a person, as above.
-
-### Looking up a lost charge
-
-Stripe replays a request only if both its key and its parameters match the first
-one, so `findCharge` now takes the original `ChargeRequest` (the reconciler rebuilds
-it from the payment row) instead of just its key. It:
-
-1. Sends the create request again. Stripe answers with the PaymentIntent from the
-   first time, or creates it now if the first never arrived: unconfirmed either
-   way, so nothing is charged. If Stripe won't replay it (`idempotency_error`: the
-   request has changed since it was sent, after a deploy), that says nothing about
-   the charge, so the payment stays `PROCESSING` and an error asks a person to
-   settle it from the dashboard. Calling it declined could hide a charge.
-2. Reads the PaymentIntent's status:
-
-| Status | Meaning | Answer |
-|---|---|---|
-| `succeeded` | charged | approved |
-| `requires_payment_method`, with a payment error | declined | declined, with Stripe's message |
-| `requires_confirmation` | the confirm never arrived | cancel it, then "never received" |
-| `canceled` | | "never received" |
-| anything else (`processing`, ...) | still settling | unavailable: the next run asks again |
-
-Cancelling the unconfirmed PaymentIntent makes "never received" final: a confirm
-still on its way would now fail rather than charge. Stripe's Search API could find
-the PaymentIntent by its metadata instead, but it lags behind writes by up to a
-minute and isn't offered in every country.
-
-### Refunds
-
-`refund` sends `POST /v1/refunds` for the PaymentIntent and the payment's amount,
-under the key `<installation>-refund_7`. Can't connect, a timeout, a `401`/`403`,
-`429` or `5xx` is "unavailable": the refund stays `REFUND_PENDING`, and the retry job
-sends the same request again, which Stripe answers with the first refund. A refund
-Stripe accepts, whether succeeded or still pending while the card network carries
-the money back, is recorded as refunded. Any other error, or a refund Stripe
-reports as failed, is logged and left `REFUND_PENDING` for a person: retrying
-can't change Stripe's answer.
-
-### Keys that can't collide: the installation id
-
-Stripe remembers an idempotency key for 24 hours, per account, and sends webhooks
-about every payment in the account. But `pay_7` is unique only within one database.
-A local database wiped and created again starts at payment 1 again, and a second
-database (another developer's laptop) on the same Stripe account has its own
-payment 7. Unchecked, the new payment 7 could get the old one's answer for a day
-(approved without being charged), or have another database's webhook applied to it.
-
-So `V16__installation.sql` gives each database a random id, which MySQL generates
-once when the migration runs. The adapter starts every Stripe key with it and puts
-it in the metadata of every PaymentIntent and refund, and a webhook whose metadata
-names another installation is acknowledged and ignored. The fake provider keeps
-its answers in memory per app, so it doesn't need this.
-
-### Webhooks
-
-Stripe signs its webhooks the way the fake does: `Stripe-Signature: t=...,v1=...`,
-an HMAC-SHA256 over `<t>.<raw body>`, with a `whsec_...` secret that goes in
-`PAYMENT_WEBHOOK_SECRET`. `WebhookSignature` checks both, and now accepts any of
-several `v1` values, which Stripe sends while a secret is being rotated.
-`StripeWebhookReader` turns Stripe's events into the shop's:
-
-| Stripe event | Shop event | Payment found by |
-|---|---|---|
-| `payment_intent.succeeded` | `charge.succeeded` | the PaymentIntent's metadata, `shop_charge_key` |
-| `payment_intent.payment_failed` | `charge.failed` | the same |
-| `refund.created` or `refund.updated`, with status `succeeded` | `refund.succeeded` | the refund's metadata, `shop_refund_key` |
-| anything else | none: recorded and acknowledged | |
-
-From there the processor, the recorders and the exactly-once rules of section 7
-are unchanged. Stripe can't reach a laptop, so locally the Stripe CLI relays them:
-`stripe listen --events payment_intent.succeeded,payment_intent.payment_failed,refund.created,refund.updated --forward-to localhost:8082/api/v1/payments/webhooks`,
-with the `whsec_` secret that `stripe listen --print-secret` shows. Tried that way,
-each of those events was answered `200`, and one Stripe sent again was recognised
-as a duplicate. A `payment_intent` event doesn't name the card, so a payment
-that a webhook settles first is shown without its brand and last four digits.
-
-### Test cards
-
-The storefront keeps its test methods; the adapter maps them to Stripe's test
-PaymentMethods. Real Stripe won't time out or go down on request, so the methods
-that simulate that stay with the fake: the adapter declines them, saying why,
-without calling Stripe.
-
-| Shop method | Stripe test PaymentMethod |
-|---|---|
-| `test_visa` | `pm_card_visa` |
-| `test_mastercard` | `pm_card_mastercard` |
-| `test_declined` | `pm_card_chargeDeclined` |
-| `test_insufficient_funds` | `pm_card_chargeDeclinedInsufficientFunds` |
-
-### Testing
-
-- Unit tests replay Stripe's responses through Spring's `MockRestServiceServer`:
-  every row of the failure table, each status of the lookup, refunds and the
-  webhook translation. They need no network and no key, so they run in CI.
-- CI, staging and the E2E tests keep the fake provider.
-- The README explains how to try it against Stripe's test mode by hand.
+A lost charge is looked up by sending the same create again (Stripe replays it),
+then reading the PaymentIntent; one never confirmed is cancelled, so it can't
+charge later. Every key starts with the database's installation id (V16), so
+databases sharing a Stripe account can't collide.
 
 ### Key decisions
 
 | Decision | Why | Rejected alternative |
 |---|---|---|
-| Spring's `RestClient` against Stripe's HTTP API | Every request, key and error is visible in the code; `MockRestServiceServer` tests it without a network; no extra dependency to keep free of CVEs | Stripe's Java SDK |
-| Create, then confirm, each with its own key | A lost charge can be looked up without charging anyone | One create with `confirm=true`: asking again would charge |
-| Test-mode keys only, checked at startup | The project can't move real money, whatever its configuration | Trusting the configuration |
-| The fake stays the default | Tests and CI stay offline, deterministic and free of secrets, and keep their simulated failures | Stripe in CI |
-| An installation id in every key and in the metadata | Databases sharing a Stripe account can't receive each other's answers or events | `pay_<id>` alone |
-| Stripe's test PaymentMethods, chosen on the server | The API and webhooks are real without a card form in the browser | Stripe Elements now (on the roadmap) |
-| Every request pins `Stripe-Version: 2026-09-30.endive`, the version it was tried against | The account's default version changes when the account is upgraded, and a new version can drop a parameter the adapter sends (as `payment_method_types` was dropped) | The account's default version |
+| Spring's `RestClient` against Stripe's HTTP API | Every request and error visible; tested without a network | Stripe's Java SDK |
+| Create, then confirm, each with its own key | A lost charge can be looked up without charging | `confirm=true` on create |
+| Test-mode keys only, checked at startup | Can't move real money | Trusting the configuration |
+| The fake stays the default | Tests and CI stay offline and deterministic | Stripe in CI |
+| An installation id in every key | Databases sharing an account can't collide | `pay_<id>` alone |
+| Every request pins `Stripe-Version` | An account upgrade can't drop a parameter we send | The account's default version |
 
 ## 9. Circuit breaker on Stripe
 
-When Stripe is down, or so slow that its calls time out, every call still waits:
-up to 5 seconds to connect and 30 to answer, then twice more for the retries of
-`PaymentGatewayClient`. A payment request can then take a minute and a half,
-holding one of Tomcat's request threads the whole time, and the refund job and
-reconciliation do the same on every run. Nothing comes of it, since Stripe isn't
-answering. A **circuit breaker** (Resilience4j's) notices that Stripe keeps
-failing and stops calling it for a while, answering at once through the paths the
-shop already has for "provider unavailable". Then it lets a couple of calls
-through to see whether Stripe is back.
+When Stripe keeps failing, a Resilience4j breaker stops calling it for 30 seconds
+and callers take their existing "unavailable" paths.
 
 ```mermaid
 stateDiagram-v2
@@ -744,78 +395,23 @@ stateDiagram-v2
     HALF_OPEN --> OPEN: a trial call fails
 ```
 
-### What counts as a failure
-
-Only what says Stripe is unwell. An answer, even a refusal, is Stripe working.
-
 | Outcome of a Stripe call | For the breaker |
 |---|---|
-| Unavailable: can't connect, `401`/`403`, `429`, a `5xx` | failure |
-| Outcome unknown: a timeout, or a `5xx` while confirming | failure |
-| Slower than 10 seconds | slow, which counts like a failure |
-| Approved, declined, refunded | success |
-| A refund Stripe refuses (`4xx`) | success: Stripe answered (and the error is logged, as before) |
-| A lookup Stripe answers without settling the payment: still processing, or a changed request it won't replay (`PaymentNotSettledException`) | ignored: Stripe is working, and one stuck payment, looked up every minute, mustn't open the breaker on a quiet shop |
-
-### The fallback: the paths that already exist
-
-While the breaker is open, no request goes to Stripe: the call throws
-`PaymentProviderCircuitOpenException`, a kind of "provider unavailable", which
-every caller already handles without losing money:
+| Unavailable, outcome unknown, or slower than 10 s | failure |
+| Approved, declined, refunded, a refused refund | success: Stripe answered |
+| A lookup answered without settling | ignored |
 
 | Caller | While the breaker is open |
 |---|---|
-| Paying | Refused before an attempt is recorded: `503` with `Retry-After: 30`, so an outage doesn't use up the order's 5 attempts |
-| Refunding a cancelled order | Stays `REFUND_PENDING`; the retry job tries again on a later run |
-| Reconciliation | The payment stays `PROCESSING`; the next run asks again |
-| Webhooks | Unaffected: Stripe calls the shop, not the other way round |
+| Paying | `503` with `Retry-After: 30`, before an attempt is recorded |
+| Refunding | Stays owed; the outbox relay tries again |
+| Reconciliation | Stays `PROCESSING`; the next run asks again |
 
-### Where it sits
-
-- **One breaker, `stripe`, for every Stripe call**: charges, lookups and refunds
-  share one view of Stripe's health.
-- **Inside the Stripe adapter, under the retries** of `PaymentGatewayClient`
-  (section 10), so every try counts, and a call the open breaker refuses isn't
-  retried: retrying it would only be refused again. Nor is a lookup Stripe answered
-  without settling.
-- **Not around the fake provider.** Its failures are simulated per payment method
-  (`test_provider_down`), so a breaker there would let one customer's test close
-  payments for everyone.
-- **Never in readiness, never `DOWN`.** An open breaker must not make the API look
-  down. Caddy, `deploy.sh` and the pipeline's staging check all go by
-  `/actuator/health/readiness`, so a breaker added to readiness (as some guides
-  suggest) would take the shop out of the load balancer whenever Stripe is down.
-  Its state shows in the health details instead, without changing the overall
-  status (section 10), and goes to Prometheus (`resilience4j_circuitbreaker_*`), on
-  the Grafana dashboard.
-- **It half-opens on its own** after 30 seconds. Paying only reads the breaker's
-  state before it starts, so without that nothing might try Stripe again while
-  payments are being refused.
-
-Tried against a Stripe that can't be reached (its address pointed at a closed
-port): the first payment's three tries failed, and it was recorded as failed; the
-second payment's fifth failure opened the breaker, and its last try was refused and
-not retried; the third payment got `503` with `Retry-After: 30`, and no attempt was
-recorded. Readiness stayed `UP` throughout, and 30 seconds later the breaker was
-half-open by itself.
-
-### Key decisions
-
-| Decision | Why | Rejected alternative |
-|---|---|---|
-| Resilience4j's breaker, called from code, configured in `application.yml` | Where it sits relative to the retries is plain to see, and it is unit-tested without Spring | The `@CircuitBreaker` annotation: two aspects, whose order would decide whether retries count |
-| Only "Stripe is unwell" outcomes are failures | A decline or a refused request is Stripe working; counting them would let customers' cards open the breaker | Counting every exception |
-| While open, a payment is refused before it is recorded (`503`, `Retry-After`) | An outage doesn't use up the customer's attempts, and the client is told when to come back | Recording a `FAILED` attempt each time |
-| The existing "unavailable" paths are the fallback | Each already keeps the money safe; nothing new can guess wrong | A fallback that guesses, such as approving now and settling later |
-| In the health details, but never `DOWN` and never in readiness | An outage at Stripe mustn't take the shop out of the load balancer | The breaker's state in readiness |
-| No fallback URL | Stripe has one API host, and sending an unanswered charge elsewhere could charge twice | A list of backup URLs |
+The breaker shows in the health details as `CIRCUIT_OPEN`, never `DOWN`, and is
+never part of readiness: an outage at Stripe can't take the shop out of the load
+balancer.
 
 ## 10. Retries and fallbacks, with Resilience4j
-
-The retries move from Spring's `@Retryable` to Resilience4j's Retry, the library the
-circuit breaker already uses: one configuration (`application.yml`), one set of
-metrics and Actuator endpoints for both, and a **fallback** that is a method of its
-own, run when the tries are used up.
 
 ```mermaid
 flowchart LR
@@ -827,118 +423,32 @@ flowchart LR
     R --> FK[FakePaymentGateway]
 ```
 
-### Retried
-
-Three tries in all: the first, then two more, 100 ms and 200 ms later.
-
-| What the provider said | Retried? | Why |
-|---|---|---|
-| Unavailable: can't connect, `401`/`403`, `429`, `5xx` | yes | Nothing happened; the same idempotency key makes a repeat safe |
-| Outcome unknown: a timeout, or a `5xx` while confirming | no | It may have charged; reconciliation finds out (section 5) |
-| The breaker is open | no | It would only be refused again |
-| A lookup answered without settling the payment | no | Asking again at once gets the same answer |
-| Declined, refunded, any other answer | no | It isn't a failure |
-
-### The fallbacks
-
-When the tries are used up, or the breaker is open, `PaymentGatewayClient` doesn't
-throw: it runs the operation's fallback, which returns what happened in so many
-words. The callers read it as a result, not an exception:
+| What the provider said | Retried? |
+|---|---|
+| Unavailable | yes: 3 tries, 100 ms and 200 ms apart, same key |
+| Outcome unknown, breaker open, lookup not settled, any answer | no |
 
 | Call | Fallback result | What the caller does |
 |---|---|---|
-| `charge` | `ChargeResult.Unavailable` | Records the payment `FAILED`: "the payment provider is unavailable; please try again in a moment". Nothing was charged |
-| `findCharge` | `ChargeLookup.Unanswered` | Leaves the payment `PROCESSING`; the next reconciliation run asks again |
-| `refund` | `RefundAttempt.StillOwed` | Leaves the payment `REFUND_PENDING`; the retry job tries again |
+| `charge` | `ChargeResult.Unavailable` | Records the payment `FAILED`: nothing was charged |
+| `findCharge` | `ChargeLookup.Unanswered` | Leaves it `PROCESSING` for the next run |
+| `refund` | `RefundAttempt.StillOwed` | Leaves the refund owed for the outbox relay |
 
-`findCharge` now returns one of three results, where an exception used to stand for
-the third: `Found` (the provider's answer), `NeverReceived` (nothing was charged, so
-the payment fails), and `Unanswered` (try again later). "Never received" and
-"couldn't ask" lead to opposite outcomes, so they are told apart by type, not by
-whether something was thrown. An outcome unknown is not a fallback: the charge may
-have happened, so it still reaches `PaymentService`, which leaves the payment
-`PROCESSING` (`202`).
-
-### The app's internal calls
-
-The same tools guard the app's other outgoing calls:
-
-| Call | Retry | Circuit breaker | Fallback |
-|---|---|---|---|
-| The fake provider's webhook delivery (to the API's own endpoint) | 3 tries, 1 s then 2 s apart, on a connection error or a `5xx`; not on a `4xx` (a wrong secret, a refused event), which won't change | `webhook-delivery`: when deliveries keep failing, they are skipped for 30 s | Logged: reconciliation and the refund job settle what the webhook would have |
-| The startup check of configured external endpoints | 3 tries, 1 s apart | none: it runs once, at startup | The `WARN` it logs today; startup goes on |
-
-A webhook delivery runs on the scheduler, whose one thread also runs the payment
-jobs, so its retries must not wait on that thread. Resilience4j's async retry
-context says how long to wait, and the next try is scheduled for then; the request
-itself is sent asynchronously.
-
-### Seeing it: Actuator
-
-| Endpoint | Shows |
-|---|---|
-| `/actuator/health` (details, admins only) | `circuitBreakers`: each breaker's state, failure rate and calls |
-| `/actuator/circuitbreakers`, `/actuator/circuitbreakerevents` | Each breaker's state, and its recent events: opened, refused, half-opened, closed |
-| `/actuator/retries`, `/actuator/retryevents` | Each retry, and its recent events: retried, gave up |
-
-Like the rest of the actuator, they are admin-only, and in production they are on
-the internal management port only. Production shows no health details to anyone
-(`application-prod.yml`), so there the breakers' state is read from
-`/actuator/circuitbreakers` and the Grafana dashboard. An open breaker shows in the health details as
-`CIRCUIT_OPEN`, a status Spring Boot leaves out of the overall one, so `/actuator/health`
-stays `UP`, and readiness, which Caddy and `deploy.sh` go by, never includes it.
-
-Tried against a Stripe that can't be reached (its address pointed at a closed port):
-each of the first two payments was tried three times and failed through the charge
-fallback; the breaker opened on the fifth failure, and the second payment's last
-try, refused by it, wasn't retried (an "ignored error" in `/actuator/retryevents`);
-the third payment got `503`. Meanwhile `/actuator/circuitbreakers` showed `stripe`
-`OPEN` (5 failed, 1 not permitted), its events the transition from `CLOSED` to
-`OPEN`, and `/actuator/health` stayed `UP` with `stripe` as `CIRCUIT_OPEN`.
-
-A context test checks each retry's and breaker's settings in `application.yml`
-against the rules the unit tests copy. It caught one: an instance's
-`enable-exponential-backoff: false` doesn't undo the `true` of its `base-config` in
-Resilience4j, so `startup-check` has settings of its own.
-
-### Key decisions
-
-| Decision | Why | Rejected alternative |
-|---|---|---|
-| Resilience4j's Retry, alongside its breaker | One configuration, one set of metrics and endpoints, and an explicit fallback | Spring's `@Retryable`, beside a second library |
-| A fallback per operation, returning a result | What happens when the provider can't be reached is in one class, and the callers can't mistake "couldn't ask" for "never charged" | Exceptions caught in three callers |
-| Three tries, 100 ms and 200 ms apart | A payment request waits at most a few hundred milliseconds longer when the provider is down | Longer waits, inside a customer's request |
-| Webhook retries scheduled, not slept | The scheduler's one thread also runs the payment jobs | Blocking retries on that thread |
-| The breaker in the health details, never `DOWN` | Visible at a glance, but an outage elsewhere can't take the API out of the load balancer | No health details, or a breaker that fails health |
+The fake provider's webhook deliveries have a retry (3 tries, scheduled, never
+slept) and a breaker of their own. Admins see both under `/actuator/circuitbreakers`
+and `/actuator/retries`.
 
 ## 11. Partial refunds
 
-Until now a refund was all or nothing: cancelling a paid order refunded the whole
-payment. Now an admin can also refund **part** of a paid order: items the customer
-sent back, or an amount (a goodwill gesture, a damaged item kept), as often as
-there is money left, on a paid order in any state until it is cancelled, shipped
-and delivered ones included, since that is where returns happen.
+An admin can refund part of a paid order, as often as money is left: items sent
+back, or an amount.
 
 | Kind | The admin gives | Amount | Stock |
 |---|---|---|---|
-| `ITEMS` | order items and quantities, and a reason | worked out by the server: each quantity times the unit price the customer paid | back in stock if the admin says so |
+| `ITEMS` | order items and quantities, a reason | each quantity times the price paid | back in stock if asked |
 | `AMOUNT` | an amount and a reason | as given, at most what is left | unchanged |
-| `CANCELLATION` (as before) | nothing: cancelling the order | what is left | the items not already refunded go back |
-
-### The rules
-
-- **Never more in total than was paid.** The payment row is locked
-  (`SELECT ... FOR UPDATE`) while a refund is added, and what is left is the amount
-  paid minus every refund owed or made, a running total kept on that row. Two
-  admins at once take turns, and a check constraint on the row refuses a total over
-  the amount paid, whatever the code does ("Taking turns", below).
-- **An item can't be refunded more times than it was bought.** Each order item
-  counts its refunded quantity (`orderitems.refunded_quantity`, in the order module,
-  which owns items and stock), checked and raised in the same transaction.
-- **Only a payment that succeeded, of an order not cancelled**: not while it is
-  `PROCESSING`, and not once the order is cancelled (its refund is under way).
-- **Admins only** (`ShopConfig`), and the request carries an `Idempotency-Key`, as
-  paying does, so a double click refunds once.
+| `CANCELLATION` | nothing: cancelling the order | what is left | items not already refunded |
+| `LATE_CHARGE` | nothing: a charge after a failure (section 14) | all of it | unchanged |
 
 ### Data model
 
@@ -949,33 +459,11 @@ erDiagram
     orderitems ||--o{ refund_item : "returned in"
 ```
 
-| `refund` column | |
-|---|---|
-| `payment_id` | the payment it gives money back from |
-| `kind` | `ITEMS`, `AMOUNT` or `CANCELLATION` |
-| `amount`, `currency` | what goes back |
-| `reason` | the admin's, shown to the customer |
-| `status` | `PENDING` (owed: the outbox row), then `REFUNDED` |
-| `idempotency_key` | the shop's key with the provider (unique) |
-| `request_key` | the admin's `Idempotency-Key`, unique per payment; none for a cancellation |
-| `provider_reference` | the provider's id for the refund (unique) |
-| `requested_by` | the admin's email at the time (a record, not a foreign key, so it outlives the account) |
-| `requested_at`, `refunded_at` | |
-
-`refund_item` lists an `ITEMS` refund's order items and quantities. The payment
-gains two running totals: `refund_requested_amount` (every refund owed or made) and
-`refunded_amount` (the ones the provider has made), with a check that
-`refunded_amount <= refund_requested_amount <= amount`.
-`V17__partial_refunds.sql` creates the tables and columns, adds `refunded_quantity`
-to `orderitems`, moves each payment's existing refund into a `CANCELLATION` row
-(and into the totals), and drops the payment's old refund columns.
+The payment keeps running totals, `refund_requested_amount` and `refunded_amount`,
+with a check constraint that they never exceed the amount paid
+(`V17__partial_refunds.sql`).
 
 ### Lifecycle
-
-A refund is `PENDING` until the provider refunds it, then `REFUNDED`. The payment
-keeps saying where its money stands: `SUCCEEDED` while it is kept, even in part;
-`REFUND_PENDING` once its order is cancelled (the rest is owed back); `REFUNDED`
-once every cent is back, which partial refunds can now reach on their own.
 
 ```mermaid
 stateDiagram-v2
@@ -1001,104 +489,40 @@ sequenceDiagram
     R->>DB: a refund with key k already? return it
     R->>DB: items: check and raise refunded quantities, restock if asked
     R->>DB: amount <= paid - refund_requested_amount, else 409
-    R->>DB: INSERT refund (PENDING): the outbox row; raise refund_requested_amount
+    R->>DB: INSERT refund (PENDING) and its outbox message; raise refund_requested_amount
     end
     R-->>A: 201, refund PENDING
-    R->>G: after the commit: refund (its key rfd_..., amount)
-    G-->>R: refunded, or still owed (the retry job tries again)
+    R->>G: after the commit, through the outbox: refund (its key rfd_..., amount)
+    G-->>R: refunded, or still owed (the outbox relay tries again)
     R->>DB: lock the payment, then the refund: REFUNDED, raise refunded_amount; payment REFUNDED if every cent is back
 ```
 
-From the commit on, a partial refund goes the way a cancellation's always has: the
-after-commit listener sends it (sections 4 and 10), the retry job retries what is
-still `PENDING`, and a `refund.succeeded` webhook settles it, now found by its
-idempotency key rather than by a payment id read out of the key.
-
-### Keys
-
-A new refund's key with the provider is `rfd_` and a random UUID, made with the
-refund: the key is part of the row it is saved in, so it can't wait for the row's id.
-The refunds `V17` moves keep their old key, `refund_<payment id>`: one still pending
-must be repeated under the key it was first sent with, or the provider would refund
-it twice. The prefixes differ, so the two kinds can't collide.
-
-### Cancelling after partial refunds
-
-A cancellation refunds only what is left (and none, if nothing is), and restocks
-only the quantities not already refunded as items: those that were restocked went
-back when they were refunded.
-
-### Taking turns
-
-Everything that refunds a payment locks its row first: an admin's refund, a
-cancellation, and recording a refund (from the after-commit listener, the retry job
-or a webhook, which then lock the refund's row too). Locking the payment before the
-order (a refund of items raises the order's version, as paying does) and products
-in id order keeps them from deadlocking with each other or with checkout.
-
-The lock alone isn't enough under MySQL's default isolation, `REPEATABLE READ`: a
-transaction's plain reads return the database as it was at the first of them, even
-once it holds a lock. Only a locking read returns what is committed now. A
-cancellation has read its order by the time it locks the payment, and a webhook its
-event; refunds they then loaded and summed could be older than the lock, missing
-one its last holder had just committed, and owe back too much, or never mark the
-payment refunded. So the totals live on the payment row, which every one of them
-reads with its lock, and a refund being recorded is read with a lock of its own. The
-admin's refund takes the payment's lock as its first read, so the order, its items
-and earlier refunds it reads afterwards are as fresh. `RefundIntegrationTest` holds a
-transaction open across another's commit to show each case.
+Everything that refunds a payment locks its row first, and the totals live on that
+row: under MySQL's `REPEATABLE READ`, refunds read after the lock could be stale.
 
 ### API
 
 | Method | Path | Who | Result |
 |---|---|---|---|
-| `POST` | `/api/v1/orders/{orderId}/refunds` | admins | `201` with `Location` and the refund (`PENDING`); `200` with the first one when the `Idempotency-Key` was used for this order before; `409` when the order can't be refunded, or for more than is left; `400` for a body that is neither items nor an amount |
-| `GET` | `/api/v1/orders/{orderId}/refunds` | the order's owner or an admin | the order's refunds, oldest first |
-| `GET` | `/api/v1/orders/{orderId}/refunds/{refundId}` | the order's owner or an admin | one of them (the `Location` of a new one) |
-
-```json
-{"items": [{"orderItemId": 12, "quantity": 1}], "restock": true, "reason": "Returned: wrong size"}
-{"amount": 5.00, "reason": "The box arrived damaged"}
-```
-
-A payment now reports `refundedAmount`, what its refunds have given back so far. The
-single refund's reference and dates it used to carry belong to each refund instead,
-and an order item reports its `id` (what a refund of items names) and its
-`refundedQuantity`.
+| `POST` | `/api/v1/orders/{orderId}/refunds` | admins | `201` (`PENDING`); `200` for a repeated `Idempotency-Key`; `409` for more than is left |
+| `GET` | `/api/v1/orders/{orderId}/refunds` | owner or admin | the order's refunds |
+| `GET` | `/api/v1/orders/{orderId}/refunds/{refundId}` | owner or admin | one refund |
 
 ### Key decisions
 
 | Decision | Why | Rejected alternative |
 |---|---|---|
-| A `refund` table, one row per refund | Many refunds per payment, each with its own key, status and record | Refund columns on the payment: one refund only |
-| The server prices item refunds | What goes back for a returned item is what was paid for it; only an admin's goodwill amount is typed in, and it is capped | Amounts sent by the client for every refund |
-| Lock the payment row while adding a refund | Two refunds at once can't add up to more than was paid | Checking after the fact |
-| Running totals on the payment row, with a check constraint | Read under the lock, they are always current; summing refund rows read after the lock missed concurrent refunds under `REPEATABLE READ` (found by the concurrency tests) | Summing the refunds; `READ COMMITTED`, which each caller's transaction (the order module's cancellation among them) would have to remember |
-| Refunded quantities on the order item | The order module owns items and stock, and cancelling must not restock what was already refunded | Counting `refund_item` rows from the order module, which can't see payments |
-| Migrated refunds keep their key | A refund retried after the migration must repeat its first key | New keys for all |
-| An order's status doesn't change | An order with a returned item is still delivered; its refunds are listed beside it | A `PARTIALLY_REFUNDED` order status |
-
-Built in two pull requests: the model, the API and the money rules first; then the
-admin's refund form, the customer's view of their refunds, and the E2E test.
+| A `refund` table, one row per refund | Many refunds per payment, each with its own key | Refund columns on the payment |
+| The server prices item refunds | What goes back is what was paid | Client-sent amounts |
+| Lock the payment row, keep totals on it, check constraint | Two refunds at once can't exceed what was paid | Summing refund rows |
+| Refunded quantities on the order item | The order module owns items and stock | Counting refund rows from the order module |
+| An order's status doesn't change | A delivered order with a return is still delivered | A `PARTIALLY_REFUNDED` status |
 
 ## 12. The transactional outbox
 
-Some work can only happen after a transaction commits: sending a refund to the
-provider is the one this shop has. Doing it inside the transaction would hold a
-pooled connection while the provider answers, and refund the customer even if the
-transaction then rolled back; doing it after the commit loses it if the app stops
-in between. Section 4 solved that for refunds alone: the refund row recorded that
-money was owed, an `@Async` after-commit listener sent it, and `RefundRetryJob`
-retried it. That is the **transactional outbox** pattern, built for one kind of
-message. This section makes it general, so the checkout saga (next) can owe its
-own steps the same way, and refunds now go through it.
-
-### The idea
-
-Write the work that is owed as a row, in the same transaction as the change that
-owes it, then deliver it after the commit. The two commit together or not at all,
-so the work is owed if and only if the change happened, and the row survives a
-crash. Delivering it is a separate step that can be retried until it succeeds.
+Work that must follow a commit (sending a refund) is written as an
+`outbox_message` in the same transaction as the change that owes it, then delivered
+after the commit and retried until done (`V18__outbox.sql`).
 
 ```mermaid
 sequenceDiagram
@@ -1131,10 +555,6 @@ sequenceDiagram
     J->>R: deliverDue(now)
 ```
 
-A cancellation owes its refunds the same way: `PaymentOrderListener`, inside the
-cancellation's transaction, calls `RefundRecorder.requestRefunds`, which writes each
-refund row and its message.
-
 ### A message's life
 
 ```mermaid
@@ -1147,102 +567,33 @@ stateDiagram-v2
     Processed --> [*]: deleted after 7 days
 ```
 
-There is no "claimed" column: claiming a message moves its `available_at` 5
-minutes on (`app.outbox.claim-timeout`), so no relay finds it due before then. If
-the relay finishes, it records the result, and if it never does, the message is due
-again once that time has passed.
-
-### Rules
-
-- **Written in the transaction that owes it.** `Outbox.append` is
-  `Propagation.MANDATORY`: without a transaction, nothing would tie the message to
-  the change.
-- **A message names its record, not a copy of it.** It holds a type and an id
-  (`payment.refund`, refund 11). The handler reads the refund as it is when the
-  message is delivered, so a message can't carry stale data, and there is no
-  payload format to version.
-- **Delivered at least once, so handlers are safe to repeat.** A relay can stop
-  after the handler finished and before it recorded that; the message is then
-  delivered again. `RefundOutboxHandler` checks that the refund is still owed and
-  sends the same provider key every time, so a refund is made once.
-- **No transaction around a handler.** Claiming and recording are short
-  transactions in `OutboxStore`, a separate bean so each goes through Spring's
-  proxy; the handler runs between them, holding no pooled connection however long
-  the provider takes.
-- **Two relays never take one message.** The after-commit delivery and the job, or
-  two instances of the app, can run at once. The claim locks rows with
-  `FOR UPDATE SKIP LOCKED`, which passes over rows another relay is claiming
-  instead of waiting for them, and the moved `available_at` keeps them off it after
-  that. ShedLock also runs the job on one instance at a time.
-- **Retried with a backoff, never given up.** A message that fails, or whose
-  handler isn't done (the provider still unavailable after its own retries), is due
-  again after 10 seconds, then 20, 40 and so on, up to 10 minutes. It is never
-  dropped: what it owes (money back) must happen. `last_error` and `attempts` show
-  what is going wrong.
-- **Delivered right away, retried by a job.** The after-commit delivery means a
-  refund normally goes out within a moment; `OutboxRelayJob`
-  (`app.outbox.relay-cron`, every 10 seconds) delivers whatever that couldn't
-  finish. Processed messages are deleted after 7 days (`app.outbox.retention`).
-
-### Data model (`V18__outbox.sql`)
-
-| Column | Meaning |
-|---|---|
-| `type` | what the message asks for, and so which `OutboxHandler` takes it: `payment.refund` |
-| `aggregate_id` | the record it is about: the refund's id. Not a foreign key: every type shares the table |
-| `created_at` | when it was written |
-| `available_at` | when it may next be delivered: when it was written, then while claimed or after a failure, later |
-| `attempts` | how many times it was claimed |
-| `processed_at` | when its handler finished; null while it is owed |
-| `last_error` | why the last try failed, if it did |
-
-An index on `(processed_at, available_at)` serves the relay's query and the
-cleanup. The migration gives each refund still `PENDING` a message, since
-`RefundRetryJob`, which found them by their status, is gone; and it drops the index
-that only that job's query used.
-
-### What happens when
-
-| Situation | Result |
-|---|---|
-| The transaction that appends a message rolls back | No message, and nothing is sent |
-| The app stops right after the commit | The message is due; the job delivers it on its next run |
-| The provider is down | The handler reports "not done"; the message is due again after the backoff, until the provider is back |
-| The app stops after the provider refunded, before the message is marked | The claim runs out, the message is delivered again, and the handler finds the refund already recorded (or the provider answers from the same key) |
-| The after-commit delivery and the job reach one message | The first to claim it delivers it; the other skips it |
-| A message of a type no handler takes (an older release reading a newer message) | Logged as an error, and kept due until a handler for it is deployed |
+- At least once: a handler must be safe to repeat (check the record, same key).
+- No transaction around a handler; claims use `FOR UPDATE SKIP LOCKED`.
+- Retried with a backoff (10 s doubling to 10 min), never given up.
 
 ### Key decisions
 
 | Decision | Why | Rejected alternative |
 |---|---|---|
-| One outbox table and relay in `shop-common`, handlers in the modules | Every module can owe work the same way; refunds, and the checkout saga next, share one mechanism, one job and one set of rules | A table and a retry job per kind of work, as refunds had |
-| Delivered in the app, to handlers it holds | One application and one database: a message broker would add infrastructure to run, secure and test for nothing the app needs yet. A handler could later publish to a broker instead | Kafka or RabbitMQ, with a relay or change data capture (Debezium) publishing the rows |
-| Messages name their record by id | The handler always works from the current state; nothing to keep in sync or version | A JSON payload copied from the record |
-| A claim moves `available_at` and commits, rather than holding the row lock while the handler runs | A lock held for the handler's whole run would mean a connection held for it too | `SELECT ... FOR UPDATE` across the provider call |
-| At least once, with idempotent handlers | Exactly once would need the provider in the same transaction as the database, which can't be done | Hoping a crash never falls between the two |
-| Right after the commit, and also polled | Fast in the normal case, and nothing is lost when the fast path fails | Polling only (slower), or after-commit only (lost on a crash) |
+| One outbox and relay in `shop-common`, handlers in modules | One mechanism for every kind of owed work | A table and job per kind |
+| Delivered in the app | One app, one database: no broker to run | Kafka or RabbitMQ |
+| Messages name their record by id | Handlers read current state; nothing to version | A copied JSON payload |
+| A claim moves `available_at` and commits | No connection held while a handler runs | Holding the row lock |
+| At least once, idempotent handlers | Exactly once would need the provider in our transaction | Hoping no crash falls in between |
+| After the commit, and also polled | Fast, and nothing lost on a crash | Only one of the two |
 
 ## 13. The checkout saga
 
-A checkout is three steps, and they can't share one transaction: one of them
-happens at the payment provider, and the customer chooses when to pay, minutes
-after placing the order. A **saga** is the pattern for such a process: a sequence
-of local transactions where each step that can be undone has a **compensation**, a
-transaction that undoes it in business terms (a refund, not a rollback). If the
-process can't finish, the steps done so far are compensated, newest first.
+A checkout is three steps that can't share one transaction. Each step that can be
+undone has a compensation, and one orchestrator, `CheckoutSaga`, is told every
+step's outcome in the transaction that records it, decides what follows, and keeps
+each order's state in `checkout_saga` (`V19__checkout_saga.sql`).
 
 | Step | Transaction | Compensation |
 |---|---|---|
-| 1. Book the order | `OrderService.placeOrder`: the order `PENDING`, its stock reserved, the cart cleared | Cancel the order and put the stock back (`OrderService` restocks on cancelling) |
-| 2. Charge the payment | `PaymentService.pay`: at the provider, between two short transactions (section 2) | Refund it (`payment.refund` outbox message, section 12) |
-| 3. Confirm the order | `PaymentRecorder.recordSuccess`: the order `PAID`, with the payment's success | None: this is the **pivot**. Once the order is paid, the checkout only goes forward |
-
-Most of this already existed (sections 4 to 6 built every compensation), spread
-over listeners and jobs: an order's progress was something to work out from the
-order's status, its payments' statuses and three jobs. This section makes it one
-**orchestrated** saga: `CheckoutSaga` is told every step's outcome, decides what
-follows, and records the saga's state in `checkout_saga`.
+| 1. Book the order | `OrderService.placeOrder`: `PENDING`, stock reserved | cancel the order and restock |
+| 2. Charge the payment | `PaymentService.pay`, at the provider | refund it: a cancellation's, or a late charge's (section 14) |
+| 3. Confirm the order | `PaymentRecorder.recordSuccess`: `PAID` | none: the pivot |
 
 ### Orchestrated, not choreographed
 
@@ -1258,27 +609,23 @@ flowchart LR
         CS{{"CheckoutSaga<br/>(state in checkout_saga)"}}
         J[CheckoutDeadlineJob]
         H[CheckoutCompensationHandler]
+        RH[RefundOutboxHandler]
     end
     OB[(outbox_message)]
+    G[Payment provider]
     OS -.->|OrderPlacedEvent,<br/>OrderCancellingEvent| L
     L -->|orderBooked,<br/>orderCancelling| CS
-    PR -->|paymentSucceeded,<br/>paymentFailed| CS
+    PR -->|paymentSucceeded,<br/>paymentFailed,<br/>chargedAfterFailing| CS
     RR -->|paymentRefunded| CS
     J -->|expire| CS
     CS -->|cancelUnpaid,<br/>expireIfUnpaid| OS
     CS -->|checkout.compensate,<br/>payment.refund| OB
-    OB -->|after the commit| H
+    OB -->|checkout.compensate| H
     H -->|compensate| CS
+    OB -->|payment.refund| RH
+    RH -->|refund| G
+    G -.->|webhooks| PR
 ```
-
-In a **choreographed** saga there is no coordinator: each module reacts to the
-others' events, and the process is the sum of those reactions. That is how this
-shop worked before: hard to see whole, and with no record of where a checkout
-stood. In an **orchestrated** saga one component holds the process. Every
-outcome reaches `CheckoutSaga` in the transaction that records it, and every
-compensation is decided there. The order module can't call payments (dependencies
-point one way, section 2), so it still publishes events, but only to report its
-steps to the orchestrator.
 
 ### The saga's states
 
@@ -1295,114 +642,71 @@ stateDiagram-v2
     COMPLETED --> [*]: delivered
 ```
 
-`COMPENSATING` means a compensation is owed and not yet done: the order's
-cancellation (after the last failed payment) or a refund. `compensation_reason`
-says why: `PAYMENT_ATTEMPTS_USED_UP`, `PAYMENT_DEADLINE_PASSED` or
-`ORDER_CANCELLED` (by the customer, an admin, or deleting the account).
+### The fifth failed payment
 
-A paid order cancelled before it ships is a completed checkout compensated: its
-refund (step 2) and its restock (step 1) are the same compensations, and the saga
-records them. Partial refunds (section 11) leave the saga `COMPLETED`: the order
-stands.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Customer
+    participant P as PaymentService
+    participant R as PaymentRecorder
+    participant S as CheckoutSaga
+    participant DB as MySQL
+    participant H as CheckoutCompensationHandler
+    participant O as OrderService
+    C->>P: pay, the fifth attempt: declined
+    rect rgb(230, 240, 255)
+    note over R,DB: recordFailure's transaction
+    P->>R: recordFailure(7)
+    R->>DB: payment 7 FAILED
+    R->>S: paymentFailed(42): the fifth failure
+    S->>DB: saga COMPENSATING (PAYMENT_ATTEMPTS_USED_UP)
+    S->>DB: outbox checkout.compensate 42
+    end
+    P-->>C: 201 FAILED
+    H->>S: after the commit, compensate(42)
+    rect rgb(230, 240, 255)
+    note over S,O: a transaction of its own
+    S->>O: cancelUnpaid(42): CANCELLED, restocked
+    O->>S: OrderCancellingEvent, then orderCancelling
+    S->>DB: saga COMPENSATED
+    end
+```
 
 ### What happens when
 
 | Event | Told by | The saga | Compensation |
 |---|---|---|---|
-| An order is placed | `OrderPlacedEvent`, in the checkout's transaction | starts, `AWAITING_PAYMENT` | |
-| A payment succeeds | `PaymentRecorder.recordSuccess`, with the order becoming `PAID` | `COMPLETED` | |
-| A payment fails, with attempts left | `PaymentRecorder.recordFailure` | stays `AWAITING_PAYMENT` | |
-| The fifth payment fails | `PaymentRecorder.recordFailure` | `COMPENSATING` (`PAYMENT_ATTEMPTS_USED_UP`) | a `checkout.compensate` message, in the same transaction; after the commit `CheckoutSaga.compensate` cancels the order and restocks it |
-| 30 minutes pass unpaid | `CheckoutDeadlineJob` | `COMPENSATED` (`PAYMENT_DEADLINE_PASSED`) | the order cancelled and restocked, in one transaction |
-| An unpaid order is cancelled | `OrderCancellingEvent` | `COMPENSATED` (`ORDER_CANCELLED`) | the cancellation restocks it |
-| A paid order is cancelled | `OrderCancellingEvent` | `COMPENSATING` (`ORDER_CANCELLED`) | a refund of what is left, with its `payment.refund` message, in the cancellation's transaction; the cancellation restocks |
-| That refund is made | `RefundRecorder`, as the payment becomes `REFUNDED` | `COMPENSATED` | |
-| An order is cancelled while a payment is `PROCESSING` | `OrderCancellingEvent` | refuses: `409`, and the cancellation rolls back | none: step 2's outcome isn't known yet |
-
-### Rules
-
-- **The saga is told in the step's own transaction.** `orderBooked`,
-  `paymentSucceeded`, `paymentFailed`, `orderCancelling` and `paymentRefunded` are
-  `MANDATORY`: the saga's state commits with the step it records, or not at all.
-- **A compensation owed after a commit goes through the outbox.** Cancelling the
-  order after the fifth failure isn't done in that failure's transaction: a
-  failure is recorded by a request, a webhook or reconciliation, and none of them
-  should fail because the cancellation did (a version conflict, say). The failure
-  owes a `checkout.compensate` message instead, and the cancellation runs once it
-  commits, retried until it is done. The refund was already owed this way.
-- **Compensations are safe to repeat.** `CheckoutSaga.compensate` cancels the order
-  only while it is unpaid, so a message delivered twice, or one that arrives after
-  the customer cancelled, does nothing. A refund keeps its provider key.
-- **A payment in progress is a semantic lock.** While a payment is `PROCESSING`,
-  step 2's outcome is unknown, so it can't be compensated: the saga refuses any
-  cancellation (`409`), and the deadline job leaves that order for its next run.
-- **The saga's row is the last lock.** Every transaction that changes a saga locks
-  its row (`SELECT ... FOR UPDATE`) after the order, payment and refund rows it
-  works on, so the saga's lock can't be part of a deadlock with them.
-
-### Data model (`V19__checkout_saga.sql`)
-
-| Column | Meaning |
-|---|---|
-| `order_id` | the order whose checkout it is; unique, a foreign key (cascading deletes are for test data: orders are never deleted) |
-| `status` | `AWAITING_PAYMENT`, `COMPLETED`, `COMPENSATING`, `COMPENSATED` |
-| `compensation_reason` | why it was compensated; null while it hasn't been |
-| `created_at`, `updated_at` | when it started, and when its state last changed |
-
-The migration gives every earlier order the saga it would have had, from its
-status and its payments'. The deadline job finds unpaid orders through the
-orders' `(order_status, created_at)` index from `V13`: an unpaid order is exactly a
-saga awaiting payment.
-
-### Behavior that changed
-
-- **The fifth failed payment cancels the order** and returns its stock straight
-  away. Before, the order waited, unpayable, for the 30-minute expiry.
-- **The unpaid-order expiry is the saga's deadline.** `UnpaidOrderExpiryJob` in
-  `shop-order` became `CheckoutDeadlineJob` in `shop-payment`, on the same
-  schedule (`app.orders.unpaid-expiry-cron`) and window (`app.orders.unpaid-expiry`).
-- **Owing a cancellation's refunds moved** from `RefundRecorder` to
-  `CheckoutSaga.orderCancelling`: the orchestrator issues the compensation.
+| An order is placed | `OrderPlacedEvent` | `AWAITING_PAYMENT` | |
+| A payment succeeds | `recordSuccess` | `COMPLETED` | |
+| The fifth payment fails | `recordFailure` | `COMPENSATING` | `checkout.compensate` message: cancel and restock |
+| 30 minutes pass unpaid | `CheckoutDeadlineJob` | `COMPENSATED` | cancel and restock |
+| An unpaid order is cancelled | `OrderCancellingEvent` | `COMPENSATED` | restock |
+| A paid order is cancelled | `OrderCancellingEvent` | `COMPENSATING`, then `COMPENSATED` once refunded | refund what is left, restock |
+| A charge arrives for a `FAILED` payment | `recordSuccess` (webhook) | unchanged | `LATE_CHARGE` refund of all of it (section 14) |
+| Cancelling while a payment is `PROCESSING` | `OrderCancellingEvent` | refuses: `409` | none: step 2's outcome is unknown |
 
 ### Key decisions
 
 | Decision | Why | Rejected alternative |
 |---|---|---|
-| Orchestration, one `CheckoutSaga` | The whole process is in one class, with its state in one table: easy to follow, test and draw | Choreography: each module reacting to the others' events, as before |
-| The saga lives in `shop-payment` | It must call the order module and the payment code, and only `shop-payment` may use both (dependencies point one way) | A `shop-checkout` module above `shop-payment`, which payments would then have to report to through events |
-| Confirming the order is the pivot | Once paid, a checkout only goes forward; a cancellation afterwards compensates what was done | Treating every later change as part of the checkout |
-| The fifth failure's cancellation goes through the outbox | Recording a failure must not fail because cancelling did; the outbox retries the cancellation on its own | Cancelling in the failure's transaction |
-| The deadline cancels in one transaction | The job is its own retry: an order it can't cancel now is found on its next run | A `checkout.compensate` message for the deadline too |
-| One row per order, with a status and a reason | Enough to see where every checkout stands, and why it was undone | A log row per step: more history, more to keep consistent |
+| Orchestration, one `CheckoutSaga` | The whole process in one class and one table | Choreography: modules reacting to events |
+| The saga lives in `shop-payment` | It must call orders and payments, and only `shop-payment` may | A `shop-checkout` module above it |
+| Confirming the order is the pivot | Once paid, a checkout only goes forward | Treating later changes as the checkout |
+| The fifth failure's cancellation goes through the outbox | Recording a failure must not fail because cancelling did | Cancelling in the failure's transaction |
+| The saga's row is locked last | It can't take part in a deadlock | Locking it first |
 
 ## 14. Charges after a failure
 
-When the shop records an attempt as `FAILED`, it tells the customer the payment
-failed. The provider could still end up charging it, and until now the shop only
-logged that: the money was kept and the order stayed unpaid. With Stripe the way in
-was a confirm that leaves the PaymentIntent unfinished: `requires_action`, which
-means 3-D Secure, and the shop can't authenticate on the server
-(`allow_redirects=never`, section 8). The shop called it declined but left the
-PaymentIntent open, so an authentication completed elsewhere (in the bank's app)
-would charge it, and `payment_intent.succeeded` would reach a `FAILED` payment.
+A payment recorded as `FAILED` could still be charged by the provider. Nothing is
+left open where the shop can prevent it, and a charge that comes anyway is refunded
+in full (`V20__late_charge_refunds.sql`).
 
-There are two parts: nothing is left open where the shop can prevent it, and a
-charge that comes anyway is refunded.
-
-### Prevention: nothing left open
-
-- **A PaymentIntent left unfinished is cancelled before it is called declined**
-  (`StripePaymentGateway.outcome`), under the same idempotency key that
-  reconciliation cancels with, so the two can't disagree.
-- **If Stripe refuses the cancel** (the payment completed meanwhile) **or can't be
-  reached**, the outcome is unknown: the payment stays `PROCESSING` (`202`), and
-  reconciliation settles it from what Stripe says (section 5). Calling it declined,
-  or retrying into a fallback that would, could hide a charge.
-- **Reconciliation does the same**: a lookup that finds `requires_action` cancels
-  the PaymentIntent and reports it declined; if the cancel is refused, the next run
-  looks again.
-
-### Compensation: the late charge is refunded
+- **Prevention:** a Stripe PaymentIntent the confirm leaves unfinished
+  (`requires_action`, 3-D Secure) is cancelled before it is called declined; if the
+  cancel is refused or fails, the payment stays `PROCESSING` for reconciliation.
+- **Compensation:** the saga owes a `LATE_CHARGE` refund of all of it. The attempt
+  stays `FAILED`, as the customer was told, and the order is still theirs to pay.
 
 ```mermaid
 sequenceDiagram
@@ -1428,75 +732,22 @@ sequenceDiagram
     O->>DB: refund 12 REFUNDED, payment 7 still FAILED
 ```
 
-- **The attempt stays `FAILED`.** That is what the customer was told, and a settled
-  outcome never changes. It also keeps the attempt out of V11's unique index of
-  payments that haven't failed, so the order can be (or has been) paid by another
-  attempt. Once its late charge is refunded, a `FAILED` payment stays `FAILED`
-  rather than becoming `REFUNDED`.
-- **It is always refunded, never taken as the order's payment.** By the time the
-  charge is reported, the customer may have paid with another attempt, or the order
-  may have been cancelled (by them, or by the saga after the fifth failure).
-  Refunding is right in every case; taking the charge would be right only in some.
-- **The saga decides.** It is step 2 completing out of turn, so
-  `CheckoutSaga.chargedAfterFailing` compensates it, as it compensates the other
-  steps (section 13), and the order and the saga's state don't change.
-- **Repeat-safe.** The provider may report the charge again under another event id:
-  `late_charged_at` is set already, so nothing more is owed. The refund keeps its
-  provider key, like every refund.
-- **Visible.** The customer sees the refund under the order's refunds, as "Charged
-  after the payment failed".
-
-### Data model (`V20__late_charge_refunds.sql`)
-
-| Change | Meaning |
-|---|---|
-| `payment.late_charged_at` | when the provider reported charging an attempt recorded as failed; null otherwise |
-| `refund.kind` gains `LATE_CHARGE` | all of such a charge, owed back |
-
-The late charge's reference goes in the payment's `provider_reference`, which a
-failed attempt didn't have, so the refund is sent for it like any other.
-
-### Testing it
-
-A new test method, `test_late_charge`, reproduces it with the simulated provider:
-declined ("Your bank didn't confirm the payment in time."), then charged after all,
-reported by a `charge.succeeded` webhook 5 seconds later, once the shop has recorded
-the failure. The integration test posts that webhook itself; the E2E test
-(`late-charge.e2e.ts`) pays with the card in the storefront and waits for the
-refund.
-
-### Not covered
-
-Detection relies on the webhook: a late charge the provider never reports isn't
-found. Production requires `PAYMENT_WEBHOOK_SECRET`, so webhooks are always on
-there. Sweeping failed payments instead would mean asking Stripe about each, which
-replays its create and cancels what it finds unconfirmed, for a case the cancel
-above already prevents.
-
 ### Key decisions
 
 | Decision | Why | Rejected alternative |
 |---|---|---|
-| Cancel an unfinished PaymentIntent before calling it declined | Nothing the shop calls failed can charge later | Leaving it open and relying on the refund alone |
-| Refund the late charge in full, always | Right whether the customer paid again, the order was cancelled, or neither | Taking it as the order's payment when the order is still unpaid |
-| The attempt stays `FAILED`, with `late_charged_at` | The customer's record and V11's index stay true | A new payment status, which the index would count as live |
-| Reuse the refund table, the outbox and the refund webhook | One way money goes back, already safe to repeat | A table and a sender of its own |
+| Cancel an unfinished PaymentIntent before calling it declined | Nothing called failed can charge later | Relying on the refund alone |
+| Refund the late charge in full, always | Right whether the customer paid again or not | Taking it as the order's payment |
+| The attempt stays `FAILED`, with `late_charged_at` | The customer's record and V11's index stay true | A new payment status |
+| Reuse the refund table, outbox and refund webhook | One way money goes back | A table and sender of its own |
+
+Try it with the `test_late_charge` card: declined, then refunded a few seconds
+later (`late-charge.e2e.ts`).
 
 ## 15. Roadmap
 
-- **Phase 1**, done (#177): everything in sections 1 to 3, the pay step on the
-  storefront's order page, and tests (unit, integration against MySQL,
-  end-to-end).
-- **Phase 2**, done: refunds when a paid order is cancelled (section 4, #178),
-  reconciliation of payments stuck in `PROCESSING` (section 5, #179), and expiry of
-  orders left unpaid (section 6, #180).
-- **Phase 3**, done: provider webhooks with a signature check (section 7, #181),
-  Stripe in test mode (section 8, #185), a circuit breaker on Stripe (section 9,
-  #187), and Resilience4j retries with explicit fallbacks (section 10).
-- **Partial refunds**, done (section 11, #189 and #190).
-- **The transactional outbox**, done (section 12, #218): refunds are sent through it.
-- **The checkout saga**, done (section 13, #219): one orchestrator for the
-  checkout's steps and their compensations.
-- **Charges after a failure** (section 14), in progress: refunded in full, and
-  prevented at Stripe.
+- **Done:** payments (#177), refunds, reconciliation and expiry (#178–#180),
+  webhooks (#181), Stripe test mode (#185), circuit breaker (#187), Resilience4j
+  (#188), partial refunds (#189, #190), the transactional outbox (#218), the checkout
+  saga (#219), charges after a failure (#221).
 - **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure.
