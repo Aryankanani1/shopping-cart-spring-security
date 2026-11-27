@@ -1,6 +1,5 @@
 package com.aryan.spring_security_demo.payment;
 
-import com.aryan.spring_security_demo.common.outbox.Outbox;
 import com.aryan.spring_security_demo.order.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,12 +13,11 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /** The database steps of a refund, with the repositories mocked. */
@@ -32,32 +30,10 @@ class RefundRecorderTest {
 
     @Mock private PaymentRepository paymentRepository;
     @Mock private RefundRepository refundRepository;
-    @Mock private Outbox outbox;
+    @Mock private CheckoutSaga checkoutSaga;
     @Spy private Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @InjectMocks private RefundRecorder recorder;
-
-    @Test
-    void requestRefunds_owesWhatIsLeftOfEachPaidOrder_underThePaymentsLock_withItsOutboxMessage() {
-        Payment paid = paid();
-        when(paymentRepository.findByOrdersAndStatusForUpdate(List.of(9L), PaymentStatus.SUCCEEDED))
-                .thenReturn(List.of(paid));
-        when(refundRepository.saveAll(anyList())).thenAnswer(invocation -> {
-            List<Refund> owed = invocation.getArgument(0);
-            owed.forEach(refund -> ReflectionTestUtils.setField(refund, "id", REFUND_ID));
-            return owed;
-        });
-
-        assertThat(recorder.requestRefunds(List.of(9L))).containsExactly(REFUND_ID);
-
-        assertThat(paid.getStatus()).isEqualTo(PaymentStatus.REFUND_PENDING);
-        assertThat(paid.getRefunds()).singleElement().satisfies(refund -> {
-            assertThat(refund.getKind()).isEqualTo(Refund.Kind.CANCELLATION);
-            assertThat(refund.getAmount()).isEqualByComparingTo("59.97");
-            assertThat(refund.getRequestedAt()).isEqualTo(NOW);
-        });
-        verify(outbox).append(RefundOutboxHandler.TYPE, REFUND_ID);
-    }
 
     @Test
     void pendingRefund_asksForTheRefundsAmount_underItsOwnKey() {
@@ -93,9 +69,11 @@ class RefundRecorderTest {
         assertThat(refund.getStatus()).isEqualTo(Refund.Status.REFUNDED);
         assertThat(refund.getProviderReference()).isEqualTo("re_1");
         assertThat(paid.getStatus()).as("every cent back").isEqualTo(PaymentStatus.REFUNDED);
+        // If the order was cancelled, that was the checkout's last compensation.
+        verify(checkoutSaga).paymentRefunded(9L);
     }
 
-    // The after-commit listener and the retry job can both get here for one refund.
+    // The outbox can deliver one refund's message twice, and a webhook can get here too.
     @Test
     void recordRefunded_twice_keepsTheFirst() {
         Payment paid = paid();
@@ -108,6 +86,7 @@ class RefundRecorderTest {
         assertThat(refund.getProviderReference()).isEqualTo("re_1");
         assertThat(paid.getRefundedAmount()).as("counted once").isEqualByComparingTo("10.00");
         assertThat(paid.getStatus()).as("part of it kept").isEqualTo(PaymentStatus.SUCCEEDED);
+        verifyNoInteractions(checkoutSaga);
     }
 
     // A webhook records its event and the refund in one transaction.

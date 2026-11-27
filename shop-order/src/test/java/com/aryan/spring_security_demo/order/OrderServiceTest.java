@@ -154,7 +154,11 @@ class OrderServiceTest {
 
         when(authUtils.currentUserId()).thenReturn(OWNER_ID);
         when(cartService.getCartByUserIdForUpdate(OWNER_ID)).thenReturn(cart);
-        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
+            Order placed = inv.getArgument(0);
+            placed.setId(ORDER_ID);
+            return placed;
+        });
         when(modelMapper.map(any(Order.class), eq(OrderDto.class))).thenReturn(new OrderDto());
 
         PlaceOrderRequest addr = new PlaceOrderRequest();
@@ -187,6 +191,8 @@ class OrderServiceTest {
         assertThat(saved.getTotalAmount()).isEqualByComparingTo("24.00");
         // And the cart is emptied after a successful order.
         verify(cartService).clearCart(99L);
+        // The order's checkout saga starts in the same transaction.
+        verify(events).publishEvent(new OrderPlacedEvent(ORDER_ID));
     }
 
     @Test
@@ -458,6 +464,30 @@ class OrderServiceTest {
         when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.empty());
 
         assertThat(orderService.expireIfUnpaid(ORDER_ID, CUTOFF)).isFalse();
+    }
+
+    // The checkout saga's compensation once every payment attempt has failed: however new the order.
+    @Test
+    void cancelUnpaid_cancelsAnUnpaidOrderOfAnyAge_andRestocksIt() {
+        order.setCreatedAt(CUTOFF);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThat(orderService.cancelUnpaid(ORDER_ID)).isTrue();
+
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(product.getInventory()).isEqualTo(7);
+        verify(events).publishEvent(new OrderCancellingEvent(List.of(ORDER_ID)));
+        verifyNoInteractions(authUtils);
+    }
+
+    @Test
+    void cancelUnpaid_anOrderNoLongerPending_isLeftAlone() {
+        order.setOrderStatus(OrderStatus.CANCELLED);
+        when(orderRepository.findByIdWithItems(ORDER_ID)).thenReturn(Optional.of(order));
+
+        assertThat(orderService.cancelUnpaid(ORDER_ID)).isFalse();
+
+        verifyNoInteractions(events);
     }
 
     @Test

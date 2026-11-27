@@ -275,8 +275,9 @@ the refund call.
 
 Since section 12, the refund is sent through the shop's general outbox:
 `OutboxAfterCommitDispatcher` and `OutboxRelayJob` do what
-`RefundAfterCommitListener` and `RefundRetryJob` did here, and the reasoning below
-still holds.
+`RefundAfterCommitListener` and `RefundRetryJob` did here; and since section 13,
+the checkout saga (`CheckoutSaga.orderCancelling`) owes the refund. The reasoning
+below still holds.
 
 ```mermaid
 sequenceDiagram
@@ -426,6 +427,10 @@ No new columns: the job's query (`status = 'PROCESSING' and created_at < ?`) use
 the `status`-led index from `V12`.
 
 ## 6. Phase 2: unpaid order expiry
+
+Since section 13, this is the checkout saga's deadline: `CheckoutDeadlineJob`, in
+`shop-payment`, does what `UnpaidOrderExpiryJob` did, through the same
+`OrderService.expireIfUnpaid`, and records why the checkout was compensated.
 
 Checkout takes the items out of stock straight away, so an order nobody pays for
 holds them forever. An order still `PENDING` 30 minutes after it was placed
@@ -1218,7 +1223,159 @@ that only that job's query used.
 | At least once, with idempotent handlers | Exactly once would need the provider in the same transaction as the database, which can't be done | Hoping a crash never falls between the two |
 | Right after the commit, and also polled | Fast in the normal case, and nothing is lost when the fast path fails | Polling only (slower), or after-commit only (lost on a crash) |
 
-## 13. Roadmap
+## 13. The checkout saga
+
+A checkout is three steps, and they can't share one transaction: one of them
+happens at the payment provider, and the customer chooses when to pay, minutes
+after placing the order. A **saga** is the pattern for such a process: a sequence
+of local transactions where each step that can be undone has a **compensation**, a
+transaction that undoes it in business terms (a refund, not a rollback). If the
+process can't finish, the steps done so far are compensated, newest first.
+
+| Step | Transaction | Compensation |
+|---|---|---|
+| 1. Book the order | `OrderService.placeOrder`: the order `PENDING`, its stock reserved, the cart cleared | Cancel the order and put the stock back (`OrderService` restocks on cancelling) |
+| 2. Charge the payment | `PaymentService.pay`: at the provider, between two short transactions (section 2) | Refund it (`payment.refund` outbox message, section 12) |
+| 3. Confirm the order | `PaymentRecorder.recordSuccess`: the order `PAID`, with the payment's success | None: this is the **pivot**. Once the order is paid, the checkout only goes forward |
+
+Most of this already existed (sections 4 to 6 built every compensation), spread
+over listeners and jobs: an order's progress was something to work out from the
+order's status, its payments' statuses and three jobs. This section makes it one
+**orchestrated** saga: `CheckoutSaga` is told every step's outcome, decides what
+follows, and records the saga's state in `checkout_saga`.
+
+### Orchestrated, not choreographed
+
+```mermaid
+flowchart LR
+    subgraph order[shop-order]
+        OS[OrderService]
+    end
+    subgraph payment[shop-payment]
+        L[PaymentOrderListener]
+        PR[PaymentRecorder]
+        RR[RefundRecorder]
+        CS{{"CheckoutSaga<br/>(state in checkout_saga)"}}
+        J[CheckoutDeadlineJob]
+        H[CheckoutCompensationHandler]
+    end
+    OB[(outbox_message)]
+    OS -.->|OrderPlacedEvent,<br/>OrderCancellingEvent| L
+    L -->|orderBooked,<br/>orderCancelling| CS
+    PR -->|paymentSucceeded,<br/>paymentFailed| CS
+    RR -->|paymentRefunded| CS
+    J -->|expire| CS
+    CS -->|cancelUnpaid,<br/>expireIfUnpaid| OS
+    CS -->|checkout.compensate,<br/>payment.refund| OB
+    OB -->|after the commit| H
+    H -->|compensate| CS
+```
+
+In a **choreographed** saga there is no coordinator: each module reacts to the
+others' events, and the process is the sum of those reactions. That is how this
+shop worked before: hard to see whole, and with no record of where a checkout
+stood. In an **orchestrated** saga one component holds the process. Every
+outcome reaches `CheckoutSaga` in the transaction that records it, and every
+compensation is decided there. The order module can't call payments (dependencies
+point one way, section 2), so it still publishes events, but only to report its
+steps to the orchestrator.
+
+### The saga's states
+
+```mermaid
+stateDiagram-v2
+    [*] --> AWAITING_PAYMENT: step 1, the order is booked
+    AWAITING_PAYMENT --> COMPLETED: steps 2 and 3, a payment succeeded and the order is paid
+    AWAITING_PAYMENT --> COMPENSATING: the last payment attempt allowed failed
+    AWAITING_PAYMENT --> COMPENSATED: cancelled, or unpaid past the deadline
+    COMPENSATING --> COMPENSATED: the order is cancelled, or its refund made
+    COMPLETED --> COMPENSATING: the paid order is cancelled, a refund is owed
+    COMPLETED --> COMPENSATED: the paid order is cancelled, nothing left to refund
+    COMPENSATED --> [*]
+    COMPLETED --> [*]: delivered
+```
+
+`COMPENSATING` means a compensation is owed and not yet done: the order's
+cancellation (after the last failed payment) or a refund. `compensation_reason`
+says why: `PAYMENT_ATTEMPTS_USED_UP`, `PAYMENT_DEADLINE_PASSED` or
+`ORDER_CANCELLED` (by the customer, an admin, or deleting the account).
+
+A paid order cancelled before it ships is a completed checkout compensated: its
+refund (step 2) and its restock (step 1) are the same compensations, and the saga
+records them. Partial refunds (section 11) leave the saga `COMPLETED`: the order
+stands.
+
+### What happens when
+
+| Event | Told by | The saga | Compensation |
+|---|---|---|---|
+| An order is placed | `OrderPlacedEvent`, in the checkout's transaction | starts, `AWAITING_PAYMENT` | |
+| A payment succeeds | `PaymentRecorder.recordSuccess`, with the order becoming `PAID` | `COMPLETED` | |
+| A payment fails, with attempts left | `PaymentRecorder.recordFailure` | stays `AWAITING_PAYMENT` | |
+| The fifth payment fails | `PaymentRecorder.recordFailure` | `COMPENSATING` (`PAYMENT_ATTEMPTS_USED_UP`) | a `checkout.compensate` message, in the same transaction; after the commit `CheckoutSaga.compensate` cancels the order and restocks it |
+| 30 minutes pass unpaid | `CheckoutDeadlineJob` | `COMPENSATED` (`PAYMENT_DEADLINE_PASSED`) | the order cancelled and restocked, in one transaction |
+| An unpaid order is cancelled | `OrderCancellingEvent` | `COMPENSATED` (`ORDER_CANCELLED`) | the cancellation restocks it |
+| A paid order is cancelled | `OrderCancellingEvent` | `COMPENSATING` (`ORDER_CANCELLED`) | a refund of what is left, with its `payment.refund` message, in the cancellation's transaction; the cancellation restocks |
+| That refund is made | `RefundRecorder`, as the payment becomes `REFUNDED` | `COMPENSATED` | |
+| An order is cancelled while a payment is `PROCESSING` | `OrderCancellingEvent` | refuses: `409`, and the cancellation rolls back | none: step 2's outcome isn't known yet |
+
+### Rules
+
+- **The saga is told in the step's own transaction.** `orderBooked`,
+  `paymentSucceeded`, `paymentFailed`, `orderCancelling` and `paymentRefunded` are
+  `MANDATORY`: the saga's state commits with the step it records, or not at all.
+- **A compensation owed after a commit goes through the outbox.** Cancelling the
+  order after the fifth failure isn't done in that failure's transaction: a
+  failure is recorded by a request, a webhook or reconciliation, and none of them
+  should fail because the cancellation did (a version conflict, say). The failure
+  owes a `checkout.compensate` message instead, and the cancellation runs once it
+  commits, retried until it is done. The refund was already owed this way.
+- **Compensations are safe to repeat.** `CheckoutSaga.compensate` cancels the order
+  only while it is unpaid, so a message delivered twice, or one that arrives after
+  the customer cancelled, does nothing. A refund keeps its provider key.
+- **A payment in progress is a semantic lock.** While a payment is `PROCESSING`,
+  step 2's outcome is unknown, so it can't be compensated: the saga refuses any
+  cancellation (`409`), and the deadline job leaves that order for its next run.
+- **The saga's row is the last lock.** Every transaction that changes a saga locks
+  its row (`SELECT ... FOR UPDATE`) after the order, payment and refund rows it
+  works on, so the saga's lock can't be part of a deadlock with them.
+
+### Data model (`V19__checkout_saga.sql`)
+
+| Column | Meaning |
+|---|---|
+| `order_id` | the order whose checkout it is; unique, a foreign key (cascading deletes are for test data: orders are never deleted) |
+| `status` | `AWAITING_PAYMENT`, `COMPLETED`, `COMPENSATING`, `COMPENSATED` |
+| `compensation_reason` | why it was compensated; null while it hasn't been |
+| `created_at`, `updated_at` | when it started, and when its state last changed |
+
+The migration gives every earlier order the saga it would have had, from its
+status and its payments'. The deadline job finds unpaid orders through the
+orders' `(order_status, created_at)` index from `V13`: an unpaid order is exactly a
+saga awaiting payment.
+
+### Behavior that changed
+
+- **The fifth failed payment cancels the order** and returns its stock straight
+  away. Before, the order waited, unpayable, for the 30-minute expiry.
+- **The unpaid-order expiry is the saga's deadline.** `UnpaidOrderExpiryJob` in
+  `shop-order` became `CheckoutDeadlineJob` in `shop-payment`, on the same
+  schedule (`app.orders.unpaid-expiry-cron`) and window (`app.orders.unpaid-expiry`).
+- **Owing a cancellation's refunds moved** from `RefundRecorder` to
+  `CheckoutSaga.orderCancelling`: the orchestrator issues the compensation.
+
+### Key decisions
+
+| Decision | Why | Rejected alternative |
+|---|---|---|
+| Orchestration, one `CheckoutSaga` | The whole process is in one class, with its state in one table: easy to follow, test and draw | Choreography: each module reacting to the others' events, as before |
+| The saga lives in `shop-payment` | It must call the order module and the payment code, and only `shop-payment` may use both (dependencies point one way) | A `shop-checkout` module above `shop-payment`, which payments would then have to report to through events |
+| Confirming the order is the pivot | Once paid, a checkout only goes forward; a cancellation afterwards compensates what was done | Treating every later change as part of the checkout |
+| The fifth failure's cancellation goes through the outbox | Recording a failure must not fail because cancelling did; the outbox retries the cancellation on its own | Cancelling in the failure's transaction |
+| The deadline cancels in one transaction | The job is its own retry: an order it can't cancel now is found on its next run | A `checkout.compensate` message for the deadline too |
+| One row per order, with a status and a reason | Enough to see where every checkout stands, and why it was undone | A log row per step: more history, more to keep consistent |
+
+## 14. Roadmap
 
 - **Phase 1**, done (#177): everything in sections 1 to 3, the pay step on the
   storefront's order page, and tests (unit, integration against MySQL,
@@ -1230,8 +1387,7 @@ that only that job's query used.
   Stripe in test mode (section 8, #185), a circuit breaker on Stripe (section 9,
   #187), and Resilience4j retries with explicit fallbacks (section 10).
 - **Partial refunds**, done (section 11, #189 and #190).
-- **The transactional outbox** (section 12), in progress: refunds are sent
-  through it.
-- **Next:** a checkout saga on top of the outbox, with each step's compensation
-  (a payment refunded, a booked order cancelled and restocked); then Stripe's card
-  form in the browser (Stripe Elements), with 3-D Secure.
+- **The transactional outbox** (section 12, #218): refunds are sent through it.
+- **The checkout saga** (section 13), in progress: one orchestrator for the
+  checkout's steps and their compensations.
+- **Next:** Stripe's card form in the browser (Stripe Elements), with 3-D Secure.

@@ -44,7 +44,7 @@ app:
     alert-cron: "-"
   # Tests call OutboxRelay.deliverDue,
   # PaymentReconciler.reconcileStuckPayments and
-  # UnpaidOrderExpiryJob.expireUnpaidOrders themselves, with a time they choose.
+  # CheckoutDeadlineJob.expireUnpaidOrders themselves, with a time they choose.
   # Messages are still delivered right after their commit.
   outbox:
     relay-cron: "-"

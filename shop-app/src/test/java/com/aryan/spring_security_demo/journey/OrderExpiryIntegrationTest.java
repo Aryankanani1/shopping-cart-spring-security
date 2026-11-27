@@ -14,7 +14,11 @@ import com.aryan.spring_security_demo.identity.UserRepository;
 import com.aryan.spring_security_demo.order.Order;
 import com.aryan.spring_security_demo.order.OrderRepository;
 import com.aryan.spring_security_demo.order.OrderStatus;
-import com.aryan.spring_security_demo.order.UnpaidOrderExpiryJob;
+import com.aryan.spring_security_demo.payment.CheckoutDeadlineJob;
+import com.aryan.spring_security_demo.payment.CheckoutSagaInstance;
+import com.aryan.spring_security_demo.payment.CheckoutSagaInstanceRepository;
+import com.aryan.spring_security_demo.payment.CheckoutSagaStatus;
+import com.aryan.spring_security_demo.payment.CompensationReason;
 import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
 import com.aryan.spring_security_demo.payment.PaymentRepository;
@@ -58,7 +62,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Unpaid orders expire, through the real job method against MySQL: checkout
  * reserved their stock, so an order left unpaid is cancelled and its items go back
- * on sale. The job is called directly with a cutoff the test picks (its cron is
+ * on sale, compensating its checkout saga. The job is called directly with a cutoff the test picks (its cron is
  * off in the test profile): a far-future cutoff makes every unpaid order old.
  */
 @Tag("integration")
@@ -79,8 +83,9 @@ class OrderExpiryIntegrationTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired private MockMvc mockMvc;
-    @Autowired private UnpaidOrderExpiryJob expiryJob;
+    @Autowired private CheckoutDeadlineJob deadlineJob;
     @Autowired private PaymentRepository paymentRepository;
+    @Autowired private CheckoutSagaInstanceRepository sagaRepository;
     @Autowired private OrderRepository orderRepository;
     @Autowired private CartItemRepository cartItemRepository;
     @Autowired private CartRepository cartRepository;
@@ -132,11 +137,16 @@ class OrderExpiryIntegrationTest {
         assertThat(Instant.parse(dataOf(shown).path("payBy").asText()))
                 .isEqualTo(placed.getCreatedAt().plus(Duration.ofMinutes(30)));
         assertThat(inventoryOf(productId)).isEqualTo(STOCK - 3);
+        assertThat(sagaOf(orderId).getStatus()).isEqualTo(CheckoutSagaStatus.AWAITING_PAYMENT);
 
-        assertThat(expiryJob.expireUnpaidOrders(FAR_FUTURE)).isEqualTo(1);
+        assertThat(deadlineJob.expireUnpaidOrders(FAR_FUTURE)).isEqualTo(1);
 
         assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.CANCELLED);
         assertThat(inventoryOf(productId)).isEqualTo(STOCK);
+        assertThat(sagaOf(orderId)).satisfies(saga -> {
+            assertThat(saga.getStatus()).isEqualTo(CheckoutSagaStatus.COMPENSATED);
+            assertThat(saga.getCompensationReason()).isEqualTo(CompensationReason.PAYMENT_DEADLINE_PASSED);
+        });
         // Too late to pay for it now.
         pay(orderId, FakePaymentGateway.VISA).andExpect(status().isConflict());
     }
@@ -148,10 +158,10 @@ class OrderExpiryIntegrationTest {
         Long paid = placeOrder(1);
         pay(paid, FakePaymentGateway.VISA).andExpect(status().isCreated());
 
-        assertThat(expiryJob.expireUnpaidOrders(LONG_AGO)).isZero();
+        assertThat(deadlineJob.expireUnpaidOrders(LONG_AGO)).isZero();
         assertThat(orderStatus(fresh)).isEqualTo(OrderStatus.PENDING);
 
-        assertThat(expiryJob.expireUnpaidOrders(FAR_FUTURE)).isEqualTo(1);  // only the unpaid one
+        assertThat(deadlineJob.expireUnpaidOrders(FAR_FUTURE)).isEqualTo(1);  // only the unpaid one
         assertThat(orderStatus(paid)).isEqualTo(OrderStatus.PAID);
         assertThat(orderStatus(fresh)).isEqualTo(OrderStatus.CANCELLED);
     }
@@ -166,7 +176,7 @@ class OrderExpiryIntegrationTest {
         paymentRepository.save(Payment.start(order, UUID.randomUUID().toString(), FakePaymentGateway.VISA, "USD",
                 Instant.parse("2026-10-16T12:00:00Z")));
 
-        assertThat(expiryJob.expireUnpaidOrders(FAR_FUTURE)).isEqualTo(1);
+        assertThat(deadlineJob.expireUnpaidOrders(FAR_FUTURE)).isEqualTo(1);
 
         assertThat(orderStatus(beingPaid)).isEqualTo(OrderStatus.PENDING);
         assertThat(orderStatus(abandoned)).isEqualTo(OrderStatus.CANCELLED);
@@ -181,7 +191,7 @@ class OrderExpiryIntegrationTest {
 
             List<Object> results = allAtOnce(List.of(
                     () -> pay(orderId, FakePaymentGateway.VISA).andReturn().getResponse().getStatus(),
-                    () -> expiryJob.expireUnpaidOrders(FAR_FUTURE)));
+                    () -> deadlineJob.expireUnpaidOrders(FAR_FUTURE)));
 
             OrderStatus status = orderStatus(orderId);
             List<PaymentStatus> payments = paymentRepository.findAllByOrder(orderId).stream()
@@ -280,5 +290,9 @@ class OrderExpiryIntegrationTest {
     /** The {@code data} node of an {@code ApiResponse} JSON body. */
     private JsonNode dataOf(MvcResult result) throws Exception {
         return objectMapper.readTree(result.getResponse().getContentAsString()).path("data");
+    }
+
+    private CheckoutSagaInstance sagaOf(Long orderId) {
+        return sagaRepository.findByOrderId(orderId).orElseThrow();
     }
 }

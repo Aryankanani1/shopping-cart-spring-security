@@ -52,6 +52,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("select p.id from Payment p where p.status = :status and p.createdAt < :before order by p.createdAt")
     List<Long> findIdsByStatusCreatedBefore(@Param("status") PaymentStatus status, @Param("before") Instant before);
 
+    /** The orders, of {@code orderIds}, that have a payment in {@code status}. */
+    @Query("select p.order.id from Payment p where p.order.id in :orderIds and p.status = :status")
+    List<Long> findOrderIdsByStatus(@Param("orderIds") Collection<Long> orderIds, @Param("status") PaymentStatus status);
+
     @Query("select count(p) from Payment p where p.order.id in :orderIds and p.status = :status")
     long countByOrdersAndStatus(@Param("orderIds") Collection<Long> orderIds, @Param("status") PaymentStatus status);
 

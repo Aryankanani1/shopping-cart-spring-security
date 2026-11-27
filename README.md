@@ -447,6 +447,13 @@ test payment methods (`test_visa`, `test_declined`, `test_insufficient_funds`,
   running totals kept on that row, which a check constraint caps at the amount paid;
   refunded items aren't restocked again when the order is cancelled
   ([section 11](docs/payment-design.md#11-partial-refunds)).
+- **Every checkout is a saga.** Booking the order, charging it and confirming it
+  are separate transactions, one of them at the provider, so `CheckoutSaga`
+  orchestrates them: it is told each step's outcome in that step's transaction,
+  keeps the checkout's state in `checkout_saga`, and compensates what was done when
+  the checkout can't finish (the order cancelled and restocked after the fifth
+  failed payment or 30 minutes unpaid; a refund when a paid order is cancelled)
+  ([section 13](docs/payment-design.md#13-the-checkout-saga)).
 - **Lost outcomes are reconciled.** A payment still `PROCESSING` after 2 minutes
   (the provider timed out, or the app stopped before recording its answer) is
   settled by `PaymentReconciliationJob` (`APP_PAYMENT_RECONCILE_CRON`, every
@@ -454,8 +461,9 @@ test payment methods (`test_visa`, `test_declined`, `test_insufficient_funds`,
   approved, declined, or never received.
 - **Unpaid orders expire.** Checkout reserves the stock, so an order still unpaid
   after 30 minutes (`APP_ORDERS_UNPAID_EXPIRY`) is cancelled and its items go back
-  on sale, by `UnpaidOrderExpiryJob` (`APP_ORDERS_UNPAID_EXPIRY_CRON`, every
-  minute, ShedLock), one transaction per order. An order being paid for is left
+  on sale, by the checkout saga's `CheckoutDeadlineJob`
+  (`APP_ORDERS_UNPAID_EXPIRY_CRON`, every minute, ShedLock), one transaction per
+  order. An order being paid for is left
   until its payment settles. The order's `payBy` tells the customer the deadline.
 - **Webhooks settle what the shop couldn't, in seconds.** The provider reports each
   charge and refund by a signed webhook: an HMAC-SHA256 over the timestamp and the

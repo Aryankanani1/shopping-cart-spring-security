@@ -17,6 +17,10 @@ import com.aryan.spring_security_demo.order.Order;
 import com.aryan.spring_security_demo.order.OrderRepository;
 import com.aryan.spring_security_demo.order.OrderStatus;
 import com.aryan.spring_security_demo.payment.ChargeRequest;
+import com.aryan.spring_security_demo.payment.CheckoutSagaInstance;
+import com.aryan.spring_security_demo.payment.CheckoutSagaInstanceRepository;
+import com.aryan.spring_security_demo.payment.CheckoutSagaStatus;
+import com.aryan.spring_security_demo.payment.CompensationReason;
 import com.aryan.spring_security_demo.payment.FakePaymentGateway;
 import com.aryan.spring_security_demo.payment.Payment;
 import com.aryan.spring_security_demo.payment.PaymentReconciler;
@@ -103,6 +107,8 @@ class PaymentIntegrationTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     /** A refund after a commit can take a moment: it runs on a background thread. */
     private static final Duration REFUND_WAIT = Duration.ofSeconds(10);
+    /** An outbox message is delivered right after its commit, on another thread. */
+    private static final Duration OUTBOX_WAIT = Duration.ofSeconds(10);
     private static final Instant FAR_FUTURE = Instant.parse("2100-01-01T00:00:00Z");
 
     private final List<Boolean> providerCalledInATransaction = new CopyOnWriteArrayList<>();
@@ -111,6 +117,7 @@ class PaymentIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private PaymentRepository paymentRepository;
+    @Autowired private CheckoutSagaInstanceRepository sagaRepository;
     @Autowired private RefundRepository refundRepository;
     @Autowired private OrderRepository orderRepository;
     @Autowired private CartItemRepository cartItemRepository;
@@ -163,6 +170,7 @@ class PaymentIntegrationTest {
     @DisplayName("a test card pays the order's total and the order becomes PAID")
     void pay_withATestCard_paysTheTotal_andTheOrderIsPaid() throws Exception {
         Long orderId = placeOrder(2);
+        assertThat(sagaOf(orderId).getStatus()).isEqualTo(CheckoutSagaStatus.AWAITING_PAYMENT);
 
         MvcResult result = pay(orderId, newKey(), FakePaymentGateway.VISA)
                 .andExpect(status().isCreated())
@@ -177,6 +185,7 @@ class PaymentIntegrationTest {
         assertThat(dataOf(result).path("amount").decimalValue()).isEqualByComparingTo("39.98");  // 2 x 19.99
         assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PAID);
         assertThat(inventoryOf(productId)).isEqualTo(98);  // still reserved for the order
+        assertThat(sagaOf(orderId).getStatus()).isEqualTo(CheckoutSagaStatus.COMPLETED);
     }
 
     @Test
@@ -308,17 +317,21 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    @DisplayName("after five failed attempts the order can't be paid any more")
-    void pay_afterFiveFailures_is409() throws Exception {
+    @DisplayName("after the fifth failed attempt the checkout is compensated: the order is cancelled and restocked")
+    void pay_afterFiveFailures_cancelsTheOrder_andRestocksIt() throws Exception {
         Long orderId = placeOrder(1);
         for (int i = 0; i < 5; i++) {
             pay(orderId, newKey(), FakePaymentGateway.INSUFFICIENT_FUNDS).andExpect(status().isCreated());
         }
 
-        pay(orderId, newKey(), FakePaymentGateway.VISA)
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.title").value("Too many payment attempts"));
-        assertThat(orderStatus(orderId)).isEqualTo(OrderStatus.PENDING);
+        // Owed through the outbox by the fifth failure's transaction, and done right after its commit.
+        await().atMost(OUTBOX_WAIT).until(() -> orderStatus(orderId) == OrderStatus.CANCELLED);
+        assertThat(inventoryOf(productId)).isEqualTo(100);
+        assertThat(sagaOf(orderId)).satisfies(saga -> {
+            assertThat(saga.getStatus()).isEqualTo(CheckoutSagaStatus.COMPENSATED);
+            assertThat(saga.getCompensationReason()).isEqualTo(CompensationReason.PAYMENT_ATTEMPTS_USED_UP);
+        });
+        pay(orderId, newKey(), FakePaymentGateway.VISA).andExpect(status().isConflict());
     }
 
     @Test
@@ -452,6 +465,11 @@ class PaymentIntegrationTest {
         assertThat(inventoryOf(productId)).isEqualTo(100);
         assertThat(refundCalledInATransaction).containsExactly(false);
         assertThat(refundThreads).singleElement().isNotEqualTo(Thread.currentThread().getName());
+        // Recorded with the refund: both steps are undone.
+        assertThat(sagaOf(orderId)).satisfies(saga -> {
+            assertThat(saga.getStatus()).isEqualTo(CheckoutSagaStatus.COMPENSATED);
+            assertThat(saga.getCompensationReason()).isEqualTo(CompensationReason.ORDER_CANCELLED);
+        });
 
         // Repeating the original payment request now finds it refunded.
         pay(orderId, key, FakePaymentGateway.VISA)
@@ -471,11 +489,13 @@ class PaymentIntegrationTest {
         // The attempt after the commit: a first try and 2 retries, all refused.
         await().atMost(REFUND_WAIT).until(() -> refundThreads.size() == 3);
         assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUND_PENDING);
+        assertThat(sagaOf(orderId).getStatus()).isEqualTo(CheckoutSagaStatus.COMPENSATING);
 
         // Past the message's backoff: the relay job's next run.
         assertThat(outboxRelay.deliverDue(FAR_FUTURE)).isEqualTo(1);
 
         assertThat(paymentOf(orderId).getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(sagaOf(orderId).getStatus()).isEqualTo(CheckoutSagaStatus.COMPENSATED);
         assertThat(refundThreads).hasSize(4);
         // Nothing left to deliver, and no second refund.
         assertThat(outboxRelay.deliverDue(FAR_FUTURE)).isZero();
@@ -667,6 +687,10 @@ class PaymentIntegrationTest {
     /** The id of the order's only payment. */
     private Long paymentIdOf(Long orderId) {
         return paymentOf(orderId).getId();
+    }
+
+    private CheckoutSagaInstance sagaOf(Long orderId) {
+        return sagaRepository.findByOrderId(orderId).orElseThrow();
     }
 
     private Payment paymentOf(Long orderId) {
